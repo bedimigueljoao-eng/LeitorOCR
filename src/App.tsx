@@ -23,29 +23,61 @@ import { BrowserScanner, isNativeAndroidApp } from './plugins/browserScanner';
 
 type ActiveTab = 'analyzer' | 'scanner' | 'board' | 'android';
 
-const STORAGE_KEY_SPINS = 'roletavision_spins_v1';
+const STORAGE_KEY_SESSION_SPINS = 'roletavision_session_spins_v2';
+const STORAGE_KEY_LEARNED_BACKUP = 'roletavision_learned_backup_v2';
 const STORAGE_KEY_BANKROLL = 'roletavision_bankroll_v1';
 const SPLIT_PRESETS = [0.56, 0.45, 0.66] as const;
 
-function mergeIncomingStrip(prev: number[], incoming: number[], isFullStrip: boolean): number[] {
-  if (incoming.length === 0) return prev;
-  if (!isFullStrip) {
-    return [...incoming, ...prev].slice(0, 500);
+function reconcileScannerSpins(
+  prevSession: number[],
+  prevBackup: number[],
+  incoming: number[],
+  isFullStrip: boolean
+): { nextSession: number[]; nextBackup: number[] } {
+  if (incoming.length === 0) {
+    return { nextSession: prevSession, nextBackup: prevBackup };
   }
-  if (prev.length >= 3) {
-    // Se a faixa completa contém novos giros seguidos do histórico anterior, preserva o histórico antigo
+
+  if (!isFullStrip) {
+    // Novos giros em tempo real: entram na sessão atual para avaliar OK/X + %
+    return {
+      nextSession: [...incoming, ...prevSession].slice(0, 500),
+      nextBackup: prevBackup,
+    };
+  }
+
+  // Faixa completa detectada ao abrir mesa ou trocar de mesa:
+  // Verifica se já está alinhada com o histórico atual (sessão + backup)
+  const combined = [...prevSession, ...prevBackup];
+  if (combined.length >= 3) {
     for (let shift = 0; shift <= Math.min(4, incoming.length - 3); shift++) {
       if (
-        incoming[shift] === prev[0] &&
-        incoming[shift + 1] === prev[1] &&
-        incoming[shift + 2] === prev[2]
+        incoming[shift] === combined[0] &&
+        incoming[shift + 1] === combined[1] &&
+        incoming[shift + 2] === combined[2]
       ) {
-        if (shift === 0) return prev;
-        return [...incoming.slice(0, shift), ...prev].slice(0, 500);
+        if (shift === 0) {
+          return { nextSession: prevSession, nextBackup: prevBackup };
+        }
+        // Só o que é novo antes de combined[0] entra na sessão
+        return {
+          nextSession: [...incoming.slice(0, shift), ...prevSession].slice(0, 500),
+          nextBackup: prevBackup,
+        };
       }
     }
   }
-  return incoming.slice(0, 500);
+
+  // Primeira leitura da mesa (ou troca de mesa): alimenta o contexto/aprendizagem
+  // sem gerar % falsa de acerto na sessão atual (sessão continua virgem 0%)
+  const mergedBackup = [...incoming, ...prevBackup.filter((_, idx) => idx >= incoming.length)].slice(
+    0,
+    2000
+  );
+  return {
+    nextSession: prevSession,
+    nextBackup: prevBackup.length === 0 ? incoming.slice(0, 2000) : mergedBackup,
+  };
 }
 
 export default function App() {
@@ -55,19 +87,30 @@ export default function App() {
   const [splitPresetIdx, setSplitPresetIdx] = useState(0);
   const [browserUrlInput, setBrowserUrlInput] = useState('https://www.kwanzabet.ao');
   const [browserNotice, setBrowserNotice] = useState<string | null>(null);
+  const [scanStatusHint, setScanStatusHint] = useState<string | null>(null);
 
-  const [spins, setSpins] = useState<number[]>(() => {
+  const [spinMemory, setSpinMemory] = useState<{ session: number[]; backup: number[] }>(() => {
+    let session: number[] = [];
+    let backup: number[] = [];
     try {
-      const saved = localStorage.getItem(STORAGE_KEY_SPINS);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      const savedSess = localStorage.getItem(STORAGE_KEY_SESSION_SPINS);
+      if (savedSess) {
+        const parsed = JSON.parse(savedSess);
+        if (Array.isArray(parsed)) session = parsed;
+      }
+      const savedBack = localStorage.getItem(STORAGE_KEY_LEARNED_BACKUP);
+      if (savedBack) {
+        const parsed = JSON.parse(savedBack);
+        if (Array.isArray(parsed)) backup = parsed;
       }
     } catch {
       // ignore storage errors
     }
-    return INITIAL_SCREENSHOT_SPINS;
+    return { session, backup };
   });
+
+  const sessionSpins = spinMemory.session;
+  const learnedBackupSpins = spinMemory.backup;
 
   const [bankrollAoa, setBankrollAoa] = useState<number>(() => {
     try {
@@ -90,11 +133,12 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY_SPINS, JSON.stringify(spins));
+      localStorage.setItem(STORAGE_KEY_SESSION_SPINS, JSON.stringify(spinMemory.session));
+      localStorage.setItem(STORAGE_KEY_LEARNED_BACKUP, JSON.stringify(spinMemory.backup));
     } catch {
       // ignore storage errors
     }
-  }, [spins]);
+  }, [spinMemory]);
 
   useEffect(() => {
     try {
@@ -117,7 +161,16 @@ export default function App() {
         );
         if (incoming.length === 0) return;
 
-        setSpins((prev) => mergeIncomingStrip(prev, incoming, Boolean(event.isFullStrip)));
+        setScanStatusHint(`Faixa lida: ${incoming.slice(0, 6).join(', ')}`);
+        setSpinMemory((prev) => {
+          const res = reconcileScannerSpins(
+            prev.session,
+            prev.backup,
+            incoming,
+            Boolean(event.isFullStrip)
+          );
+          return { session: res.nextSession, backup: res.nextBackup };
+        });
       });
 
       const visSub = await BrowserScanner.addListener(
@@ -129,9 +182,21 @@ export default function App() {
         }
       );
 
+      const feedbackSub = await BrowserScanner.addListener('scanFeedback', (event) => {
+        if (!mounted) return;
+        if (event.count > 0) {
+          setScanStatusHint(`Leitura ativa (${event.count} números via ${event.mode || 'ocr'})`);
+        } else {
+          setScanStatusHint(
+            'Nenhum número detetado. Abra a roleta e toque em Mira se precisar alinhar.'
+          );
+        }
+      });
+
       return () => {
         void spinSub.remove();
         void visSub.remove();
+        void feedbackSub.remove();
       };
     };
 
@@ -142,9 +207,14 @@ export default function App() {
     };
   }, [isAndroidApk]);
 
+  const combinedSpins = useMemo(
+    () => [...sessionSpins, ...learnedBackupSpins].slice(0, 2000),
+    [sessionSpins, learnedBackupSpins]
+  );
+
   const analysis = useMemo(
-    () => analyzeSpins(spins, profile, bankrollAoa, unitStakeAoa),
-    [spins, profile, bankrollAoa, unitStakeAoa]
+    () => analyzeSpins(sessionSpins, profile, bankrollAoa, unitStakeAoa, learnedBackupSpins),
+    [sessionSpins, profile, bankrollAoa, unitStakeAoa, learnedBackupSpins]
   );
 
   const handleOpenIntegratedBrowser = async () => {
@@ -177,12 +247,16 @@ export default function App() {
 
   const handleManualBrowserScan = async () => {
     if (!isAndroidApk) return;
+    setScanStatusHint('A ler faixa do navegador...');
     await BrowserScanner.scanNow();
   };
 
   const handleRegisterSpin = (num: number) => {
     if (num < 0 || num > 36 || !Number.isInteger(num)) return;
-    setSpins((prev) => [num, ...prev].slice(0, 500));
+    setSpinMemory((prev) => ({
+      session: [num, ...prev.session].slice(0, 500),
+      backup: prev.backup,
+    }));
   };
 
   const handleManualSubmit = (e: React.FormEvent) => {
@@ -199,12 +273,9 @@ export default function App() {
     detectedBalance: number | null
   ) => {
     if (numbersNewestFirst.length > 0) {
-      setSpins((prev) => {
-        const sameHead =
-          prev.slice(0, numbersNewestFirst.length).join(',') ===
-          numbersNewestFirst.join(',');
-        if (sameHead) return prev;
-        return numbersNewestFirst;
+      setSpinMemory((prev) => {
+        const res = reconcileScannerSpins(prev.session, prev.backup, numbersNewestFirst, true);
+        return { session: res.nextSession, backup: res.nextBackup };
       });
     }
     if (detectedBalance !== null && detectedBalance >= 0) {
@@ -212,13 +283,24 @@ export default function App() {
     }
   };
 
-  const handleResetToSample = () => {
-    setSpins(INITIAL_SCREENSHOT_SPINS);
+  const handleLoadSample = () => {
+    setSpinMemory({ session: [], backup: INITIAL_SCREENSHOT_SPINS });
     setBankrollAoa(238.39);
   };
 
-  const handleClearSpins = () => {
-    setSpins([]);
+  // Zera estatísticas do momento (0% / 0/0), mas guarda os giros no Backup de Maturidade!
+  const handleResetMomentKeepBackup = () => {
+    setSpinMemory((prev) => {
+      if (prev.session.length === 0) return prev;
+      return {
+        session: [],
+        backup: [...prev.session, ...prev.backup].slice(0, 2000),
+      };
+    });
+  };
+
+  const handleResetAllVirgin = () => {
+    setSpinMemory({ session: [], backup: [] });
   };
 
   const { fieldSuggestions, accuracy } = analysis;
@@ -249,51 +331,63 @@ export default function App() {
 
   // Modo integrado quando o navegador Kwanzabet está aberto em cima no APK
   if (nativeBrowserOpen) {
+    const hasTableData = combinedSpins.length > 0;
     const compactOptions = [
       {
         marketKey: 'Vermelho / Preto',
-        shortTitle: 'Cor',
-        suggestion: fieldSuggestions.color,
-        accent:
-          fieldSuggestions.color === 'Vermelho'
-            ? 'text-red-300'
-            : 'text-slate-100',
+        shortTitle: 'Cor (Vermelho / Preto)',
+        suggestion: hasTableData ? `APOSTAR: ${fieldSuggestions.color}` : 'Aguardando mesa...',
+        accent: !hasTableData
+          ? 'text-slate-500'
+          : fieldSuggestions.color === 'Vermelho'
+          ? 'text-red-300'
+          : 'text-slate-100',
       },
       {
         marketKey: 'Par / Ímpar',
-        shortTitle: 'Par / Ímpar',
-        suggestion: fieldSuggestions.parity,
-        accent: 'text-slate-100',
+        shortTitle: 'Paridade (Par / Ímpar)',
+        suggestion: hasTableData ? `APOSTAR: ${fieldSuggestions.parity}` : 'Aguardando mesa...',
+        accent: hasTableData ? 'text-slate-100' : 'text-slate-500',
       },
       {
         marketKey: '1–18 / 19–36',
-        shortTitle: 'Força',
-        suggestion: fieldSuggestions.half,
-        accent: 'text-slate-100',
+        shortTitle: 'Força (1–18 / 19–36)',
+        suggestion: hasTableData ? `APOSTAR: ${fieldSuggestions.half}` : 'Aguardando mesa...',
+        accent: hasTableData ? 'text-slate-100' : 'text-slate-500',
       },
       {
         marketKey: 'Dúzias (Blocos)',
         shortTitle: 'Bloco / Dúzia',
-        suggestion: fieldSuggestions.dozenLabel,
-        accent: 'text-amber-300',
+        suggestion: hasTableData
+          ? `APOSTAR: ${fieldSuggestions.dozenLabel}`
+          : 'Aguardando mesa...',
+        accent: hasTableData ? 'text-amber-300' : 'text-slate-500',
       },
       {
         marketKey: 'Colunas (2to1)',
         shortTitle: 'Coluna (2to1)',
-        suggestion: fieldSuggestions.columnLabel,
-        accent: 'text-amber-300',
+        suggestion: hasTableData
+          ? `APOSTAR: ${fieldSuggestions.columnLabel}`
+          : 'Aguardando mesa...',
+        accent: hasTableData ? 'text-amber-300' : 'text-slate-500',
       },
       {
         marketKey: 'Setor da Roda',
-        shortTitle: 'Setor',
-        suggestion: analysis.recommendedSector.name,
-        accent: 'text-emerald-300',
+        shortTitle: 'Setor da Roda',
+        suggestion: hasTableData
+          ? `APOSTAR: ${analysis.recommendedSector.name}`
+          : 'Aguardando mesa...',
+        accent: hasTableData ? 'text-emerald-300' : 'text-slate-500',
       },
       {
         marketKey: 'Vizinhos (±2)',
-        shortTitle: `Vizinhos (Âncora ${fieldSuggestions.anchorNumber})`,
-        suggestion: fieldSuggestions.neighbors.join(' · '),
-        accent: 'text-emerald-400 font-mono',
+        shortTitle: hasTableData
+          ? `Vizinhos (±2 · Âncora ${fieldSuggestions.anchorNumber})`
+          : 'Vizinhos (±2)',
+        suggestion: hasTableData
+          ? `APOSTAR: ${fieldSuggestions.neighbors.join(' · ')}`
+          : 'Aguardando mesa...',
+        accent: hasTableData ? 'text-emerald-400 font-mono' : 'text-slate-500',
       },
     ];
 
@@ -302,7 +396,7 @@ export default function App() {
 
     return (
       <div className="h-screen overflow-y-auto bg-[#0B0F17] text-slate-100 p-2.5 space-y-2">
-        {/* Cabeçalho compacto com controles do split + resumo de acerto da plataforma */}
+        {/* Cabeçalho compacto com controles + resumo virgem ou ao vivo */}
         <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-800 pb-2">
           <div className="flex items-center gap-2 min-w-0">
             {accuracy.lastRound ? (
@@ -323,18 +417,26 @@ export default function App() {
                     Último: {accuracy.lastRound.hitsCount}/{accuracy.lastRound.totalMarkets} acertos
                   </div>
                   <div className="font-mono text-[10px] text-emerald-400 tabular-nums">
-                    Plataforma: {accuracy.overallRatePct.toFixed(1)}% ({accuracy.totalHits}/{accuracy.totalAttempts})
+                    Sessão: {accuracy.overallRatePct.toFixed(1)}% ({accuracy.totalHits}/{accuracy.totalAttempts})
                   </div>
                 </div>
               </>
             ) : (
-              <span className="text-[11px] text-slate-400">
-                Aguardando leitura da faixa...
-              </span>
+              <div className="text-[11px] leading-tight">
+                <div className="text-slate-200 font-medium">
+                  Sessão Virgem: 0.0% (0/0)
+                </div>
+                <div className="text-[10px] text-slate-400">
+                  {scanStatusHint ||
+                    (hasTableData
+                      ? `Mesa lida (${combinedSpins.length} giros). Aguardando 1ª jogada.`
+                      : 'Abra a roleta em cima ou toque em Ler / Mira.')}
+                </div>
+              </div>
             )}
           </div>
 
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex flex-wrap items-center gap-1 shrink-0">
             <button
               type="button"
               onClick={handleManualBrowserScan}
@@ -343,6 +445,14 @@ export default function App() {
             >
               <RefreshCw className="h-3 w-3" />
               <span>Ler</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleResetMomentKeepBackup}
+              title="Zerar estatísticas do momento mantendo aprendizagem"
+              className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-200"
+            >
+              Zerar 0%
             </button>
             <button
               type="button"
@@ -373,25 +483,31 @@ export default function App() {
 
         {/* Faixa de histórico lida */}
         <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-          {spins.slice(0, 16).map((num, idx) => {
-            const col = getRouletteColor(num);
-            const bg =
-              col === 'green'
-                ? 'bg-emerald-700 border-emerald-500'
-                : col === 'red'
-                ? 'bg-[#A61B26] border-red-800'
-                : 'bg-[#181C24] border-slate-700';
-            return (
-              <span
-                key={`${num}-${idx}`}
-                className={`inline-flex h-6 min-w-[26px] px-1 items-center justify-center rounded border font-mono text-[11px] font-bold text-white tabular-nums shrink-0 ${bg} ${
-                  idx === 0 ? 'ring-1 ring-amber-400' : ''
-                }`}
-              >
-                {num}
-              </span>
-            );
-          })}
+          {combinedSpins.length === 0 ? (
+            <span className="text-[11px] text-amber-300">
+              Nenhum número lido ainda — abra a mesa da roleta acima ou toque em Mira para alinhar a caixa verde.
+            </span>
+          ) : (
+            combinedSpins.slice(0, 16).map((num, idx) => {
+              const col = getRouletteColor(num);
+              const bg =
+                col === 'green'
+                  ? 'bg-emerald-700 border-emerald-500'
+                  : col === 'red'
+                  ? 'bg-[#A61B26] border-red-800'
+                  : 'bg-[#181C24] border-slate-700';
+              return (
+                <span
+                  key={`${num}-${idx}`}
+                  className={`inline-flex h-6 min-w-[26px] px-1 items-center justify-center rounded border font-mono text-[11px] font-bold text-white tabular-nums shrink-0 ${bg} ${
+                    idx === 0 ? 'ring-1 ring-amber-400' : ''
+                  }`}
+                >
+                  {num}
+                </span>
+              );
+            })
+          )}
         </div>
 
         {/* Todas as opções de apostas visíveis por completo + OK/X + % de acerto */}
@@ -399,9 +515,10 @@ export default function App() {
           {compactOptions.map((opt, idx) => {
             const lastEval = lastRoundMap.get(opt.marketKey);
             const rateStat = marketRateMap.get(opt.marketKey);
+            const hasAttempts = Boolean(rateStat && rateStat.attempts > 0);
             const ratePct = rateStat ? rateStat.ratePct : 0;
             const aboveBase =
-              rateStat && rateStat.attempts > 0 && rateStat.ratePct >= rateStat.expectedRandomPct;
+              hasAttempts && rateStat!.ratePct >= rateStat!.expectedRandomPct;
             const isFullWidth = idx === compactOptions.length - 1;
 
             return (
@@ -429,19 +546,19 @@ export default function App() {
                     )}
                     <span
                       className={`font-mono text-[10px] font-bold tabular-nums ${
-                        !rateStat || rateStat.attempts === 0
+                        !hasAttempts
                           ? 'text-slate-500'
                           : aboveBase
                           ? 'text-emerald-400'
                           : 'text-amber-300'
                       }`}
                     >
-                      {ratePct.toFixed(0)}%
+                      {hasAttempts ? `${ratePct.toFixed(0)}%` : '0%'}
                     </span>
                   </div>
                 </div>
 
-                <div className={`mt-0.5 text-xs font-bold leading-snug ${opt.accent}`}>
+                <div className={`mt-1 text-xs font-bold leading-snug ${opt.accent}`}>
                   {opt.suggestion}
                 </div>
 
@@ -458,31 +575,39 @@ export default function App() {
           <div className="col-span-2 rounded-lg border border-slate-800 bg-[#131924] p-2">
             <div className="flex items-center justify-between gap-2 mb-1">
               <span className="text-[10px] font-medium text-slate-400">
-                Números Diretos (Fichas Completas)
+                Números Diretos Sugeridos (Fichas)
               </span>
               <span className="font-mono text-[10px] font-semibold text-emerald-400 tabular-nums">
-                {analysis.totalRoundStakeAoa.toFixed(0)} AOA ({analysis.suggestedChips.length}×{analysis.stakePerUnitAoa})
+                {analysis.suggestedChips.length > 0
+                  ? `${analysis.totalRoundStakeAoa.toFixed(0)} AOA (${analysis.suggestedChips.length}×${analysis.stakePerUnitAoa})`
+                  : '0 AOA'}
               </span>
             </div>
-            <div className="flex flex-wrap items-center gap-1">
-              {analysis.suggestedChips.map((chip) => {
-                const col = getRouletteColor(chip);
-                const chipBg =
-                  col === 'green'
-                    ? 'bg-emerald-700 border-emerald-500'
-                    : col === 'red'
-                    ? 'bg-[#B91C1C] border-red-700'
-                    : 'bg-[#181C24] border-slate-600';
-                return (
-                  <span
-                    key={chip}
-                    className={`inline-flex h-6 min-w-[26px] px-1.5 items-center justify-center rounded border font-mono text-[11px] font-bold text-white tabular-nums ${chipBg}`}
-                  >
-                    {chip}
-                  </span>
-                );
-              })}
-            </div>
+            {analysis.suggestedChips.length === 0 ? (
+              <div className="text-[11px] text-slate-500">
+                Aguardando leitura da faixa ou 1º giro para sugerir fichas.
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-1">
+                {analysis.suggestedChips.map((chip) => {
+                  const col = getRouletteColor(chip);
+                  const chipBg =
+                    col === 'green'
+                      ? 'bg-emerald-700 border-emerald-500'
+                      : col === 'red'
+                      ? 'bg-[#B91C1C] border-red-700'
+                      : 'bg-[#181C24] border-slate-600';
+                  return (
+                    <span
+                      key={chip}
+                      className={`inline-flex h-6 min-w-[26px] px-1.5 items-center justify-center rounded border font-mono text-[11px] font-bold text-white tabular-nums ${chipBg}`}
+                    >
+                      {chip}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -609,27 +734,27 @@ export default function App() {
           </div>
         </section>
 
-        {/* Faixa de Histórico Sincronizada */}
+        {/* Faixa de Histórico Sincronizada + Backup de Aprendizagem */}
         <section className="rounded-xl border border-slate-800 bg-[#131924] p-4 sm:p-5">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                <span>Sessão Creedroomz</span>
-                <span aria-hidden="true">·</span>
-                <span className="font-mono tabular-nums text-slate-200">
-                  {analysis.totalSpins} giros registrados
-                </span>
+                <span>Sessão Atual: {sessionSpins.length} jogadas</span>
                 <span aria-hidden="true">·</span>
                 <span className="font-mono tabular-nums text-emerald-400">
+                  Backup Aprendizagem: {learnedBackupSpins.length} giros
+                </span>
+                <span aria-hidden="true">·</span>
+                <span className="font-mono tabular-nums text-slate-200">
                   Banca {bankrollAoa.toFixed(2)} AOA
                 </span>
                 <span aria-hidden="true">·</span>
                 <span className="font-mono tabular-nums text-amber-300">
-                  Assertividade {accuracy.overallRatePct.toFixed(1)}%
+                  Acerto Sessão: {accuracy.overallRatePct.toFixed(1)}% ({accuracy.totalHits}/{accuracy.totalAttempts})
                 </span>
               </div>
               <h1 className="font-display text-xl sm:text-2xl font-semibold text-slate-100">
-                Sugestões por Campo e Taxa de Acerto em Tempo Real
+                Sugestões de Aposta e Taxa de Acerto Real
               </h1>
             </div>
 
@@ -656,31 +781,40 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={handleResetToSample}
-                title="Carregar sequência da captura enviada"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                onClick={handleResetMomentKeepBackup}
+                title="Zera o placar de acertos (%) para começar uma nova sessão mantendo o backup de aprendizagem"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-200 hover:bg-amber-500/20 transition-colors cursor-pointer whitespace-nowrap shrink-0"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                <span>Restaurar Print</span>
+                <span>Zerar Momento (Manter Backup)</span>
               </button>
 
               <button
                 type="button"
-                onClick={handleClearSpins}
+                onClick={handleLoadSample}
+                title="Carregar giros de exemplo apenas na base da mesa (placar continua 0%)"
+                className="rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-2 text-xs font-medium text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              >
+                Simular Mesa
+              </button>
+
+              <button
+                type="button"
+                onClick={handleResetAllVirgin}
                 className="rounded-lg border border-slate-800 px-3 py-2 text-xs font-medium text-slate-400 hover:text-red-300 hover:border-red-900/60 transition-colors cursor-pointer whitespace-nowrap shrink-0"
               >
-                Limpar
+                Zerar Tudo
               </button>
             </div>
           </div>
 
           <div className="mt-4 flex items-center gap-1.5 overflow-x-auto pb-1">
-            {spins.length === 0 ? (
-              <span className="text-xs text-slate-500 py-1">
-                Nenhum giro na sessão. Clique na mesa ou registre um número de 0 a 36.
+            {combinedSpins.length === 0 ? (
+              <span className="text-xs text-slate-400 py-1">
+                Estado virgem (0% de acerto). Abra o navegador na Kwanzabet ou registre os números da mesa para iniciar.
               </span>
             ) : (
-              spins.slice(0, 24).map((num, idx) => {
+              combinedSpins.slice(0, 24).map((num, idx) => {
                 const col = getRouletteColor(num);
                 const bg =
                   col === 'green'
@@ -709,14 +843,18 @@ export default function App() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                 <div>
                   <h2 className="text-base font-semibold text-slate-100">
-                    Sugestões de Aposta para o Próximo Giro
+                    Onde Apostar Agora (Todas as Opções da Mesa)
                   </h2>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Cobertura recomendada em todos os campos da mesa com base no histórico atual
+                    {combinedSpins.length > 0
+                      ? 'Escolha um ou mais campos abaixo conforme a leitura atual e acompanhe OK / X + % de cada opção.'
+                      : 'Aguardando leitura da mesa ou 1º giro para liberar as sugestões de aposta.'}
                   </p>
                 </div>
                 <div className="font-mono text-xs text-emerald-400 tabular-nums">
-                  {analysis.totalRoundStakeAoa.toFixed(0)} AOA sugeridos ({analysis.suggestedChips.length} fichas × {analysis.stakePerUnitAoa} AOA)
+                  {analysis.suggestedChips.length > 0
+                    ? `${analysis.totalRoundStakeAoa.toFixed(0)} AOA sugeridos (${analysis.suggestedChips.length} fichas × ${analysis.stakePerUnitAoa} AOA)`
+                    : '0 AOA'}
                 </div>
               </div>
 
@@ -725,61 +863,130 @@ export default function App() {
                   {
                     marketKey: 'Vermelho / Preto',
                     title: 'Cor (Vermelho / Preto)',
-                    value: fieldSuggestions.color,
-                    reason: fieldSuggestions.colorReason,
+                    value:
+                      combinedSpins.length > 0
+                        ? `APOSTAR: ${fieldSuggestions.color}`
+                        : 'Aguardando leitura...',
+                    reason:
+                      combinedSpins.length > 0
+                        ? fieldSuggestions.colorReason
+                        : 'Sem giros lidos ainda',
                     swatch:
-                      fieldSuggestions.color === 'Vermelho'
+                      combinedSpins.length === 0
+                        ? undefined
+                        : fieldSuggestions.color === 'Vermelho'
                         ? 'bg-[#B91C1C]'
                         : 'bg-slate-900 border border-slate-600',
-                    valueClass: 'text-base font-semibold text-slate-100',
+                    valueClass:
+                      combinedSpins.length > 0
+                        ? 'text-base font-bold text-slate-100'
+                        : 'text-sm text-slate-500',
                   },
                   {
                     marketKey: 'Par / Ímpar',
                     title: 'Paridade (Par / Ímpar)',
-                    value: fieldSuggestions.parity,
-                    reason: fieldSuggestions.parityReason,
-                    valueClass: 'text-base font-semibold text-slate-100',
+                    value:
+                      combinedSpins.length > 0
+                        ? `APOSTAR: ${fieldSuggestions.parity}`
+                        : 'Aguardando leitura...',
+                    reason:
+                      combinedSpins.length > 0
+                        ? fieldSuggestions.parityReason
+                        : 'Sem giros lidos ainda',
+                    valueClass:
+                      combinedSpins.length > 0
+                        ? 'text-base font-bold text-slate-100'
+                        : 'text-sm text-slate-500',
                   },
                   {
                     marketKey: '1–18 / 19–36',
                     title: 'Força / Metade (1–18 / 19–36)',
-                    value: fieldSuggestions.half,
-                    reason: fieldSuggestions.halfReason,
-                    valueClass: 'text-base font-semibold text-slate-100',
+                    value:
+                      combinedSpins.length > 0
+                        ? `APOSTAR: ${fieldSuggestions.half}`
+                        : 'Aguardando leitura...',
+                    reason:
+                      combinedSpins.length > 0
+                        ? fieldSuggestions.halfReason
+                        : 'Sem giros lidos ainda',
+                    valueClass:
+                      combinedSpins.length > 0
+                        ? 'text-base font-bold text-slate-100'
+                        : 'text-sm text-slate-500',
                   },
                   {
                     marketKey: 'Dúzias (Blocos)',
                     title: 'Bloco / Dúzia',
-                    value: fieldSuggestions.dozenLabel,
-                    reason: fieldSuggestions.dozenReason,
-                    valueClass: 'text-base font-semibold text-amber-300',
+                    value:
+                      combinedSpins.length > 0
+                        ? `APOSTAR: ${fieldSuggestions.dozenLabel}`
+                        : 'Aguardando leitura...',
+                    reason:
+                      combinedSpins.length > 0
+                        ? fieldSuggestions.dozenReason
+                        : 'Sem giros lidos ainda',
+                    valueClass:
+                      combinedSpins.length > 0
+                        ? 'text-base font-bold text-amber-300'
+                        : 'text-sm text-slate-500',
                   },
                   {
                     marketKey: 'Colunas (2to1)',
                     title: 'Coluna (2to1)',
-                    value: fieldSuggestions.columnLabel,
-                    reason: fieldSuggestions.columnReason,
-                    valueClass: 'text-base font-semibold text-amber-300',
+                    value:
+                      combinedSpins.length > 0
+                        ? `APOSTAR: ${fieldSuggestions.columnLabel}`
+                        : 'Aguardando leitura...',
+                    reason:
+                      combinedSpins.length > 0
+                        ? fieldSuggestions.columnReason
+                        : 'Sem giros lidos ainda',
+                    valueClass:
+                      combinedSpins.length > 0
+                        ? 'text-base font-bold text-amber-300'
+                        : 'text-sm text-slate-500',
                   },
                   {
                     marketKey: 'Vizinhos (±2)',
-                    title: `Vizinhos (±2) · Âncora ${fieldSuggestions.anchorNumber}`,
-                    value: fieldSuggestions.neighbors.join(' · '),
-                    reason: `Setor: ${fieldSuggestions.sectorName}`,
-                    valueClass: 'font-mono text-base font-bold text-emerald-400 tabular-nums',
+                    title:
+                      combinedSpins.length > 0
+                        ? `Vizinhos (±2) · Âncora ${fieldSuggestions.anchorNumber}`
+                        : 'Vizinhos (±2)',
+                    value:
+                      combinedSpins.length > 0
+                        ? `APOSTAR: ${fieldSuggestions.neighbors.join(' · ')}`
+                        : 'Aguardando leitura...',
+                    reason:
+                      combinedSpins.length > 0
+                        ? `Setor: ${fieldSuggestions.sectorName}`
+                        : 'Sem giros lidos ainda',
+                    valueClass:
+                      combinedSpins.length > 0
+                        ? 'font-mono text-base font-bold text-emerald-400 tabular-nums'
+                        : 'text-sm text-slate-500',
                   },
                   {
                     marketKey: 'Setor da Roda',
                     title: 'Setor Físico da Roda',
-                    value: analysis.recommendedSector.name,
-                    reason: `${analysis.recommendedSector.hitRatePct.toFixed(0)}% nos últimos 20 giros`,
-                    valueClass: 'text-base font-semibold text-emerald-300',
+                    value:
+                      combinedSpins.length > 0
+                        ? `APOSTAR: ${analysis.recommendedSector.name}`
+                        : 'Aguardando leitura...',
+                    reason:
+                      combinedSpins.length > 0
+                        ? `${analysis.recommendedSector.hitRatePct.toFixed(0)}% nos últimos 20 giros`
+                        : 'Sem giros lidos ainda',
+                    valueClass:
+                      combinedSpins.length > 0
+                        ? 'text-base font-bold text-emerald-300'
+                        : 'text-sm text-slate-500',
                   },
                 ].map((card) => {
                   const lastEval = lastRoundMap.get(card.marketKey);
                   const rateStat = marketRateMap.get(card.marketKey);
+                  const hasAttempts = Boolean(rateStat && rateStat.attempts > 0);
                   const aboveBase =
-                    rateStat && rateStat.attempts > 0 && rateStat.ratePct >= rateStat.expectedRandomPct;
+                    hasAttempts && rateStat!.ratePct >= rateStat!.expectedRandomPct;
                   return (
                     <div
                       key={card.marketKey}
@@ -802,19 +1009,19 @@ export default function App() {
                           {rateStat && (
                             <span
                               className={`font-mono text-[11px] font-bold tabular-nums ${
-                                rateStat.attempts === 0
+                                !hasAttempts
                                   ? 'text-slate-500'
                                   : aboveBase
                                   ? 'text-emerald-400'
                                   : 'text-amber-300'
                               }`}
                             >
-                              {rateStat.ratePct.toFixed(1)}%
+                              {hasAttempts ? `${rateStat.ratePct.toFixed(1)}%` : '0.0%'}
                             </span>
                           )}
                         </div>
                       </div>
-                      <div className="mt-1 flex items-center gap-2">
+                      <div className="mt-1.5 flex items-center gap-2">
                         {card.swatch && (
                           <span className={`inline-block h-3 w-3 rounded-sm ${card.swatch}`} />
                         )}
@@ -834,25 +1041,31 @@ export default function App() {
                       {analysis.coveragePct.toFixed(1)}% da roda
                     </span>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    {analysis.suggestedChips.map((chip) => {
-                      const col = getRouletteColor(chip);
-                      const chipBg =
-                        col === 'green'
-                          ? 'bg-emerald-700 border-emerald-500'
-                          : col === 'red'
-                          ? 'bg-[#B91C1C] border-red-700'
-                          : 'bg-[#181C24] border-slate-600';
-                      return (
-                        <span
-                          key={chip}
-                          className={`inline-flex h-7 min-w-[30px] px-1.5 items-center justify-center rounded border font-mono text-xs font-bold text-white tabular-nums ${chipBg}`}
-                        >
-                          {chip}
-                        </span>
-                      );
-                    })}
-                  </div>
+                  {analysis.suggestedChips.length === 0 ? (
+                    <div className="mt-2 text-xs text-slate-500">
+                      Aguardando leitura da faixa ou 1º giro para exibir as fichas diretas.
+                    </div>
+                  ) : (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {analysis.suggestedChips.map((chip) => {
+                        const col = getRouletteColor(chip);
+                        const chipBg =
+                          col === 'green'
+                            ? 'bg-emerald-700 border-emerald-500'
+                            : col === 'red'
+                            ? 'bg-[#B91C1C] border-red-700'
+                            : 'bg-[#181C24] border-slate-600';
+                        return (
+                          <span
+                            key={chip}
+                            className={`inline-flex h-7 min-w-[30px] px-1.5 items-center justify-center rounded border font-mono text-xs font-bold text-white tabular-nums ${chipBg}`}
+                          >
+                            {chip}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             </section>

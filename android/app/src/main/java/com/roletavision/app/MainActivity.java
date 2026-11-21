@@ -63,8 +63,8 @@ public class MainActivity extends BridgeActivity {
     private boolean isScanningFrame = false;
     private boolean hasLoadedInitialUrl = false;
 
-    private float roiTopRatio = 0.04f;
-    private float roiHeightRatio = 0.07f;
+    private float roiTopRatio = 0.08f;
+    private float roiHeightRatio = 0.11f;
     private List<Integer> lastObservedStrip = new ArrayList<>();
 
     private SharedPreferences prefs;
@@ -85,8 +85,8 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         prefs = getSharedPreferences("roletavision_browser", MODE_PRIVATE);
-        roiTopRatio = prefs.getFloat("roi_top", 0.04f);
-        roiHeightRatio = prefs.getFloat("roi_height", 0.07f);
+        roiTopRatio = prefs.getFloat("roi_top", 0.08f);
+        roiHeightRatio = prefs.getFloat("roi_height", 0.11f);
 
         setupIntegratedBrowserSplitLayout();
     }
@@ -376,6 +376,11 @@ public class MainActivity extends BridgeActivity {
                 if (url != null && !url.isEmpty() && (url.startsWith("http://") || url.startsWith("https://"))) {
                     etUrl.setText(url);
                 }
+                handler.postDelayed(() -> {
+                    if (browserVisible && autoScanEnabled && !isScanningFrame) {
+                        captureAndAnalyzeBrowser(false);
+                    }
+                }, 900L);
             }
         });
 
@@ -461,9 +466,16 @@ public class MainActivity extends BridgeActivity {
     }
 
     public void triggerImmediateScan() {
-        if (browserVisible && !isScanningFrame) {
-            captureAndAnalyzeBrowser(true);
+        if (!browserVisible) return;
+        if (isScanningFrame) {
+            handler.postDelayed(() -> {
+                if (browserVisible && !isScanningFrame) {
+                    captureAndAnalyzeBrowser(true);
+                }
+            }, 180L);
+            return;
         }
+        captureAndAnalyzeBrowser(true);
     }
 
     private void updateRoiOverlayPosition() {
@@ -495,26 +507,48 @@ public class MainActivity extends BridgeActivity {
         if (w < 50 || h < 50) return;
 
         isScanningFrame = true;
+        final float prevOverlayAlpha = roiOverlay != null ? roiOverlay.getAlpha() : 1f;
+        if (roiOverlay != null && roiOverlay.getVisibility() == View.VISIBLE) {
+            roiOverlay.setAlpha(0f);
+        }
+
         Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             int[] loc = new int[2];
             browserWebView.getLocationInWindow(loc);
-            Rect srcRect = new Rect(loc[0], loc[1], loc[0] + w, loc[1] + h);
-            try {
-                PixelCopy.request(getWindow(), srcRect, bitmap, copyResult -> {
-                    if (copyResult == PixelCopy.SUCCESS) {
-                        processCapturedBitmap(bitmap, showCalibrationFeedback);
-                    } else {
-                        fallbackCanvasCapture(bitmap, showCalibrationFeedback);
-                    }
-                }, handler);
-            } catch (Exception e) {
-                fallbackCanvasCapture(bitmap, showCalibrationFeedback);
+            View decor = getWindow().getDecorView();
+            int left = Math.max(0, loc[0]);
+            int top = Math.max(0, loc[1]);
+            int right = Math.min(decor.getWidth(), loc[0] + w);
+            int bottom = Math.min(decor.getHeight(), loc[1] + h);
+
+            if (right - left >= 50 && bottom - top >= 50) {
+                Rect srcRect = new Rect(left, top, right, bottom);
+                if (srcRect.width() != w || srcRect.height() != h) {
+                    bitmap.recycle();
+                    bitmap = Bitmap.createBitmap(srcRect.width(), srcRect.height(), Bitmap.Config.ARGB_8888);
+                }
+                final Bitmap targetBitmap = bitmap;
+                try {
+                    PixelCopy.request(getWindow(), srcRect, targetBitmap, copyResult -> {
+                        if (roiOverlay != null) roiOverlay.setAlpha(prevOverlayAlpha);
+                        if (copyResult == PixelCopy.SUCCESS) {
+                            processCapturedBitmap(targetBitmap, showCalibrationFeedback);
+                        } else {
+                            fallbackCanvasCapture(targetBitmap, showCalibrationFeedback);
+                        }
+                    }, handler);
+                    return;
+                } catch (Exception e) {
+                    if (roiOverlay != null) roiOverlay.setAlpha(prevOverlayAlpha);
+                    fallbackCanvasCapture(targetBitmap, showCalibrationFeedback);
+                    return;
+                }
             }
-        } else {
-            fallbackCanvasCapture(bitmap, showCalibrationFeedback);
         }
+        if (roiOverlay != null) roiOverlay.setAlpha(prevOverlayAlpha);
+        fallbackCanvasCapture(bitmap, showCalibrationFeedback);
     }
 
     private void fallbackCanvasCapture(Bitmap bitmap, boolean showCalibrationFeedback) {
@@ -529,15 +563,19 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void processCapturedBitmap(Bitmap bitmap, boolean showCalibrationFeedback) {
-        scanner.scanHistoryStrip(bitmap, roiTopRatio, roiHeightRatio, detectedNewestFirst -> {
+        scanner.scanHistoryStrip(bitmap, roiTopRatio, roiHeightRatio, (detectedNewestFirst, usedMode) -> {
             bitmap.recycle();
             isScanningFrame = false;
 
+            if (showCalibrationFeedback) {
+                BrowserScannerPlugin.emitScanFeedback(detectedNewestFirst.size(), usedMode);
+            }
+
             if (showCalibrationFeedback && tvCalibStatus != null) {
                 if (detectedNewestFirst.isEmpty()) {
-                    tvCalibStatus.setText("Nenhum numero lido. Ajuste a caixa verde sobre a faixa.");
+                    tvCalibStatus.setText("Nenhum numero lido. Arraste a barra acima ate cobrir os numeros.");
                 } else {
-                    tvCalibStatus.setText("Lidos: " + detectedNewestFirst.toString());
+                    tvCalibStatus.setText("Lidos (" + usedMode + "): " + detectedNewestFirst.toString());
                 }
             }
 

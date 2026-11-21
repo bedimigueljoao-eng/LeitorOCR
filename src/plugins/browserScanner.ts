@@ -9,6 +9,11 @@ export interface BrowserVisibilityEvent {
   visible: boolean;
 }
 
+export interface ScanFeedbackEvent {
+  count: number;
+  mode: string;
+}
+
 export interface BrowserScannerPlugin {
   openBrowser(options?: { url?: string }): Promise<void>;
   closeBrowser(): Promise<void>;
@@ -23,6 +28,10 @@ export interface BrowserScannerPlugin {
   addListener(
     eventName: 'browserVisibilityChanged',
     listenerFunc: (event: BrowserVisibilityEvent) => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'scanFeedback',
+    listenerFunc: (event: ScanFeedbackEvent) => void
   ): Promise<PluginListenerHandle>;
 }
 

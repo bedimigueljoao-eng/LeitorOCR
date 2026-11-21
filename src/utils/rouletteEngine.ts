@@ -374,32 +374,38 @@ export function computeFieldSuggestions(
  * para cada giro i, usa apenas os giros anteriores a i para prever e testa se acertou em i.
  */
 export function evaluateAccuracy(
-  spinsNewestFirst: number[],
-  profile: StrategyProfile = 'neighbors'
+  sessionSpinsNewestFirst: number[],
+  profile: StrategyProfile = 'neighbors',
+  learnedPriorSpinsNewestFirst: number[] = []
 ): AccuracySummary {
-  if (spinsNewestFirst.length < 2) {
+  const emptyMarkets: MarketAccuracy[] = [
+    { market: 'Vermelho / Preto', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 48.6 },
+    { market: 'Par / Ímpar', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 48.6 },
+    { market: '1–18 / 19–36', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 48.6 },
+    { market: 'Dúzias (Blocos)', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 32.4 },
+    { market: 'Colunas (2to1)', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 32.4 },
+    { market: 'Vizinhos (±2)', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 13.5 },
+    { market: 'Setor da Roda', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 32.4 },
+  ];
+
+  if (sessionSpinsNewestFirst.length === 0) {
     return {
       evaluatedRounds: 0,
       totalHits: 0,
       totalAttempts: 0,
       overallRatePct: 0,
-      levelLabel: 'Aguardando mais giros',
-      byMarket: [
-        { market: 'Vermelho / Preto', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 48.6 },
-        { market: 'Par / Ímpar', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 48.6 },
-        { market: '1–18 / 19–36', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 48.6 },
-        { market: 'Dúzias (Blocos)', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 32.4 },
-        { market: 'Colunas (2to1)', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 32.4 },
-        { market: 'Vizinhos (±2)', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 13.5 },
-        { market: 'Setor da Roda', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 32.4 },
-      ],
+      levelLabel:
+        learnedPriorSpinsNewestFirst.length > 0
+          ? 'Sessão zerada (aprendizagem preservada)'
+          : 'Sessão virgem (aguardando 1ª jogada)',
+      byMarket: emptyMarkets,
       lastRound: null,
       recentRounds: [],
     };
   }
 
-  // Ordem cronológica: oldest -> newest
-  const chronological = [...spinsNewestFirst].reverse();
+  // Ordem cronológica da sessão atual: oldest -> newest
+  const sessionChronological = [...sessionSpinsNewestFirst].reverse();
 
   const marketStats = [
     { market: 'Vermelho / Preto', hits: 0, attempts: 0, expectedRandomPct: 48.6 },
@@ -413,10 +419,20 @@ export function evaluateAccuracy(
 
   const roundEvaluations: RoundEvaluation[] = [];
 
-  for (let i = 1; i < chronological.length; i++) {
-    const historyPriorNewestFirst = chronological.slice(0, i).reverse();
-    const { suggestions, topSector } = computeFieldSuggestions(historyPriorNewestFirst, profile);
-    const actual = chronological[i];
+  for (let i = 0; i < sessionChronological.length; i++) {
+    const priorSessionNewestFirst = sessionChronological.slice(0, i).reverse();
+    const combinedPriorNewestFirst = [
+      ...priorSessionNewestFirst,
+      ...learnedPriorSpinsNewestFirst,
+    ];
+
+    // Se ainda não existia nenhum giro prévio (nem na mesa/backup), o primeiro giro apenas inicia a leitura
+    if (combinedPriorNewestFirst.length === 0) {
+      continue;
+    }
+
+    const { suggestions, topSector } = computeFieldSuggestions(combinedPriorNewestFirst, profile);
+    const actual = sessionChronological[i];
     const actualColor = getRouletteColor(actual);
 
     const colorActualLabel =
@@ -514,13 +530,26 @@ export function evaluateAccuracy(
     });
 
     roundEvaluations.push({
-      spinIndex: i,
+      spinIndex: i + 1,
       actualNumber: actual,
       actualColor,
       markets: evals,
       hitsCount: evals.filter((e) => e.hit).length,
       totalMarkets: evals.length,
     });
+  }
+
+  if (roundEvaluations.length === 0) {
+    return {
+      evaluatedRounds: 0,
+      totalHits: 0,
+      totalAttempts: 0,
+      overallRatePct: 0,
+      levelLabel: '1º giro lido · Aguardando próxima rodada para medir acerto',
+      byMarket: emptyMarkets,
+      lastRound: null,
+      recentRounds: [],
+    };
   }
 
   const totalHits = marketStats.reduce((acc, m) => acc + m.hits, 0);
@@ -552,14 +581,20 @@ export function evaluateAccuracy(
 }
 
 export function analyzeSpins(
-  spinsNewestFirst: number[],
+  sessionSpinsNewestFirst: number[],
   profile: StrategyProfile = 'neighbors',
   bankrollAoa = 238.39,
-  unitStakeAoa = 10
+  unitStakeAoa = 10,
+  learnedPriorSpinsNewestFirst: number[] = []
 ): RouletteAnalysis {
-  const total = spinsNewestFirst.length;
-  const computed = computeFieldSuggestions(spinsNewestFirst, profile);
-  const accuracy = evaluateAccuracy(spinsNewestFirst, profile);
+  const combinedForPrediction = [...sessionSpinsNewestFirst, ...learnedPriorSpinsNewestFirst];
+  const total = combinedForPrediction.length;
+  const computed = computeFieldSuggestions(combinedForPrediction, profile);
+  const accuracy = evaluateAccuracy(
+    sessionSpinsNewestFirst,
+    profile,
+    learnedPriorSpinsNewestFirst
+  );
 
   if (total === 0) {
     return {
@@ -582,22 +617,22 @@ export function analyzeSpins(
       hotNumbers: [],
       coldNumbers: [],
       learnedFollowups: [],
-      suggestedChips: computed.suggestedChips,
-      coveragePct: (computed.suggestedChips.length / 37) * 100,
+      suggestedChips: [],
+      coveragePct: 0,
       stakePerUnitAoa: unitStakeAoa,
-      totalRoundStakeAoa: computed.suggestedChips.length * unitStakeAoa,
+      totalRoundStakeAoa: 0,
       fieldSuggestions: computed.suggestions,
       accuracy,
     };
   }
 
-  const redCount = spinsNewestFirst.filter((n) => getRouletteColor(n) === 'red').length;
-  const blackCount = spinsNewestFirst.filter((n) => getRouletteColor(n) === 'black').length;
-  const greenCount = spinsNewestFirst.filter((n) => n === 0).length;
-  const evenCount = spinsNewestFirst.filter((n) => n !== 0 && n % 2 === 0).length;
-  const oddCount = spinsNewestFirst.filter((n) => n !== 0 && n % 2 === 1).length;
-  const lowCount = spinsNewestFirst.filter((n) => n >= 1 && n <= 18).length;
-  const highCount = spinsNewestFirst.filter((n) => n >= 19 && n <= 36).length;
+  const redCount = combinedForPrediction.filter((n) => getRouletteColor(n) === 'red').length;
+  const blackCount = combinedForPrediction.filter((n) => getRouletteColor(n) === 'black').length;
+  const greenCount = combinedForPrediction.filter((n) => n === 0).length;
+  const evenCount = combinedForPrediction.filter((n) => n !== 0 && n % 2 === 0).length;
+  const oddCount = combinedForPrediction.filter((n) => n !== 0 && n % 2 === 1).length;
+  const lowCount = combinedForPrediction.filter((n) => n >= 1 && n <= 18).length;
+  const highCount = combinedForPrediction.filter((n) => n >= 19 && n <= 36).length;
 
   const safeMaxRound = Math.max(unitStakeAoa, Math.floor(bankrollAoa * 0.25));
   const affordableChipsCount = Math.min(
@@ -612,7 +647,7 @@ export function analyzeSpins(
 
   return {
     totalSpins: total,
-    lastNumber: spinsNewestFirst[0],
+    lastNumber: combinedForPrediction[0],
     recommendedAnchor: computed.suggestions.anchorNumber,
     neighbors: computed.suggestions.neighbors,
     recommendedSector: computed.topSector,

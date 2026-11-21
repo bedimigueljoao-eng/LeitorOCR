@@ -40,6 +40,14 @@ public class BrowserScannerPlugin extends Plugin {
         instance.notifyListeners("browserVisibilityChanged", payload);
     }
 
+    public static void emitScanFeedback(int count, String mode) {
+        if (instance == null) return;
+        JSObject payload = new JSObject();
+        payload.put("count", count);
+        payload.put("mode", mode != null ? mode : "");
+        instance.notifyListeners("scanFeedback", payload);
+    }
+
     @PluginMethod
     public void openBrowser(PluginCall call) {
         String url = call.getString("url", "");
