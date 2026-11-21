@@ -15,24 +15,20 @@ export const AndroidBuilderTab: React.FC<AndroidBuilderTabProps> = ({
 
   const androidFiles = [
     {
+      path: 'capacitor.config.ts',
+      role: 'Configuração Capacitor (appName: RoletaVision, appId: com.roletavision.app, webDir: dist)',
+    },
+    {
+      path: 'android/',
+      role: 'Projeto Android gerado com npx cap add android e sincronizado via npx cap sync android',
+    },
+    {
       path: '.github/workflows/build-apk.yml',
-      role: 'Compila automaticamente o projeto Android no GitHub Actions e gera o APK para download',
+      role: 'Compila automaticamente o APK no GitHub Actions (Node 22, JDK 21, setup-android@v4, ./gradlew assembleDebug)',
     },
     {
       path: 'android-app/app/src/main/java/ao/kwanzabet/roletavision/MainActivity.kt',
-      role: 'Navegador integrado (WebView com cookies + vídeo ao vivo) e painel inferior expansível',
-    },
-    {
-      path: 'android-app/app/src/main/java/ao/kwanzabet/roletavision/ScreenScanner.kt',
-      role: 'Captura automática da faixa superior via PixelCopy + Google ML Kit OCR + validação por cor RGB',
-    },
-    {
-      path: 'android-app/app/src/main/java/ao/kwanzabet/roletavision/RouletteEngine.kt',
-      role: 'Motor estatístico da roda europeia, vizinhos, setores, atrasos e aprendizado de transições',
-    },
-    {
-      path: 'android-app/app/src/main/java/ao/kwanzabet/roletavision/SpinDatabase.kt',
-      role: 'Banco SQLite local para gravar giros entre sessões e alimentar o aprendizado contínuo',
+      role: 'Módulo nativo complementar com navegador integrado (WebView) + ML Kit OCR em Kotlin',
     },
   ];
 
@@ -49,13 +45,15 @@ export const AndroidBuilderTab: React.FC<AndroidBuilderTabProps> = ({
           <div className="flex items-center gap-3">
             <Smartphone className="h-5 w-5 text-amber-400 shrink-0" />
             <h2 className="text-lg font-semibold text-slate-100">
-              Projeto Android Nativo Pronto para GitHub → APK
+              Capacitor + Projeto Android Pronto para GitHub → APK
             </h2>
           </div>
           <p className="mt-2 text-sm text-slate-400 leading-relaxed">
-            O código-fonte nativo em Kotlin já foi gerado dentro da pasta{' '}
-            <span className="font-mono text-slate-200">android-app/</span> deste repositório,
-            junto com o workflow de compilação automática em{' '}
+            O projeto React + Vite já está empacotado com{' '}
+            <span className="font-mono text-slate-200">Capacitor</span> na pasta{' '}
+            <span className="font-mono text-slate-200">android/</span> (ID{' '}
+            <span className="font-mono text-slate-200">com.roletavision.app</span>), junto com o
+            workflow corrigido em{' '}
             <span className="font-mono text-slate-200">.github/workflows/build-apk.yml</span>.
           </p>
 
@@ -76,12 +74,10 @@ export const AndroidBuilderTab: React.FC<AndroidBuilderTabProps> = ({
                 <span className="font-mono text-xs font-bold text-amber-400 pt-0.5">02.</span>
                 <span>
                   Abra a aba <strong className="text-slate-100">Actions</strong> no GitHub. O
-                  fluxo <span className="font-mono text-xs">Build Android APK</span> executará
-                  automaticamente e disponibilizará o arquivo{' '}
-                  <span className="font-mono text-xs text-emerald-400">
-                    RoletaVision-Android-APK
-                  </span>{' '}
-                  nos artefatos.
+                  fluxo <span className="font-mono text-xs">Compilar RoletaVision APK</span>{' '}
+                  executará o build web, <span className="font-mono text-xs">cap sync android</span>{' '}
+                  e <span className="font-mono text-xs">./gradlew assembleDebug</span>, gerando o
+                  artefato <span className="font-mono text-xs text-emerald-400">RoletaVision-APK</span>.
                 </span>
               </li>
               <li className="flex gap-3">
