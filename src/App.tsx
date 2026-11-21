@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { RotateCcw, Plus, CheckCircle2, XCircle } from 'lucide-react';
+import { RotateCcw, Plus, CheckCircle2, XCircle, Globe, Crosshair } from 'lucide-react';
 import {
   analyzeSpins,
   getRouletteColor,
@@ -10,6 +10,7 @@ import { EuropeanWheel } from './components/EuropeanWheel';
 import { CreedroomzBoard } from './components/CreedroomzBoard';
 import { ScreenshotScannerTab } from './components/ScreenshotScannerTab';
 import { AndroidBuilderTab } from './components/AndroidBuilderTab';
+import { BrowserScanner, isNativeAndroidApp } from './plugins/browserScanner';
 
 type ActiveTab = 'analyzer' | 'scanner' | 'board' | 'android';
 
@@ -18,6 +19,11 @@ const STORAGE_KEY_BANKROLL = 'roletavision_bankroll_v1';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('analyzer');
+  const isAndroidApk = isNativeAndroidApp();
+  const [nativeBrowserOpen, setNativeBrowserOpen] = useState(false);
+  const [browserUrlInput, setBrowserUrlInput] = useState('https://www.kwanzabet.ao');
+  const [browserNotice, setBrowserNotice] = useState<string | null>(null);
+
   const [spins, setSpins] = useState<number[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY_SPINS);
@@ -66,10 +72,74 @@ export default function App() {
     }
   }, [bankrollAoa]);
 
+  // Conecta ao navegador nativo integrado no APK Android (Capacitor Plugin)
+  useEffect(() => {
+    if (!isAndroidApk) return;
+
+    let mounted = true;
+    const setupListeners = async () => {
+      const spinSub = await BrowserScanner.addListener('spinsDetected', (event) => {
+        if (!mounted || !Array.isArray(event.numbersNewestFirst)) return;
+        const incoming = event.numbersNewestFirst.filter(
+          (n) => typeof n === 'number' && n >= 0 && n <= 36
+        );
+        if (incoming.length === 0) return;
+
+        setSpins((prev) => {
+          if (event.isFullStrip) {
+            return incoming.slice(0, 500);
+          }
+          return [...incoming, ...prev].slice(0, 500);
+        });
+      });
+
+      const visSub = await BrowserScanner.addListener(
+        'browserVisibilityChanged',
+        (event) => {
+          if (mounted) {
+            setNativeBrowserOpen(Boolean(event.visible));
+          }
+        }
+      );
+
+      return () => {
+        void spinSub.remove();
+        void visSub.remove();
+      };
+    };
+
+    const cleanupPromise = setupListeners();
+    return () => {
+      mounted = false;
+      void cleanupPromise.then((fn) => fn && fn());
+    };
+  }, [isAndroidApk]);
+
   const analysis = useMemo(
     () => analyzeSpins(spins, profile, bankrollAoa, unitStakeAoa),
     [spins, profile, bankrollAoa, unitStakeAoa]
   );
+
+  const handleOpenIntegratedBrowser = async () => {
+    setBrowserNotice(null);
+    if (!isAndroidApk) {
+      setBrowserNotice(
+        'O navegador integrado abre dentro do aplicativo instalado no Android (RoletaVision.apk). Aqui na pré-visualização web, use a aba Leitor de Tela ou gere o APK na aba App Android.'
+      );
+      return;
+    }
+
+    if (nativeBrowserOpen) {
+      await BrowserScanner.closeBrowser();
+    } else {
+      await BrowserScanner.openBrowser({ url: browserUrlInput });
+    }
+  };
+
+  const handleToggleAndroidCalibration = async () => {
+    if (!isAndroidApk) return;
+    await BrowserScanner.toggleCalibration();
+  };
 
   const handleRegisterSpin = (num: number) => {
     if (num < 0 || num > 36 || !Number.isInteger(num)) return;
@@ -114,6 +184,92 @@ export default function App() {
 
   const { fieldSuggestions, accuracy } = analysis;
 
+  // Modo compacto automatico quando o navegador Kwanzabet esta aberto em cima no APK
+  if (nativeBrowserOpen) {
+    return (
+      <div className="min-h-screen bg-[#0B0F17] text-slate-100 p-3 space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-[11px] font-medium text-amber-300 truncate">
+              {fieldSuggestions.color} · {fieldSuggestions.parity} · {fieldSuggestions.half} ·{' '}
+              {fieldSuggestions.dozenIndex}ª Dúzia · Col {fieldSuggestions.columnIndex}
+            </div>
+            <div className="font-mono text-xs font-bold text-emerald-400 tabular-nums truncate">
+              Vizinhos: {fieldSuggestions.neighbors.join(', ')}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button
+              type="button"
+              onClick={handleToggleAndroidCalibration}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-[11px] font-medium text-slate-200"
+            >
+              <Crosshair className="h-3.5 w-3.5" />
+              <span>Mira</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleOpenIntegratedBrowser}
+              className="rounded-lg bg-amber-400 px-2.5 py-1.5 text-[11px] font-semibold text-slate-950"
+            >
+              Expandir Painel
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 text-[11px] border-t border-slate-800 pt-2">
+          <span className="text-slate-300">
+            {accuracy.lastRound
+              ? `Último (${accuracy.lastRound.actualNumber}): ${accuracy.lastRound.hitsCount}/6 acertos`
+              : 'Aguardando leitura da faixa...'}
+          </span>
+          <span className="font-mono font-semibold text-emerald-400 tabular-nums">
+            Plataforma: {accuracy.overallRatePct.toFixed(1)}%
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+          {spins.slice(0, 14).map((num, idx) => {
+            const col = getRouletteColor(num);
+            const bg =
+              col === 'green'
+                ? 'bg-emerald-700 border-emerald-500'
+                : col === 'red'
+                ? 'bg-[#A61B26] border-red-800'
+                : 'bg-[#181C24] border-slate-700';
+            return (
+              <span
+                key={`${num}-${idx}`}
+                className={`inline-flex h-6 min-w-[26px] px-1 items-center justify-center rounded border font-mono text-[11px] font-bold text-white tabular-nums shrink-0 ${bg} ${
+                  idx === 0 ? 'ring-1 ring-amber-400' : ''
+                }`}
+              >
+                {num}
+              </span>
+            );
+          })}
+        </div>
+
+        {accuracy.lastRound && (
+          <div className="grid grid-cols-3 gap-1.5 pt-1 text-[10px]">
+            {accuracy.lastRound.markets.map((ev) => (
+              <div
+                key={ev.market}
+                className="rounded border border-slate-800 bg-[#131924] px-2 py-1 flex items-center justify-between gap-1"
+              >
+                <span className="text-slate-300 truncate">{ev.market.split(' ')[0]}</span>
+                <span className={ev.hit ? 'text-emerald-400 font-semibold' : 'text-red-400'}>
+                  {ev.hit ? 'OK' : 'X'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col">
       {/* Top Bar Contract: exatamente 3 zonas separadas por gap-8 */}
@@ -155,10 +311,11 @@ export default function App() {
           <div className="shrink-0">
             <button
               type="button"
-              onClick={() => setActiveTab('scanner')}
-              className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              onClick={handleOpenIntegratedBrowser}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
-              Ler Captura
+              <Globe className="h-3.5 w-3.5" />
+              <span>Abrir Navegador</span>
             </button>
           </div>
         </div>
@@ -168,7 +325,7 @@ export default function App() {
             { id: 'analyzer', label: 'Analisador' },
             { id: 'scanner', label: 'Leitor' },
             { id: 'board', label: 'Mesa' },
-            { id: 'android', label: 'APK Android' },
+            { id: 'android', label: 'APK' },
           ].map((item) => (
             <button
               key={item.id}
@@ -187,6 +344,52 @@ export default function App() {
       </header>
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 sm:px-6 py-6 space-y-6">
+        {browserNotice && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span>{browserNotice}</span>
+            <button
+              type="button"
+              onClick={() => setBrowserNotice(null)}
+              className="text-amber-300 underline shrink-0 self-start sm:self-center cursor-pointer"
+            >
+              Fechar
+            </button>
+          </div>
+        )}
+
+        {/* Barra de Acesso Direto ao Navegador Integrado */}
+        <section className="rounded-xl border border-slate-800 bg-[#131924] p-4 sm:p-5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-100">
+                Navegador Integrado com Leitura Automática (1 Telefone)
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {isAndroidApk
+                  ? 'Abra a Kwanzabet dentro do app em tela dividida para ler os resultados em tempo real.'
+                  : 'No APK Android, o botão abaixo abre a Kwanzabet na parte superior enquanto as sugestões ficam fixas embaixo.'}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="url"
+                value={browserUrlInput}
+                onChange={(e) => setBrowserUrlInput(e.target.value)}
+                aria-label="Endereço do site da roleta"
+                className="w-full sm:w-64 rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-2 font-mono text-xs text-slate-200 focus:border-emerald-500 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleOpenIntegratedBrowser}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-3.5 py-2 text-xs font-semibold text-slate-950 hover:bg-amber-300 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Globe className="h-3.5 w-3.5" />
+                <span>Entrar</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
         {/* Faixa de Histórico Sincronizada */}
         <section className="rounded-xl border border-slate-800 bg-[#131924] p-4 sm:p-5">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -283,7 +486,6 @@ export default function App() {
 
         {activeTab === 'analyzer' && (
           <div className="space-y-6">
-            {/* Sugestoes Completas para o Proximo Giro (Todos os Campos da Mesa) */}
             <section className="rounded-xl border border-slate-800 bg-[#131924] p-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
                 <div>
@@ -373,9 +575,7 @@ export default function App() {
               </div>
             </section>
 
-            {/* Desempenho de Previsao: Acertou / Errou + Percentual por Campo */}
             <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Esquerda: Nivel Geral e Taxa por Mercado */}
               <div className="lg:col-span-7 rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
@@ -439,7 +639,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Direita: Resultado da Ultima Previsao (Acertou ou Errou em cada campo) */}
               <div className="lg:col-span-5 rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4">
                 <div className="flex items-center justify-between gap-2">
                   <div>
@@ -505,7 +704,6 @@ export default function App() {
               </div>
             </section>
 
-            {/* Grid Principal: Roda + Mesa + Estatisticas & Config */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
               <div className="lg:col-span-5 rounded-xl border border-slate-800 bg-[#131924] p-5 flex flex-col justify-between">
                 <div className="flex items-center justify-between gap-2 mb-4">
