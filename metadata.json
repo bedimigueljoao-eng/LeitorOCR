@@ -1,0 +1,6 @@
+{
+  "name": "RoletaVision Studio",
+  "description": "Analisador de roleta ao vivo e aplicativo Android nativo com navegador integrado e leitura em tempo real.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
