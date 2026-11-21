@@ -53,7 +53,7 @@ public class MainActivity extends BridgeActivity {
     private Button btnScanToggle;
 
     private View capacitorWebView;
-    private float browserSplitWeight = 0.68f;
+    private float browserSplitWeight = 0.56f;
 
     private final ScreenScanner scanner = new ScreenScanner();
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -75,7 +75,7 @@ public class MainActivity extends BridgeActivity {
             if (browserVisible && autoScanEnabled && !isScanningFrame) {
                 captureAndAnalyzeBrowser(false);
             }
-            handler.postDelayed(this, 1000L);
+            handler.postDelayed(this, 750L);
         }
     };
 
@@ -560,10 +560,15 @@ public class MainActivity extends BridgeActivity {
         int maxShift = Math.min(5, newStrip.size() - 2);
         for (int shift = 1; shift <= maxShift; shift++) {
             int overlapLen = Math.min(newStrip.size() - shift, lastObservedStrip.size());
-            if (overlapLen >= 3) {
-                List<Integer> tailNew = newStrip.subList(shift, shift + overlapLen);
-                List<Integer> headOld = lastObservedStrip.subList(0, overlapLen);
-                if (tailNew.equals(headOld)) {
+            int checkLen = Math.min(4, overlapLen);
+            if (checkLen >= 3) {
+                int matches = 0;
+                for (int k = 0; k < checkLen; k++) {
+                    if (newStrip.get(shift + k).equals(lastObservedStrip.get(k))) {
+                        matches++;
+                    }
+                }
+                if (matches == checkLen || (checkLen >= 4 && matches >= 3)) {
                     matchedShift = shift;
                     break;
                 }
@@ -577,7 +582,25 @@ public class MainActivity extends BridgeActivity {
                 browserPanel.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
             }
             BrowserScannerPlugin.emitSpins(onlyNew, false);
-        } else if (!newStrip.get(0).equals(lastObservedStrip.get(0)) && newStrip.size() >= 5) {
+            return;
+        }
+
+        // Verifica se continua na mesma mesa (ex: mesmo inicio com melhoria de leitura na direita)
+        int prefixCheck = Math.min(3, Math.min(newStrip.size(), lastObservedStrip.size()));
+        boolean sameHead = true;
+        for (int k = 0; k < prefixCheck; k++) {
+            if (!newStrip.get(k).equals(lastObservedStrip.get(k))) {
+                sameHead = false;
+                break;
+            }
+        }
+        if (sameHead) {
+            lastObservedStrip = new ArrayList<>(newStrip);
+            return;
+        }
+
+        // Mudanca completa de mesa/faixa: emite faixa completa
+        if (newStrip.size() >= 5) {
             lastObservedStrip = new ArrayList<>(newStrip);
             BrowserScannerPlugin.emitSpins(newStrip, true);
         }

@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { RotateCcw, Plus, CheckCircle2, XCircle, Globe, Crosshair } from 'lucide-react';
+import {
+  RotateCcw,
+  Plus,
+  CheckCircle2,
+  XCircle,
+  Globe,
+  Crosshair,
+  RefreshCw,
+  ArrowUpDown,
+} from 'lucide-react';
 import {
   analyzeSpins,
   getRouletteColor,
@@ -16,11 +25,34 @@ type ActiveTab = 'analyzer' | 'scanner' | 'board' | 'android';
 
 const STORAGE_KEY_SPINS = 'roletavision_spins_v1';
 const STORAGE_KEY_BANKROLL = 'roletavision_bankroll_v1';
+const SPLIT_PRESETS = [0.56, 0.45, 0.66] as const;
+
+function mergeIncomingStrip(prev: number[], incoming: number[], isFullStrip: boolean): number[] {
+  if (incoming.length === 0) return prev;
+  if (!isFullStrip) {
+    return [...incoming, ...prev].slice(0, 500);
+  }
+  if (prev.length >= 3) {
+    // Se a faixa completa contém novos giros seguidos do histórico anterior, preserva o histórico antigo
+    for (let shift = 0; shift <= Math.min(4, incoming.length - 3); shift++) {
+      if (
+        incoming[shift] === prev[0] &&
+        incoming[shift + 1] === prev[1] &&
+        incoming[shift + 2] === prev[2]
+      ) {
+        if (shift === 0) return prev;
+        return [...incoming.slice(0, shift), ...prev].slice(0, 500);
+      }
+    }
+  }
+  return incoming.slice(0, 500);
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('analyzer');
   const isAndroidApk = isNativeAndroidApp();
   const [nativeBrowserOpen, setNativeBrowserOpen] = useState(false);
+  const [splitPresetIdx, setSplitPresetIdx] = useState(0);
   const [browserUrlInput, setBrowserUrlInput] = useState('https://www.kwanzabet.ao');
   const [browserNotice, setBrowserNotice] = useState<string | null>(null);
 
@@ -85,12 +117,7 @@ export default function App() {
         );
         if (incoming.length === 0) return;
 
-        setSpins((prev) => {
-          if (event.isFullStrip) {
-            return incoming.slice(0, 500);
-          }
-          return [...incoming, ...prev].slice(0, 500);
-        });
+        setSpins((prev) => mergeIncomingStrip(prev, incoming, Boolean(event.isFullStrip)));
       });
 
       const visSub = await BrowserScanner.addListener(
@@ -141,6 +168,18 @@ export default function App() {
     await BrowserScanner.toggleCalibration();
   };
 
+  const handleCycleSplitRatio = async () => {
+    if (!isAndroidApk) return;
+    const nextIdx = (splitPresetIdx + 1) % SPLIT_PRESETS.length;
+    setSplitPresetIdx(nextIdx);
+    await BrowserScanner.setSplitRatio({ browserWeight: SPLIT_PRESETS[nextIdx] });
+  };
+
+  const handleManualBrowserScan = async () => {
+    if (!isAndroidApk) return;
+    await BrowserScanner.scanNow();
+  };
+
   const handleRegisterSpin = (num: number) => {
     if (num < 0 || num > 36 || !Number.isInteger(num)) return;
     setSpins((prev) => [num, ...prev].slice(0, 500));
@@ -184,53 +223,157 @@ export default function App() {
 
   const { fieldSuggestions, accuracy } = analysis;
 
-  // Modo compacto automatico quando o navegador Kwanzabet esta aberto em cima no APK
+  const lastRoundMap = useMemo(() => {
+    const map = new Map<
+      string,
+      { predicted: string; actual: string; hit: boolean }
+    >();
+    if (accuracy.lastRound) {
+      for (const m of accuracy.lastRound.markets) {
+        map.set(m.market, m);
+      }
+    }
+    return map;
+  }, [accuracy.lastRound]);
+
+  const marketRateMap = useMemo(() => {
+    const map = new Map<
+      string,
+      { hits: number; attempts: number; ratePct: number; expectedRandomPct: number }
+    >();
+    for (const m of accuracy.byMarket) {
+      map.set(m.market, m);
+    }
+    return map;
+  }, [accuracy.byMarket]);
+
+  // Modo integrado quando o navegador Kwanzabet está aberto em cima no APK
   if (nativeBrowserOpen) {
+    const compactOptions = [
+      {
+        marketKey: 'Vermelho / Preto',
+        shortTitle: 'Cor',
+        suggestion: fieldSuggestions.color,
+        accent:
+          fieldSuggestions.color === 'Vermelho'
+            ? 'text-red-300'
+            : 'text-slate-100',
+      },
+      {
+        marketKey: 'Par / Ímpar',
+        shortTitle: 'Par / Ímpar',
+        suggestion: fieldSuggestions.parity,
+        accent: 'text-slate-100',
+      },
+      {
+        marketKey: '1–18 / 19–36',
+        shortTitle: 'Força',
+        suggestion: fieldSuggestions.half,
+        accent: 'text-slate-100',
+      },
+      {
+        marketKey: 'Dúzias (Blocos)',
+        shortTitle: 'Bloco / Dúzia',
+        suggestion: fieldSuggestions.dozenLabel,
+        accent: 'text-amber-300',
+      },
+      {
+        marketKey: 'Colunas (2to1)',
+        shortTitle: 'Coluna (2to1)',
+        suggestion: fieldSuggestions.columnLabel,
+        accent: 'text-amber-300',
+      },
+      {
+        marketKey: 'Setor da Roda',
+        shortTitle: 'Setor',
+        suggestion: analysis.recommendedSector.name,
+        accent: 'text-emerald-300',
+      },
+      {
+        marketKey: 'Vizinhos (±2)',
+        shortTitle: `Vizinhos (Âncora ${fieldSuggestions.anchorNumber})`,
+        suggestion: fieldSuggestions.neighbors.join(' · '),
+        accent: 'text-emerald-400 font-mono',
+      },
+    ];
+
+    const splitLabel =
+      splitPresetIdx === 0 ? 'Tela 56%' : splitPresetIdx === 1 ? 'Tela 45%' : 'Tela 66%';
+
     return (
-      <div className="min-h-screen bg-[#0B0F17] text-slate-100 p-3 space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="min-w-0">
-            <div className="text-[11px] font-medium text-amber-300 truncate">
-              {fieldSuggestions.color} · {fieldSuggestions.parity} · {fieldSuggestions.half} ·{' '}
-              {fieldSuggestions.dozenIndex}ª Dúzia · Col {fieldSuggestions.columnIndex}
-            </div>
-            <div className="font-mono text-xs font-bold text-emerald-400 tabular-nums truncate">
-              Vizinhos: {fieldSuggestions.neighbors.join(', ')}
-            </div>
+      <div className="h-screen overflow-y-auto bg-[#0B0F17] text-slate-100 p-2.5 space-y-2">
+        {/* Cabeçalho compacto com controles do split + resumo de acerto da plataforma */}
+        <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-800 pb-2">
+          <div className="flex items-center gap-2 min-w-0">
+            {accuracy.lastRound ? (
+              <>
+                <span
+                  className={`inline-flex h-6 min-w-[26px] px-1 items-center justify-center rounded border font-mono text-xs font-bold text-white tabular-nums ${
+                    accuracy.lastRound.actualColor === 'green'
+                      ? 'bg-emerald-700 border-emerald-500'
+                      : accuracy.lastRound.actualColor === 'red'
+                      ? 'bg-[#B91C1C] border-red-700'
+                      : 'bg-[#181C24] border-slate-600'
+                  }`}
+                >
+                  {accuracy.lastRound.actualNumber}
+                </span>
+                <div className="text-[11px] leading-tight">
+                  <div className="text-slate-200 font-medium">
+                    Último: {accuracy.lastRound.hitsCount}/{accuracy.lastRound.totalMarkets} acertos
+                  </div>
+                  <div className="font-mono text-[10px] text-emerald-400 tabular-nums">
+                    Plataforma: {accuracy.overallRatePct.toFixed(1)}% ({accuracy.totalHits}/{accuracy.totalAttempts})
+                  </div>
+                </div>
+              </>
+            ) : (
+              <span className="text-[11px] text-slate-400">
+                Aguardando leitura da faixa...
+              </span>
+            )}
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={handleManualBrowserScan}
+              title="Ler faixa agora"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-200"
+            >
+              <RefreshCw className="h-3 w-3" />
+              <span>Ler</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleCycleSplitRatio}
+              title="Ajustar tamanho do navegador"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-200"
+            >
+              <ArrowUpDown className="h-3 w-3" />
+              <span>{splitLabel}</span>
+            </button>
             <button
               type="button"
               onClick={handleToggleAndroidCalibration}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-[11px] font-medium text-slate-200"
+              className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-200"
             >
-              <Crosshair className="h-3.5 w-3.5" />
+              <Crosshair className="h-3 w-3" />
               <span>Mira</span>
             </button>
             <button
               type="button"
               onClick={handleOpenIntegratedBrowser}
-              className="rounded-lg bg-amber-400 px-2.5 py-1.5 text-[11px] font-semibold text-slate-950"
+              className="rounded-md bg-amber-400 px-2 py-1 text-[10px] font-semibold text-slate-950"
             >
-              Expandir Painel
+              Painel
             </button>
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-2 text-[11px] border-t border-slate-800 pt-2">
-          <span className="text-slate-300">
-            {accuracy.lastRound
-              ? `Último (${accuracy.lastRound.actualNumber}): ${accuracy.lastRound.hitsCount}/6 acertos`
-              : 'Aguardando leitura da faixa...'}
-          </span>
-          <span className="font-mono font-semibold text-emerald-400 tabular-nums">
-            Plataforma: {accuracy.overallRatePct.toFixed(1)}%
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1 overflow-x-auto pb-1">
-          {spins.slice(0, 14).map((num, idx) => {
+        {/* Faixa de histórico lida */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+          {spins.slice(0, 16).map((num, idx) => {
             const col = getRouletteColor(num);
             const bg =
               col === 'green'
@@ -251,21 +394,97 @@ export default function App() {
           })}
         </div>
 
-        {accuracy.lastRound && (
-          <div className="grid grid-cols-3 gap-1.5 pt-1 text-[10px]">
-            {accuracy.lastRound.markets.map((ev) => (
+        {/* Todas as opções de apostas visíveis por completo + OK/X + % de acerto */}
+        <div className="grid grid-cols-2 gap-1.5">
+          {compactOptions.map((opt, idx) => {
+            const lastEval = lastRoundMap.get(opt.marketKey);
+            const rateStat = marketRateMap.get(opt.marketKey);
+            const ratePct = rateStat ? rateStat.ratePct : 0;
+            const aboveBase =
+              rateStat && rateStat.attempts > 0 && rateStat.ratePct >= rateStat.expectedRandomPct;
+            const isFullWidth = idx === compactOptions.length - 1;
+
+            return (
               <div
-                key={ev.market}
-                className="rounded border border-slate-800 bg-[#131924] px-2 py-1 flex items-center justify-between gap-1"
+                key={opt.marketKey}
+                className={`rounded-lg border border-slate-800 bg-[#131924] p-2 ${
+                  isFullWidth ? 'col-span-2' : ''
+                }`}
               >
-                <span className="text-slate-300 truncate">{ev.market.split(' ')[0]}</span>
-                <span className={ev.hit ? 'text-emerald-400 font-semibold' : 'text-red-400'}>
-                  {ev.hit ? 'OK' : 'X'}
-                </span>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="text-[10px] font-medium text-slate-400">
+                    {opt.shortTitle}
+                  </span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {lastEval && (
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                          lastEval.hit
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-red-500/20 text-red-400'
+                        }`}
+                      >
+                        {lastEval.hit ? 'OK' : 'X'}
+                      </span>
+                    )}
+                    <span
+                      className={`font-mono text-[10px] font-bold tabular-nums ${
+                        !rateStat || rateStat.attempts === 0
+                          ? 'text-slate-500'
+                          : aboveBase
+                          ? 'text-emerald-400'
+                          : 'text-amber-300'
+                      }`}
+                    >
+                      {ratePct.toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className={`mt-0.5 text-xs font-bold leading-snug ${opt.accent}`}>
+                  {opt.suggestion}
+                </div>
+
+                {lastEval && rateStat && (
+                  <div className="mt-0.5 text-[9px] text-slate-400 leading-tight">
+                    Ant: {lastEval.predicted} · Saiu: {lastEval.actual} ({rateStat.hits}/{rateStat.attempts})
+                  </div>
+                )}
               </div>
-            ))}
+            );
+          })}
+
+          {/* Números diretos sugeridos completos + Stake */}
+          <div className="col-span-2 rounded-lg border border-slate-800 bg-[#131924] p-2">
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="text-[10px] font-medium text-slate-400">
+                Números Diretos (Fichas Completas)
+              </span>
+              <span className="font-mono text-[10px] font-semibold text-emerald-400 tabular-nums">
+                {analysis.totalRoundStakeAoa.toFixed(0)} AOA ({analysis.suggestedChips.length}×{analysis.stakePerUnitAoa})
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              {analysis.suggestedChips.map((chip) => {
+                const col = getRouletteColor(chip);
+                const chipBg =
+                  col === 'green'
+                    ? 'bg-emerald-700 border-emerald-500'
+                    : col === 'red'
+                    ? 'bg-[#B91C1C] border-red-700'
+                    : 'bg-[#181C24] border-slate-600';
+                return (
+                  <span
+                    key={chip}
+                    className={`inline-flex h-6 min-w-[26px] px-1.5 items-center justify-center rounded border font-mono text-[11px] font-bold text-white tabular-nums ${chipBg}`}
+                  >
+                    {chip}
+                  </span>
+                );
+              })}
+            </div>
           </div>
-        )}
+        </div>
       </div>
     );
   }
@@ -502,74 +721,137 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                <div className="rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5">
-                  <div className="text-xs text-slate-400">Cor (Vermelho / Preto)</div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span
-                      className={`inline-block h-3 w-3 rounded-sm ${
-                        fieldSuggestions.color === 'Vermelho'
-                          ? 'bg-[#B91C1C]'
-                          : 'bg-slate-900 border border-slate-600'
-                      }`}
-                    />
-                    <span className="text-base font-semibold text-slate-100">
-                      {fieldSuggestions.color}
+                {[
+                  {
+                    marketKey: 'Vermelho / Preto',
+                    title: 'Cor (Vermelho / Preto)',
+                    value: fieldSuggestions.color,
+                    reason: fieldSuggestions.colorReason,
+                    swatch:
+                      fieldSuggestions.color === 'Vermelho'
+                        ? 'bg-[#B91C1C]'
+                        : 'bg-slate-900 border border-slate-600',
+                    valueClass: 'text-base font-semibold text-slate-100',
+                  },
+                  {
+                    marketKey: 'Par / Ímpar',
+                    title: 'Paridade (Par / Ímpar)',
+                    value: fieldSuggestions.parity,
+                    reason: fieldSuggestions.parityReason,
+                    valueClass: 'text-base font-semibold text-slate-100',
+                  },
+                  {
+                    marketKey: '1–18 / 19–36',
+                    title: 'Força / Metade (1–18 / 19–36)',
+                    value: fieldSuggestions.half,
+                    reason: fieldSuggestions.halfReason,
+                    valueClass: 'text-base font-semibold text-slate-100',
+                  },
+                  {
+                    marketKey: 'Dúzias (Blocos)',
+                    title: 'Bloco / Dúzia',
+                    value: fieldSuggestions.dozenLabel,
+                    reason: fieldSuggestions.dozenReason,
+                    valueClass: 'text-base font-semibold text-amber-300',
+                  },
+                  {
+                    marketKey: 'Colunas (2to1)',
+                    title: 'Coluna (2to1)',
+                    value: fieldSuggestions.columnLabel,
+                    reason: fieldSuggestions.columnReason,
+                    valueClass: 'text-base font-semibold text-amber-300',
+                  },
+                  {
+                    marketKey: 'Vizinhos (±2)',
+                    title: `Vizinhos (±2) · Âncora ${fieldSuggestions.anchorNumber}`,
+                    value: fieldSuggestions.neighbors.join(' · '),
+                    reason: `Setor: ${fieldSuggestions.sectorName}`,
+                    valueClass: 'font-mono text-base font-bold text-emerald-400 tabular-nums',
+                  },
+                  {
+                    marketKey: 'Setor da Roda',
+                    title: 'Setor Físico da Roda',
+                    value: analysis.recommendedSector.name,
+                    reason: `${analysis.recommendedSector.hitRatePct.toFixed(0)}% nos últimos 20 giros`,
+                    valueClass: 'text-base font-semibold text-emerald-300',
+                  },
+                ].map((card) => {
+                  const lastEval = lastRoundMap.get(card.marketKey);
+                  const rateStat = marketRateMap.get(card.marketKey);
+                  const aboveBase =
+                    rateStat && rateStat.attempts > 0 && rateStat.ratePct >= rateStat.expectedRandomPct;
+                  return (
+                    <div
+                      key={card.marketKey}
+                      className="rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs text-slate-400">{card.title}</div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {lastEval && (
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                                lastEval.hit
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : 'bg-red-500/20 text-red-400'
+                              }`}
+                            >
+                              {lastEval.hit ? 'OK' : 'X'}
+                            </span>
+                          )}
+                          {rateStat && (
+                            <span
+                              className={`font-mono text-[11px] font-bold tabular-nums ${
+                                rateStat.attempts === 0
+                                  ? 'text-slate-500'
+                                  : aboveBase
+                                  ? 'text-emerald-400'
+                                  : 'text-amber-300'
+                              }`}
+                            >
+                              {rateStat.ratePct.toFixed(1)}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-1 flex items-center gap-2">
+                        {card.swatch && (
+                          <span className={`inline-block h-3 w-3 rounded-sm ${card.swatch}`} />
+                        )}
+                        <span className={card.valueClass}>{card.value}</span>
+                      </div>
+                      <div className="mt-1 text-xs text-slate-400">{card.reason}</div>
+                    </div>
+                  );
+                })}
+
+                <div className="sm:col-span-2 rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-slate-400">
+                      Números Diretos Sugeridos (Fichas Completas)
+                    </span>
+                    <span className="font-mono text-xs text-emerald-400 tabular-nums">
+                      {analysis.coveragePct.toFixed(1)}% da roda
                     </span>
                   </div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    {fieldSuggestions.colorReason}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5">
-                  <div className="text-xs text-slate-400">Paridade (Par / Ímpar)</div>
-                  <div className="mt-1 text-base font-semibold text-slate-100">
-                    {fieldSuggestions.parity}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    {fieldSuggestions.parityReason}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5">
-                  <div className="text-xs text-slate-400">Força / Metade (1–18 / 19–36)</div>
-                  <div className="mt-1 text-base font-semibold text-slate-100">
-                    {fieldSuggestions.half}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    {fieldSuggestions.halfReason}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5">
-                  <div className="text-xs text-slate-400">Bloco / Dúzia</div>
-                  <div className="mt-1 text-base font-semibold text-amber-300">
-                    {fieldSuggestions.dozenLabel}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    {fieldSuggestions.dozenReason}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5">
-                  <div className="text-xs text-slate-400">Coluna (2to1)</div>
-                  <div className="mt-1 text-base font-semibold text-amber-300">
-                    {fieldSuggestions.columnLabel}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    {fieldSuggestions.columnReason}
-                  </div>
-                </div>
-
-                <div className="rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5">
-                  <div className="text-xs text-slate-400">
-                    Números Diretos e Setor ({fieldSuggestions.sectorName})
-                  </div>
-                  <div className="mt-1 font-mono text-base font-bold text-emerald-400 tabular-nums">
-                    {fieldSuggestions.neighbors.join(' · ')}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    Âncora {fieldSuggestions.anchorNumber} com ±2 vizinhos na roda
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    {analysis.suggestedChips.map((chip) => {
+                      const col = getRouletteColor(chip);
+                      const chipBg =
+                        col === 'green'
+                          ? 'bg-emerald-700 border-emerald-500'
+                          : col === 'red'
+                          ? 'bg-[#B91C1C] border-red-700'
+                          : 'bg-[#181C24] border-slate-600';
+                      return (
+                        <span
+                          key={chip}
+                          className={`inline-flex h-7 min-w-[30px] px-1.5 items-center justify-center rounded border font-mono text-xs font-bold text-white tabular-nums ${chipBg}`}
+                        >
+                          {chip}
+                        </span>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -673,32 +955,42 @@ export default function App() {
                   </p>
                 ) : (
                   <div className="divide-y divide-slate-800/70">
-                    {accuracy.lastRound.markets.map((ev) => (
-                      <div
-                        key={ev.market}
-                        className="py-2 flex items-center justify-between gap-2 text-xs"
-                      >
-                        <div className="min-w-0">
-                          <div className="font-medium text-slate-200">{ev.market}</div>
-                          <div className="text-slate-400 truncate">
-                            Sugestão: <span className="text-slate-200">{ev.predicted}</span> · Saiu:{' '}
-                            <span className="text-slate-200">{ev.actual}</span>
+                    {accuracy.lastRound.markets.map((ev) => {
+                      const rateStat = marketRateMap.get(ev.market);
+                      return (
+                        <div
+                          key={ev.market}
+                          className="py-2 flex items-center justify-between gap-2 text-xs"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-medium text-slate-200">{ev.market}</div>
+                            <div className="text-slate-400">
+                              Sugestão: <span className="text-slate-200">{ev.predicted}</span> · Saiu:{' '}
+                              <span className="text-slate-200">{ev.actual}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {rateStat && (
+                              <span className="font-mono text-[11px] font-semibold text-amber-300 tabular-nums">
+                                {rateStat.ratePct.toFixed(0)}%
+                              </span>
+                            )}
+                            <span
+                              className={`inline-flex items-center gap-1 font-medium ${
+                                ev.hit ? 'text-emerald-400' : 'text-red-400'
+                              }`}
+                            >
+                              {ev.hit ? (
+                                <CheckCircle2 className="h-3.5 w-3.5" />
+                              ) : (
+                                <XCircle className="h-3.5 w-3.5" />
+                              )}
+                              <span>{ev.hit ? 'OK' : 'X'}</span>
+                            </span>
                           </div>
                         </div>
-                        <span
-                          className={`inline-flex items-center gap-1 font-medium shrink-0 ${
-                            ev.hit ? 'text-emerald-400' : 'text-red-400'
-                          }`}
-                        >
-                          {ev.hit ? (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          ) : (
-                            <XCircle className="h-3.5 w-3.5" />
-                          )}
-                          <span>{ev.hit ? 'Acertou' : 'Errou'}</span>
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

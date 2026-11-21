@@ -11,11 +11,8 @@ import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 public class ScreenScanner {
 
@@ -30,16 +27,14 @@ public class ScreenScanner {
     private static class DetectedPill {
         final int number;
         final int leftX;
+        final int centerY;
 
-        DetectedPill(int number, int leftX) {
+        DetectedPill(int number, int leftX, int centerY) {
             this.number = number;
             this.leftX = leftX;
+            this.centerY = centerY;
         }
     }
-
-    private static final Set<Integer> RED_NUMBERS = new HashSet<>(Arrays.asList(
-            1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36
-    ));
 
     private final TextRecognizer recognizer =
             TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
@@ -71,6 +66,9 @@ public class ScreenScanner {
             cropped.recycle();
         }
 
+        final int stripMidY = scaled.getHeight() / 2;
+        final int maxBandDeviation = Math.max(16, (int) (scaled.getHeight() * 0.38f));
+
         InputImage image = InputImage.fromBitmap(scaled, 0);
         recognizer.process(image)
                 .addOnSuccessListener(visionText -> {
@@ -80,20 +78,44 @@ public class ScreenScanner {
                             for (Text.Element element : line.getElements()) {
                                 Rect box = element.getBoundingBox();
                                 if (box == null) continue;
+                                int cy = box.centerY();
+                                if (Math.abs(cy - stripMidY) > maxBandDeviation) {
+                                    continue;
+                                }
                                 PillColor sampledColor = samplePillColor(scaled, box);
                                 Integer parsed = parseRouletteToken(element.getText(), sampledColor);
                                 if (parsed != null) {
-                                    detected.add(new DetectedPill(parsed, box.left));
+                                    detected.add(new DetectedPill(parsed, box.left, cy));
                                 }
                             }
                         }
                     }
                     scaled.recycle();
 
+                    if (detected.size() >= 3) {
+                        List<Integer> ys = new ArrayList<>();
+                        for (DetectedPill p : detected) ys.add(p.centerY);
+                        Collections.sort(ys);
+                        int medianY = ys.get(ys.size() / 2);
+                        int rowTolerance = Math.max(14, cropH / 2);
+                        List<DetectedPill> rowAligned = new ArrayList<>();
+                        for (DetectedPill p : detected) {
+                            if (Math.abs(p.centerY - medianY) <= rowTolerance) {
+                                rowAligned.add(p);
+                            }
+                        }
+                        detected = rowAligned;
+                    }
+
                     Collections.sort(detected, (a, b) -> Integer.compare(a.leftX, b.leftX));
                     List<Integer> ordered = new ArrayList<>();
+                    int lastX = Integer.MIN_VALUE;
                     for (DetectedPill pill : detected) {
-                        ordered.add(pill.number);
+                        // Evita duplicado do mesmo bounding box sobreposto
+                        if (pill.leftX - lastX >= 8) {
+                            ordered.add(pill.number);
+                            lastX = pill.leftX;
+                        }
                     }
                     callback.onResult(ordered);
                 })
@@ -105,7 +127,16 @@ public class ScreenScanner {
 
     private Integer parseRouletteToken(String rawText, PillColor color) {
         if (rawText == null) return null;
-        String normalized = rawText.trim()
+        String trimmed = rawText.trim();
+        if (trimmed.isEmpty() || trimmed.length() > 3) return null;
+
+        // Rejeita precos, horas e textos como "2to1" ou "1st12"
+        if (trimmed.contains(".") || trimmed.contains(":") || trimmed.contains(",")
+                || trimmed.contains("/") || trimmed.contains("%")) {
+            return null;
+        }
+
+        String normalized = trimmed
                 .replace("O", "0")
                 .replace("o", "0")
                 .replace("I", "1")
@@ -116,10 +147,13 @@ public class ScreenScanner {
             char c = normalized.charAt(i);
             if (Character.isDigit(c)) {
                 digits.append(c);
+            } else {
+                // Contem letra nao numerica: ignora token para nunca virar falso numero
+                return null;
             }
         }
 
-        if (digits.length() == 0) {
+        if (digits.length() == 0 || digits.length() > 2) {
             return color == PillColor.GREEN ? 0 : null;
         }
 
@@ -131,30 +165,63 @@ public class ScreenScanner {
         }
 
         if (num < 0 || num > 36) return null;
-        if (num == 0 && color != PillColor.GREEN) return null;
-        if (num != 0 && color == PillColor.GREEN) return 0;
+        if (num == 0) {
+            return (color == PillColor.GREEN || trimmed.equals("0")) ? 0 : null;
+        }
+        if (color == PillColor.GREEN) {
+            return 0;
+        }
 
-        boolean isRedExpected = RED_NUMBERS.contains(num);
-        if (color == PillColor.RED && !isRedExpected) return null;
-        if (color == PillColor.BLACK && (num == 0 || isRedExpected)) return null;
-
+        // Numero 1..36 dentro da faixa calibrada: retorna mesmo se a iluminacao variar
+        // entre vermelho escuro e preto, mantendo integridade da roleta europeia.
         return num;
     }
 
     private PillColor samplePillColor(Bitmap bitmap, Rect box) {
-        int leftX = Math.max(0, Math.min(bitmap.getWidth() - 1, box.left - 6));
-        int rightX = Math.max(0, Math.min(bitmap.getWidth() - 1, box.right + 6));
-        int midY = Math.max(0, Math.min(bitmap.getHeight() - 1, (box.top + box.bottom) / 2));
+        int w = bitmap.getWidth();
+        int h = bitmap.getHeight();
+        int cx = (box.left + box.right) / 2;
+        int cy = (box.top + box.bottom) / 2;
 
-        int p1 = bitmap.getPixel(leftX, midY);
-        int p2 = bitmap.getPixel(rightX, midY);
+        int[][] points = {
+                {box.left - 4, cy},
+                {box.right + 4, cy},
+                {cx, box.top - 4},
+                {cx, box.bottom + 4},
+                {box.left - 3, box.top - 3},
+                {box.right + 3, box.top - 3},
+                {box.left - 3, box.bottom + 3},
+                {box.right + 3, box.bottom + 3}
+        };
 
-        int r = (Color.red(p1) + Color.red(p2)) / 2;
-        int g = (Color.green(p1) + Color.green(p2)) / 2;
-        int b = (Color.blue(p1) + Color.blue(p2)) / 2;
+        int sumR = 0, sumG = 0, sumB = 0, count = 0;
+        for (int[] pt : points) {
+            int px = Math.max(0, Math.min(w - 1, pt[0]));
+            int py = Math.max(0, Math.min(h - 1, pt[1]));
+            int pixel = bitmap.getPixel(px, py);
+            int r = Color.red(pixel);
+            int g = Color.green(pixel);
+            int b = Color.blue(pixel);
+            // Ignora pixels brancos dos digitos ou da borda branca do numero mais recente
+            if (r > 180 && g > 180 && b > 180) {
+                continue;
+            }
+            sumR += r;
+            sumG += g;
+            sumB += b;
+            count++;
+        }
 
-        if (g > r + 24 && g > b + 18) return PillColor.GREEN;
-        if (r > g + 35 && r > b + 30) return PillColor.RED;
+        if (count == 0) {
+            return PillColor.BLACK;
+        }
+
+        int r = sumR / count;
+        int g = sumG / count;
+        int b = sumB / count;
+
+        if (g > r + 18 && g > b + 14) return PillColor.GREEN;
+        if (r > g + 22 && r > b + 20) return PillColor.RED;
         return PillColor.BLACK;
     }
 }

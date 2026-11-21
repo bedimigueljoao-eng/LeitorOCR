@@ -391,6 +391,7 @@ export function evaluateAccuracy(
         { market: 'Dúzias (Blocos)', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 32.4 },
         { market: 'Colunas (2to1)', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 32.4 },
         { market: 'Vizinhos (±2)', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 13.5 },
+        { market: 'Setor da Roda', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 32.4 },
       ],
       lastRound: null,
       recentRounds: [],
@@ -407,13 +408,14 @@ export function evaluateAccuracy(
     { market: 'Dúzias (Blocos)', hits: 0, attempts: 0, expectedRandomPct: 32.4 },
     { market: 'Colunas (2to1)', hits: 0, attempts: 0, expectedRandomPct: 32.4 },
     { market: 'Vizinhos (±2)', hits: 0, attempts: 0, expectedRandomPct: 13.5 },
+    { market: 'Setor da Roda', hits: 0, attempts: 0, expectedRandomPct: 32.4 },
   ];
 
   const roundEvaluations: RoundEvaluation[] = [];
 
   for (let i = 1; i < chronological.length; i++) {
     const historyPriorNewestFirst = chronological.slice(0, i).reverse();
-    const { suggestions } = computeFieldSuggestions(historyPriorNewestFirst, profile);
+    const { suggestions, topSector } = computeFieldSuggestions(historyPriorNewestFirst, profile);
     const actual = chronological[i];
     const actualColor = getRouletteColor(actual);
 
@@ -454,6 +456,13 @@ export function evaluateAccuracy(
 
     const neighborsHit = suggestions.neighbors.includes(actual);
 
+    const sectorHit = topSector.numbers.includes(actual);
+    const actualSectorLabel = VOISINS_NUMBERS.includes(actual)
+      ? 'Voisins du Zéro'
+      : TIERS_NUMBERS.includes(actual)
+      ? 'Tiers du Cylindre'
+      : 'Orphelins';
+
     const evals: MarketEvaluation[] = [
       {
         market: 'Vermelho / Preto',
@@ -491,6 +500,12 @@ export function evaluateAccuracy(
         actual: String(actual),
         hit: neighborsHit,
       },
+      {
+        market: 'Setor da Roda',
+        predicted: topSector.name,
+        actual: actualSectorLabel,
+        hit: sectorHit,
+      },
     ];
 
     evals.forEach((ev, mIdx) => {
@@ -512,11 +527,10 @@ export function evaluateAccuracy(
   const totalAttempts = marketStats.reduce((acc, m) => acc + m.attempts, 0);
   const overallRatePct = totalAttempts > 0 ? (totalHits / totalAttempts) * 100 : 0;
 
-  // Taxa teórica média ponderada pelos 6 mercados: (48.6*3 + 32.4*2 + 13.5)/6 = 37.35%
   let levelLabel = 'Leitura em Calibração';
   if (roundEvaluations.length >= 3) {
-    if (overallRatePct >= 48) levelLabel = 'Nível Alto (Acima da Média Teórica)';
-    else if (overallRatePct >= 36) levelLabel = 'Nível Equilibrado (Dentro do Esperado)';
+    if (overallRatePct >= 46) levelLabel = 'Nível Alto (Acima da Média Teórica)';
+    else if (overallRatePct >= 34) levelLabel = 'Nível Equilibrado (Dentro do Esperado)';
     else levelLabel = 'Nível Baixo (Variância Desfavorável)';
   }
 
