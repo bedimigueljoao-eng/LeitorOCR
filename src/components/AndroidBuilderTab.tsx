@@ -15,7 +15,7 @@ export const AndroidBuilderTab: React.FC<AndroidBuilderTabProps> = ({
 
   const androidFiles = [
     {
-      path: 'capacitor.config.ts',
+      path: 'capacitor.config.json',
       role: 'Configuração Capacitor (appName: RoletaVision, appId: com.roletavision.app, webDir: dist)',
     },
     {
@@ -24,7 +24,7 @@ export const AndroidBuilderTab: React.FC<AndroidBuilderTabProps> = ({
     },
     {
       path: '.github/workflows/build-apk.yml',
-      role: 'Compila automaticamente o APK no GitHub Actions (Node 22, JDK 21, setup-android@v4, ./gradlew assembleDebug)',
+      role: 'Compila automaticamente o APK no GitHub Actions (Node 20, JDK 17, setup-android@v4, ./gradlew assembleDebug)',
     },
     {
       path: 'android-app/app/src/main/java/ao/kwanzabet/roletavision/MainActivity.kt',
