@@ -73,11 +73,11 @@ export const AndroidBuilderTab: React.FC<AndroidBuilderTabProps> = ({
               <li className="flex gap-3">
                 <span className="font-mono text-xs font-bold text-amber-400 pt-0.5">02.</span>
                 <span>
-                  Abra a aba <strong className="text-slate-100">Actions</strong> no GitHub. O
-                  fluxo <span className="font-mono text-xs">Compilar RoletaVision APK</span>{' '}
-                  executará o build web, <span className="font-mono text-xs">cap sync android</span>{' '}
-                  e <span className="font-mono text-xs">./gradlew assembleDebug</span>, gerando o
-                  artefato <span className="font-mono text-xs text-emerald-400">RoletaVision-APK</span>.
+                  Após o workflow <span className="font-mono text-xs">Compilar RoletaVision APK</span>{' '}
+                  concluir, abra a seção <strong className="text-slate-100">Releases</strong> na
+                  página principal do repositório para baixar{' '}
+                  <span className="font-mono text-xs text-emerald-400">RoletaVision.apk</span> direto
+                  no telemóvel.
                 </span>
               </li>
               <li className="flex gap-3">
