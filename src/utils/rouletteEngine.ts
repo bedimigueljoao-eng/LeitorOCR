@@ -404,8 +404,9 @@ export function evaluateAccuracy(
     };
   }
 
-  // Ordem cronológica da sessão atual: oldest -> newest
-  const sessionChronological = [...sessionSpinsNewestFirst].reverse();
+  // Ordem cronológica da sessão atual: oldest -> newest (avalia últimas 100 rodadas para rapidez)
+  const boundedSession = sessionSpinsNewestFirst.slice(0, 100);
+  const sessionChronological = [...boundedSession].reverse();
 
   const marketStats = [
     { market: 'Vermelho / Preto', hits: 0, attempts: 0, expectedRandomPct: 48.6 },
@@ -424,7 +425,7 @@ export function evaluateAccuracy(
     const combinedPriorNewestFirst = [
       ...priorSessionNewestFirst,
       ...learnedPriorSpinsNewestFirst,
-    ];
+    ].slice(0, 150);
 
     // Se ainda não existia nenhum giro prévio (nem na mesa/backup), o primeiro giro apenas inicia a leitura
     if (combinedPriorNewestFirst.length === 0) {

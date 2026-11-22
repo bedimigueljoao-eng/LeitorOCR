@@ -48,6 +48,25 @@ public class BrowserScannerPlugin extends Plugin {
         instance.notifyListeners("scanFeedback", payload);
     }
 
+    public static void emitScanTelemetry(
+            int lastNumber,
+            long elapsedMs,
+            boolean ocrOk,
+            int consecutiveFailures,
+            int stripCount,
+            int totalReads
+    ) {
+        if (instance == null) return;
+        JSObject payload = new JSObject();
+        payload.put("lastNumber", lastNumber);
+        payload.put("elapsedMs", elapsedMs);
+        payload.put("ocrOk", ocrOk);
+        payload.put("consecutiveFailures", consecutiveFailures);
+        payload.put("stripCount", stripCount);
+        payload.put("totalReads", totalReads);
+        instance.notifyListeners("scanTelemetry", payload);
+    }
+
     @PluginMethod
     public void openBrowser(PluginCall call) {
         String url = call.getString("url", "");

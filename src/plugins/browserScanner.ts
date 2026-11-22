@@ -14,6 +14,15 @@ export interface ScanFeedbackEvent {
   mode: string;
 }
 
+export interface ScanTelemetryEvent {
+  lastNumber: number;
+  elapsedMs: number;
+  ocrOk: boolean;
+  consecutiveFailures: number;
+  stripCount: number;
+  totalReads: number;
+}
+
 export interface BrowserScannerPlugin {
   openBrowser(options?: { url?: string }): Promise<void>;
   closeBrowser(): Promise<void>;
@@ -32,6 +41,10 @@ export interface BrowserScannerPlugin {
   addListener(
     eventName: 'scanFeedback',
     listenerFunc: (event: ScanFeedbackEvent) => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'scanTelemetry',
+    listenerFunc: (event: ScanTelemetryEvent) => void
   ): Promise<PluginListenerHandle>;
 }
 

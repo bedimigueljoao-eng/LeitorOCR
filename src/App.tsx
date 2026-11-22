@@ -13,6 +13,7 @@ import {
   analyzeSpins,
   getRouletteColor,
   INITIAL_SCREENSHOT_SPINS,
+  RouletteAnalysis,
   StrategyProfile,
 } from './utils/rouletteEngine';
 import { EuropeanWheel } from './components/EuropeanWheel';
@@ -128,8 +129,21 @@ export default function App() {
   const [unitStakeAoa, setUnitStakeAoa] = useState<number>(10);
   const [profile, setProfile] = useState<StrategyProfile>('neighbors');
   const [manualInput, setManualInput] = useState<string>('');
-  const [roiTopPct, setRoiTopPct] = useState<number>(12);
+  const [roiTopPct, setRoiTopPct] = useState<number>(4);
   const [roiHeightPct, setRoiHeightPct] = useState<number>(7);
+  const [scanDebug, setScanDebug] = useState<{
+    lastReadTime: string;
+    lastReadNumber: number | null;
+    lastReadMs: number | null;
+    lastAttemptMs: number | null;
+    consecutiveFailures: number;
+  }>({
+    lastReadTime: '--:--:--',
+    lastReadNumber: null,
+    lastReadMs: null,
+    lastAttemptMs: null,
+    consecutiveFailures: 0,
+  });
 
   useEffect(() => {
     try {
@@ -148,7 +162,7 @@ export default function App() {
     }
   }, [bankrollAoa]);
 
-  // Conecta ao navegador nativo integrado no APK Android (Capacitor Plugin)
+  // Tarefa 1 - LEITURA: apenas lê números a cada 500ms e guarda na lista sem calcular percentuais
   useEffect(() => {
     if (!isAndroidApk) return;
 
@@ -170,6 +184,27 @@ export default function App() {
             Boolean(event.isFullStrip)
           );
           return { session: res.nextSession, backup: res.nextBackup };
+        });
+      });
+
+      const telemetrySub = await BrowserScanner.addListener('scanTelemetry', (event) => {
+        if (!mounted) return;
+        const nowStr = new Date().toLocaleTimeString('pt-PT', { hour12: false });
+        setScanDebug((prev) => {
+          if (event.ocrOk && event.lastNumber >= 0) {
+            return {
+              lastReadTime: nowStr,
+              lastReadNumber: event.lastNumber,
+              lastReadMs: event.elapsedMs,
+              lastAttemptMs: event.elapsedMs,
+              consecutiveFailures: 0,
+            };
+          }
+          return {
+            ...prev,
+            lastAttemptMs: event.elapsedMs,
+            consecutiveFailures: event.consecutiveFailures,
+          };
         });
       });
 
@@ -195,6 +230,7 @@ export default function App() {
 
       return () => {
         void spinSub.remove();
+        void telemetrySub.remove();
         void visSub.remove();
         void feedbackSub.remove();
       };
@@ -212,10 +248,24 @@ export default function App() {
     [sessionSpins, learnedBackupSpins]
   );
 
-  const analysis = useMemo(
-    () => analyzeSpins(sessionSpins, profile, bankrollAoa, unitStakeAoa, learnedBackupSpins),
-    [sessionSpins, profile, bankrollAoa, unitStakeAoa, learnedBackupSpins]
+  // Tarefa 2 - CÁLCULO: executa em segundo plano APÓS a leitura guardar o número (nunca trava o OCR)
+  const [analysis, setAnalysis] = useState<RouletteAnalysis>(() =>
+    analyzeSpins(spinMemory.session, profile, bankrollAoa, unitStakeAoa, spinMemory.backup)
   );
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      const next = analyzeSpins(
+        spinMemory.session,
+        profile,
+        bankrollAoa,
+        unitStakeAoa,
+        spinMemory.backup
+      );
+      setAnalysis(next);
+    }, 0);
+    return () => window.clearTimeout(timerId);
+  }, [spinMemory, profile, bankrollAoa, unitStakeAoa]);
 
   const handleOpenIntegratedBrowser = async () => {
     setBrowserNotice(null);
@@ -253,6 +303,14 @@ export default function App() {
 
   const handleRegisterSpin = (num: number) => {
     if (num < 0 || num > 36 || !Number.isInteger(num)) return;
+    const nowStr = new Date().toLocaleTimeString('pt-PT', { hour12: false });
+    setScanDebug((prev) => ({
+      ...prev,
+      lastReadTime: nowStr,
+      lastReadNumber: num,
+      lastReadMs: 0,
+      consecutiveFailures: 0,
+    }));
     setSpinMemory((prev) => ({
       session: [num, ...prev.session].slice(0, 500),
       backup: prev.backup,
@@ -419,6 +477,11 @@ export default function App() {
                   <div className="font-mono text-[10px] text-emerald-400 tabular-nums">
                     Sessão: {accuracy.overallRatePct.toFixed(1)}% ({accuracy.totalHits}/{accuracy.totalAttempts})
                   </div>
+                  {combinedSpins.length < 50 && (
+                    <div className="text-[10px] text-amber-300">
+                      A recolher dados... {combinedSpins.length}/50
+                    </div>
+                  )}
                 </div>
               </>
             ) : (
@@ -426,11 +489,11 @@ export default function App() {
                 <div className="text-slate-200 font-medium">
                   Sessão Virgem: 0.0% (0/0)
                 </div>
-                <div className="text-[10px] text-slate-400">
-                  {scanStatusHint ||
-                    (hasTableData
-                      ? `Mesa lida (${combinedSpins.length} giros). Aguardando 1ª jogada.`
-                      : 'Abra a roleta em cima ou toque em Ler / Mira.')}
+                <div className="text-[10px] text-amber-300">
+                  {combinedSpins.length < 50
+                    ? `A recolher dados... ${combinedSpins.length}/50`
+                    : scanStatusHint ||
+                      `Mesa lida (${combinedSpins.length} giros). Aguardando 1ª jogada.`}
                 </div>
               </div>
             )}
@@ -608,6 +671,21 @@ export default function App() {
                 })}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Log de Debug Visível por baixo (Tarefa 1 OCR 500ms) */}
+        <div className="rounded-lg border border-slate-800/80 bg-[#090D14] px-2.5 py-1.5 font-mono text-[10px] leading-relaxed text-slate-400 tabular-nums">
+          <div>
+            Última leitura: {scanDebug.lastReadTime} - Número:{' '}
+            {scanDebug.lastReadNumber !== null ? scanDebug.lastReadNumber : '--'} - Tempo:{' '}
+            {scanDebug.lastReadMs !== null ? `${scanDebug.lastReadMs}ms` : '--'}
+            {scanDebug.consecutiveFailures > 0
+              ? ` · OCR ativo (${scanDebug.lastAttemptMs ?? 500}ms)`
+              : ''}
+          </div>
+          <div>
+            Giros lidos: {sessionSpins.length} / {Math.max(5, sessionSpins.length)}
           </div>
         </div>
       </div>
@@ -846,9 +924,11 @@ export default function App() {
                     Onde Apostar Agora (Todas as Opções da Mesa)
                   </h2>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    {combinedSpins.length > 0
-                      ? 'Escolha um ou mais campos abaixo conforme a leitura atual e acompanhe OK / X + % de cada opção.'
-                      : 'Aguardando leitura da mesa ou 1º giro para liberar as sugestões de aposta.'}
+                    {combinedSpins.length === 0
+                      ? 'A recolher dados... 0/50 · Abra o navegador ou registre um giro para iniciar.'
+                      : combinedSpins.length < 50
+                      ? `A recolher dados... ${combinedSpins.length}/50 · Sugestões ativas abaixo enquanto recolhe mais giros.`
+                      : 'Escolha um ou mais campos abaixo conforme a leitura atual e acompanhe OK / X + % de cada opção.'}
                   </p>
                 </div>
                 <div className="font-mono text-xs text-emerald-400 tabular-nums">
@@ -1397,6 +1477,21 @@ export default function App() {
         {activeTab === 'android' && (
           <AndroidBuilderTab roiTopPct={roiTopPct} roiHeightPct={roiHeightPct} />
         )}
+
+        {/* Log de Debug Visível por baixo */}
+        <footer className="rounded-lg border border-slate-800/80 bg-[#090D14] px-3 py-2 font-mono text-[11px] leading-relaxed text-slate-400 tabular-nums">
+          <div>
+            Última leitura: {scanDebug.lastReadTime} - Número:{' '}
+            {scanDebug.lastReadNumber !== null ? scanDebug.lastReadNumber : '--'} - Tempo:{' '}
+            {scanDebug.lastReadMs !== null ? `${scanDebug.lastReadMs}ms` : '--'}
+            {scanDebug.consecutiveFailures > 0
+              ? ` · OCR ativo (${scanDebug.lastAttemptMs ?? 500}ms)`
+              : ''}
+          </div>
+          <div>
+            Giros lidos: {sessionSpins.length} / {Math.max(5, sessionSpins.length)}
+          </div>
+        </footer>
       </main>
     </div>
   );

@@ -35,9 +35,8 @@ import android.widget.TextView;
 
 import com.getcapacitor.BridgeActivity;
 
-import org.json.JSONArray;
-
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class MainActivity extends BridgeActivity {
@@ -64,9 +63,12 @@ public class MainActivity extends BridgeActivity {
     private boolean autoScanEnabled = true;
     private boolean isScanningFrame = false;
     private boolean hasLoadedInitialUrl = false;
+    private long activeScanStartMs = 0L;
+    private int consecutiveFailures = 0;
+    private int totalReadTicks = 0;
 
-    private float roiTopRatio = 0.08f;
-    private float roiHeightRatio = 0.11f;
+    private float roiTopRatio = 0.04f;
+    private float roiHeightRatio = 0.07f;
     private List<Integer> lastObservedStrip = new ArrayList<>();
 
     private SharedPreferences prefs;
@@ -74,10 +76,14 @@ public class MainActivity extends BridgeActivity {
     private final Runnable scanRunnable = new Runnable() {
         @Override
         public void run() {
+            // Watchdog: nunca deixa uma falha antiga travar a próxima leitura de 500ms
+            if (isScanningFrame && (System.currentTimeMillis() - activeScanStartMs) > 2000L) {
+                isScanningFrame = false;
+            }
             if (browserVisible && autoScanEnabled && !isScanningFrame) {
                 captureAndAnalyzeBrowser(false);
             }
-            handler.postDelayed(this, 750L);
+            handler.postDelayed(this, 500L);
         }
     };
 
@@ -87,8 +93,8 @@ public class MainActivity extends BridgeActivity {
         super.onCreate(savedInstanceState);
 
         prefs = getSharedPreferences("roletavision_browser", MODE_PRIVATE);
-        roiTopRatio = prefs.getFloat("roi_top", 0.08f);
-        roiHeightRatio = prefs.getFloat("roi_height", 0.11f);
+        roiTopRatio = prefs.getFloat("roi_top", 0.04f);
+        roiHeightRatio = prefs.getFloat("roi_height", 0.07f);
 
         setupIntegratedBrowserSplitLayout();
     }
@@ -504,93 +510,25 @@ public class MainActivity extends BridgeActivity {
         browserWebView.loadUrl(url);
     }
 
-    private static final String DOM_STRIP_JS =
-            "(function(){" +
-            "try{" +
-            "var out=[];var hLimit=Math.max(120,window.innerHeight*0.34);" +
-            "function scanDoc(doc,ox,oy){" +
-            "try{var els=doc.querySelectorAll('*');" +
-            "for(var i=0;i<els.length;i++){var el=els[i];" +
-            "if(el.children&&el.children.length>0)continue;" +
-            "var t=(el.innerText||el.textContent||'').trim();" +
-            "if(!/^(0|[1-9]|[12][0-9]|3[0-6])$/.test(t))continue;" +
-            "var r=el.getBoundingClientRect();" +
-            "if(!r||r.width<8||r.height<8||r.width>68||r.height>68)continue;" +
-            "var y=oy+r.top+r.height/2;var x=ox+r.left;" +
-            "if(y<0||y>hLimit||x<0)continue;" +
-            "out.push({n:parseInt(t,10),x:x,y:y});}" +
-            "var frames=doc.querySelectorAll('iframe');" +
-            "for(var j=0;j<frames.length;j++){try{" +
-            "var fr=frames[j].getBoundingClientRect();" +
-            "if(frames[j].contentDocument)scanDoc(frames[j].contentDocument,ox+fr.left,oy+fr.top);" +
-            "}catch(e){}}" +
-            "}catch(e){}}" +
-            "scanDoc(document,0,0);" +
-            "if(out.length<4)return '[]';" +
-            "var best=[];" +
-            "for(var a=0;a<out.length;a++){var row=[];" +
-            "for(var b=0;b<out.length;b++){if(Math.abs(out[b].y-out[a].y)<=18)row.push(out[b]);}" +
-            "if(row.length>best.length)best=row;}" +
-            "if(best.length<4)return '[]';" +
-            "best.sort(function(p,q){return p.x-q.x;});" +
-            "var res=[];var lastX=-999;" +
-            "for(var k=0;k<best.length;k++){if(best[k].x-lastX>=6){res.push(best[k].n);lastX=best[k].x;}}" +
-            "return JSON.stringify(res);" +
-            "}catch(e){return '[]';}" +
-            "})()";
-
     private void captureAndAnalyzeBrowser(boolean showCalibrationFeedback) {
         int w = browserWebView.getWidth();
         int h = browserWebView.getHeight();
         if (w < 50 || h < 50) return;
 
         isScanningFrame = true;
-        browserWebView.evaluateJavascript(DOM_STRIP_JS, value -> {
-            List<Integer> domNums = parseJsIntArray(value);
-            if (domNums.size() >= 4) {
-                isScanningFrame = false;
-                if (showCalibrationFeedback) {
-                    BrowserScannerPlugin.emitScanFeedback(domNums.size(), "dom");
-                    if (tvCalibStatus != null) {
-                        tvCalibStatus.setText("Lidos (dom): " + domNums.toString());
-                    }
-                }
-                reconcileDetectedStrip(domNums);
-                return;
-            }
-            capturePixelsWithCleanOverlay(showCalibrationFeedback);
-        });
-    }
-
-    private List<Integer> parseJsIntArray(String raw) {
-        List<Integer> list = new ArrayList<>();
-        if (raw == null || raw.isEmpty() || "null".equals(raw)) return list;
-        try {
-            String json = raw;
-            if (json.startsWith("\"") && json.endsWith("\"") && json.length() >= 2) {
-                json = json.substring(1, json.length() - 1).replace("\\\"", "\"");
-            }
-            JSONArray arr = new JSONArray(json);
-            for (int i = 0; i < arr.length(); i++) {
-                int v = arr.optInt(i, -1);
-                if (v >= 0 && v <= 36) list.add(v);
-            }
-        } catch (Exception ignored) {
-        }
-        return list;
-    }
-
-    private void capturePixelsWithCleanOverlay(boolean showCalibrationFeedback) {
+        activeScanStartMs = System.currentTimeMillis();
         final boolean wasOverlayVisible = roiOverlay != null && roiOverlay.getVisibility() == View.VISIBLE;
         if (wasOverlayVisible) {
             roiOverlay.setVisibility(View.INVISIBLE);
-            browserFrame.postDelayed(() -> performPixelCopyCapture(true, showCalibrationFeedback), 45L);
-        } else {
-            performPixelCopyCapture(false, showCalibrationFeedback);
         }
+        performPixelCopyCapture(wasOverlayVisible, showCalibrationFeedback, activeScanStartMs);
     }
 
-    private void performPixelCopyCapture(boolean restoreOverlay, boolean showCalibrationFeedback) {
+    private void performPixelCopyCapture(
+            boolean restoreOverlay,
+            boolean showCalibrationFeedback,
+            long scanStartMs
+    ) {
         int w = browserWebView.getWidth();
         int h = browserWebView.getHeight();
         if (w < 50 || h < 50) {
@@ -621,52 +559,84 @@ public class MainActivity extends BridgeActivity {
                     PixelCopy.request(getWindow(), srcRect, targetBitmap, copyResult -> {
                         if (restoreOverlay && roiOverlay != null) roiOverlay.setVisibility(View.VISIBLE);
                         if (copyResult == PixelCopy.SUCCESS) {
-                            processCapturedBitmap(targetBitmap, showCalibrationFeedback);
+                            processCapturedBitmap(targetBitmap, showCalibrationFeedback, scanStartMs);
                         } else {
-                            fallbackCanvasCapture(targetBitmap, showCalibrationFeedback);
+                            fallbackCanvasCapture(targetBitmap, showCalibrationFeedback, scanStartMs);
                         }
                     }, handler);
                     return;
                 } catch (Exception e) {
                     if (restoreOverlay && roiOverlay != null) roiOverlay.setVisibility(View.VISIBLE);
-                    fallbackCanvasCapture(targetBitmap, showCalibrationFeedback);
+                    fallbackCanvasCapture(targetBitmap, showCalibrationFeedback, scanStartMs);
                     return;
                 }
             }
         }
         if (restoreOverlay && roiOverlay != null) roiOverlay.setVisibility(View.VISIBLE);
-        fallbackCanvasCapture(bitmap, showCalibrationFeedback);
+        fallbackCanvasCapture(bitmap, showCalibrationFeedback, scanStartMs);
     }
 
-    private void fallbackCanvasCapture(Bitmap bitmap, boolean showCalibrationFeedback) {
+    private void fallbackCanvasCapture(
+            Bitmap bitmap,
+            boolean showCalibrationFeedback,
+            long scanStartMs
+    ) {
         try {
             Canvas canvas = new Canvas(bitmap);
             browserWebView.draw(canvas);
-            processCapturedBitmap(bitmap, showCalibrationFeedback);
+            processCapturedBitmap(bitmap, showCalibrationFeedback, scanStartMs);
         } catch (Exception e) {
             bitmap.recycle();
             isScanningFrame = false;
+            consecutiveFailures++;
+            totalReadTicks++;
+            long elapsedMs = Math.max(1L, System.currentTimeMillis() - scanStartMs);
+            BrowserScannerPlugin.emitScanTelemetry(-1, elapsedMs, false, consecutiveFailures, 0, totalReadTicks);
         }
     }
 
-    private void processCapturedBitmap(Bitmap bitmap, boolean showCalibrationFeedback) {
-        scanner.scanHistoryStrip(bitmap, roiTopRatio, roiHeightRatio, (detectedNewestFirst, usedMode, debugInfo) -> {
+    private void processCapturedBitmap(
+            Bitmap bitmap,
+            boolean showCalibrationFeedback,
+            long scanStartMs
+    ) {
+        scanner.scanHistoryStrip(bitmap, roiTopRatio, roiHeightRatio, (detectedNewestFirst, ocrOk) -> {
             bitmap.recycle();
             isScanningFrame = false;
 
+            long elapsedMs = Math.max(1L, System.currentTimeMillis() - scanStartMs);
+            totalReadTicks++;
+            boolean hasNumbers = ocrOk && detectedNewestFirst != null && !detectedNewestFirst.isEmpty();
+            if (hasNumbers) {
+                consecutiveFailures = 0;
+            } else {
+                consecutiveFailures++;
+            }
+
+            int headNumber = hasNumbers ? detectedNewestFirst.get(0) : -1;
+            int stripSize = detectedNewestFirst != null ? detectedNewestFirst.size() : 0;
+            BrowserScannerPlugin.emitScanTelemetry(
+                    headNumber,
+                    elapsedMs,
+                    hasNumbers,
+                    consecutiveFailures,
+                    stripSize,
+                    totalReadTicks
+            );
+
             if (showCalibrationFeedback) {
-                BrowserScannerPlugin.emitScanFeedback(detectedNewestFirst.size(), usedMode + " " + debugInfo);
+                BrowserScannerPlugin.emitScanFeedback(stripSize, "ocr");
             }
 
             if (showCalibrationFeedback && tvCalibStatus != null) {
-                if (detectedNewestFirst.isEmpty()) {
-                    tvCalibStatus.setText("Nenhum lido (" + debugInfo + ")");
+                if (!hasNumbers) {
+                    tvCalibStatus.setText("Nenhum lido. Arraste a caixa verde sobre os numeros.");
                 } else {
-                    tvCalibStatus.setText("Lidos (" + usedMode + "): " + detectedNewestFirst.toString());
+                    tvCalibStatus.setText("Lidos: " + detectedNewestFirst.toString());
                 }
             }
 
-            if (detectedNewestFirst.size() >= 3) {
+            if (stripSize >= 3) {
                 reconcileDetectedStrip(detectedNewestFirst);
             }
         });
@@ -682,18 +652,20 @@ public class MainActivity extends BridgeActivity {
         }
 
         int matchedShift = -1;
-        int maxShift = Math.min(5, newStrip.size() - 2);
+        int maxShift = Math.min(5, newStrip.size() - 1);
         for (int shift = 1; shift <= maxShift; shift++) {
             int overlapLen = Math.min(newStrip.size() - shift, lastObservedStrip.size());
             int checkLen = Math.min(4, overlapLen);
-            if (checkLen >= 3) {
+            if (checkLen >= 2) {
                 int matches = 0;
                 for (int k = 0; k < checkLen; k++) {
                     if (newStrip.get(shift + k).equals(lastObservedStrip.get(k))) {
                         matches++;
                     }
                 }
-                if (matches == checkLen || (checkLen >= 4 && matches >= 3)) {
+                if ((checkLen == 2 && matches == 2)
+                        || (checkLen == 3 && matches >= 2)
+                        || (checkLen >= 4 && matches >= 3)) {
                     matchedShift = shift;
                     break;
                 }
@@ -710,16 +682,31 @@ public class MainActivity extends BridgeActivity {
             return;
         }
 
-        // Verifica se continua na mesma mesa (ex: mesmo inicio com melhoria de leitura na direita)
-        int prefixCheck = Math.min(3, Math.min(newStrip.size(), lastObservedStrip.size()));
-        boolean sameHead = true;
-        for (int k = 0; k < prefixCheck; k++) {
-            if (!newStrip.get(k).equals(lastObservedStrip.get(k))) {
-                sameHead = false;
-                break;
+        // Caso o primeiro numero tenha mudado e haja sobreposicao com a faixa anterior (mesmo com 1 pilula falhada no meio),
+        // emite o novo numero como giro ao vivo para garantir 5/5 leituras consecutivas.
+        if (!newStrip.get(0).equals(lastObservedStrip.get(0))) {
+            int sharedTail = 0;
+            int prevLimit = Math.min(6, lastObservedStrip.size());
+            int newLimit = Math.min(8, newStrip.size());
+            for (int i = 0; i < prevLimit; i++) {
+                Integer target = lastObservedStrip.get(i);
+                for (int j = 1; j < newLimit; j++) {
+                    if (target.equals(newStrip.get(j))) {
+                        sharedTail++;
+                        break;
+                    }
+                }
             }
-        }
-        if (sameHead) {
+            if (sharedTail >= 2 || (newStrip.size() >= 2 && newStrip.get(1).equals(lastObservedStrip.get(0)))) {
+                lastObservedStrip = new ArrayList<>(newStrip);
+                if (browserPanel != null) {
+                    browserPanel.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                }
+                BrowserScannerPlugin.emitSpins(Collections.singletonList(newStrip.get(0)), false);
+                return;
+            }
+        } else {
+            // Mesmo numero mais recente na cabeca (apenas atualizou cauda da direita)
             lastObservedStrip = new ArrayList<>(newStrip);
             return;
         }
