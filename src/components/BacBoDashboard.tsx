@@ -224,12 +224,14 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
     try {
       const scanTop =
         (roiTopPct === 4 && roiHeightPct === 7) ||
-        (roiTopPct === 40 && roiHeightPct === 36)
+        (roiTopPct === 40 && roiHeightPct === 36) ||
+        (roiTopPct === 34 && roiHeightPct === 40)
           ? 66
           : roiTopPct;
       const scanHeight =
         (roiTopPct === 4 && roiHeightPct === 7) ||
-        (roiTopPct === 40 && roiHeightPct === 36)
+        (roiTopPct === 40 && roiHeightPct === 36) ||
+        (roiTopPct === 34 && roiHeightPct === 40)
           ? 15
           : roiHeightPct;
       const scan = await scanBacBoScreenshotImage(file, scanTop, scanHeight);
@@ -394,7 +396,7 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-800 px-3 py-2 text-xs font-medium text-slate-400 hover:text-red-300 hover:border-red-900/60 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                <span>Reiniciar Base</span>
+                <span>Zerar 0%</span>
               </button>
             ) : (
               <div className="flex items-center gap-1.5">

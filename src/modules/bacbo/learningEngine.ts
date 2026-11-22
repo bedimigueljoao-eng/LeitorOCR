@@ -187,9 +187,9 @@ export function computeCalibratedProbabilities(
     return {
       reference,
       observed: { player: 0, tie: 0, banker: 0 },
-      modelEstimate: { ...reference },
+      modelEstimate: { player: 0, tie: 0, banker: 0 },
       statisticalConfidence: 'DADOS INSUFICIENTES',
-      sampleQualityNote: 'Sem rodadas registadas. A utilizar probabilidade teórica de referência (2d6 vs 2d6).',
+      sampleQualityNote: 'Sessão zerada (0.0%). Os percentuais serão calculados conforme as rodadas jogadas.',
     };
   }
 

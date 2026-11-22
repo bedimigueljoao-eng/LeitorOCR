@@ -330,8 +330,8 @@ public class MainActivity extends BridgeActivity {
         btnDone.setOnClickListener(v -> {
             if ("bacbo".equals(activeGameMode)) {
                 prefs.edit()
-                        .putFloat("bacbo_blocks_roi_top", roiTopRatio)
-                        .putFloat("bacbo_blocks_roi_height", roiHeightRatio)
+                        .putFloat("bacbo_blocks_v2_top", roiTopRatio)
+                        .putFloat("bacbo_blocks_v2_height", roiHeightRatio)
                         .apply();
             } else {
                 prefs.edit()
@@ -491,14 +491,14 @@ public class MainActivity extends BridgeActivity {
 
         if (prefs != null) {
             if ("bacbo".equals(nextMode)) {
-                roiTopRatio = prefs.getFloat("bacbo_blocks_roi_top", 0.40f);
-                roiHeightRatio = prefs.getFloat("bacbo_blocks_roi_height", 0.36f);
+                roiTopRatio = prefs.getFloat("bacbo_blocks_v2_top", 0.34f);
+                roiHeightRatio = prefs.getFloat("bacbo_blocks_v2_height", 0.40f);
                 if (seekRoiTop != null) {
                     seekRoiTop.setMax(85);
                     seekRoiTop.setProgress((int) (roiTopRatio * 100));
                 }
                 if (seekRoiHeight != null) {
-                    seekRoiHeight.setMax(45);
+                    seekRoiHeight.setMax(50);
                     seekRoiHeight.setProgress((int) (roiHeightRatio * 100));
                 }
                 if (tvCalibTitle != null) {

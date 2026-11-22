@@ -334,7 +334,8 @@ public class ScreenScanner {
                                 String upper = rawText.trim().toUpperCase();
                                 if (upper.contains("JOGADOR") || upper.contains("PLAYER")
                                         || upper.contains("BANCA") || upper.contains("BANKER")
-                                        || upper.contains("EMPATE") || upper.equals("1:1")) {
+                                        || upper.contains("EMPATE") || upper.contains("PAGAMENTO")
+                                        || upper.contains("TOTAL") || upper.equals("1:1")) {
                                     blocksVisible = true;
                                 }
 
@@ -348,28 +349,26 @@ public class ScreenScanner {
                                 Integer num = parseBacBoNumberOnly(upper);
                                 if (num == null) continue;
 
-                                String colorOutcome = sampleBacBoOutcomeColor(scaled, box);
-
                                 // 1. Deteção nos 3 Blocos (JOGADOR à esquerda | BANCA à direita)
-                                // Exige:
-                                // - número na zona superior do cartão (cy < 0.72 * sh, fora do "1:1" e rótulos)
-                                // - tamanho grande do total (bh >= max(16, 0.10 * sh))
-                                // - OS 2 DADOS DO LADO já parados com pintas brancas visíveis (totalizando 4 dados na mesa)
-                                if (bh >= Math.max(16, (int) (sh * 0.10f)) && cy < sh * 0.72f) {
-                                    if (cx < sw * 0.37f && "P".equals(colorOutcome) && bh > bestPH) {
-                                        if (hasTwoDiceWithPips(scaled, box, true)) {
+                                // Usa detector próprio para cartões com gradiente escuro + exige os 2 dados do lado visíveis (4 dados na mesa)
+                                if (bh >= Math.max(14, (int) (sh * 0.09f)) && cy < sh * 0.72f) {
+                                    String blockSide = sampleBlockCardSide(scaled, box);
+                                    if (cx < sw * 0.40f && "P".equals(blockSide)) {
+                                        blocksVisible = true;
+                                        if (bh > bestPH && hasTwoDiceWithPips(scaled, box, true)) {
                                             bestP = num;
                                             bestPH = bh;
-                                            blocksVisible = true;
                                         }
-                                    } else if (cx > sw * 0.63f && "B".equals(colorOutcome) && bh > bestBH) {
-                                        if (hasTwoDiceWithPips(scaled, box, false)) {
+                                    } else if (cx > sw * 0.60f && "B".equals(blockSide)) {
+                                        blocksVisible = true;
+                                        if (bh > bestBH && hasTwoDiceWithPips(scaled, box, false)) {
                                             bestB = num;
                                             bestBH = bh;
-                                            blocksVisible = true;
                                         }
                                     }
                                 }
+
+                                String colorOutcome = sampleBacBoOutcomeColor(scaled, box);
 
                                 // 2. Candidato a Bead Plate (células menores e uniformes; exige bolas Azuis/Vermelhas)
                                 if (colorOutcome != null
@@ -402,6 +401,46 @@ public class ScreenScanner {
     }
 
     /**
+     * Identifica se o número grande está sobre o cartão azul (P) ou vermelho (B) dos 3 blocos,
+     * tolerando o gradiente escuro perto do círculo central EMPATE.
+     */
+    private String sampleBlockCardSide(Bitmap bitmap, Rect box) {
+        int w = bitmap.getWidth();
+        int h = bitmap.getHeight();
+        int midX = clamp((box.left + box.right) / 2, 0, w - 1);
+        int midY = clamp((box.top + box.bottom) / 2, 0, h - 1);
+        int pad = Math.max(4, box.height() / 6);
+
+        int[][] points = new int[][]{
+                {clamp(box.left - pad, 0, w - 1), midY},
+                {clamp(box.right + pad, 0, w - 1), midY},
+                {midX, clamp(box.top - pad, 0, h - 1)},
+                {midX, clamp(box.bottom + pad, 0, h - 1)},
+                {clamp(box.left - 3, 0, w - 1), clamp(box.top - 3, 0, h - 1)},
+                {clamp(box.right + 3, 0, w - 1), clamp(box.top - 3, 0, h - 1)},
+                {clamp(box.left - 3, 0, w - 1), clamp(box.bottom + 3, 0, h - 1)},
+                {clamp(box.right + 3, 0, w - 1), clamp(box.bottom + 3, 0, h - 1)}
+        };
+
+        int votesP = 0;
+        int votesB = 0;
+        for (int[] pt : points) {
+            int px = bitmap.getPixel(pt[0], pt[1]);
+            int r = Color.red(px);
+            int g = Color.green(px);
+            int b = Color.blue(px);
+            if (r > 175 && g > 175 && b > 175) continue;
+            if (b > r + 12 && b >= g - 6 && b > 35) {
+                votesP++;
+            } else if (r > b + 15 && r > g + 16 && r > 40) {
+                votesB++;
+            }
+        }
+        if (votesP == 0 && votesB == 0) return null;
+        return votesP >= votesB ? "P" : "B";
+    }
+
+    /**
      * Verifica se existem os 2 ícones de dados (superior e inferior) com pintas brancas visíveis
      * imediatamente ao lado do número total (à esquerda para Player, à direita para Banker).
      * Evita ler antes de lançar os dados ou quando apenas 1 dos 2 dados parou.
@@ -410,26 +449,26 @@ public class ScreenScanner {
         int imgW = bitmap.getWidth();
         int imgH = bitmap.getHeight();
         int h = totalBox.height();
-        if (h < 14 || imgW < 40 || imgH < 40) return false;
+        if (h < 12 || imgW < 40 || imgH < 40) return false;
 
         int cy = (totalBox.top + totalBox.bottom) / 2;
         int x0;
         int x1;
         if (isPlayer) {
-            x0 = clamp(totalBox.left - (int) (h * 1.48f), 0, imgW - 1);
-            x1 = clamp(totalBox.left - (int) (h * 0.14f), 0, imgW - 1);
+            x0 = clamp(totalBox.left - (int) (h * 1.75f), 0, imgW - 1);
+            x1 = clamp(totalBox.left - (int) (h * 0.10f), 0, imgW - 1);
         } else {
-            x0 = clamp(totalBox.right + (int) (h * 0.14f), 0, imgW - 1);
-            x1 = clamp(totalBox.right + (int) (h * 1.48f), 0, imgW - 1);
+            x0 = clamp(totalBox.right + (int) (h * 0.10f), 0, imgW - 1);
+            x1 = clamp(totalBox.right + (int) (h * 1.75f), 0, imgW - 1);
         }
         if (x1 - x0 < 8) return false;
 
-        int topY0 = clamp(cy - (int) (h * 0.90f), 0, imgH - 1);
-        int topY1 = clamp(cy - (int) (h * 0.10f), 0, imgH - 1);
-        int botY0 = clamp(cy + (int) (h * 0.10f), 0, imgH - 1);
-        int botY1 = clamp(cy + (int) (h * 0.90f), 0, imgH - 1);
+        int topY0 = clamp(cy - (int) (h * 1.15f), 0, imgH - 1);
+        int topY1 = clamp(cy - (int) (h * 0.05f), 0, imgH - 1);
+        int botY0 = clamp(cy + (int) (h * 0.05f), 0, imgH - 1);
+        int botY1 = clamp(cy + (int) (h * 1.15f), 0, imgH - 1);
 
-        int step = Math.max(1, h / 24);
+        int step = Math.max(1, h / 48);
         boolean topReady = dieRegionHasPips(bitmap, x0, topY0, x1, topY1, step, isPlayer);
         boolean botReady = dieRegionHasPips(bitmap, x0, botY0, x1, botY1, step, isPlayer);
         return topReady && botReady;
@@ -459,11 +498,11 @@ public class ScreenScanner {
                 int maxC = Math.max(r, Math.max(g, b));
                 int minC = Math.min(r, Math.min(g, b));
 
-                if (r >= 185 && g >= 185 && b >= 185 && (maxC - minC) < 55) {
+                if (r >= 165 && g >= 165 && b >= 165 && (maxC - minC) < 70) {
                     whitePips++;
-                } else if (isPlayer && b > r + 18 && b > 65) {
+                } else if (isPlayer && b > r + 10 && b > 35) {
                     cardBg++;
-                } else if (!isPlayer && r > b + 18 && r > 65) {
+                } else if (!isPlayer && r > b + 12 && r > 38) {
                     cardBg++;
                 }
             }
@@ -472,7 +511,7 @@ public class ScreenScanner {
         if (total < 12) return false;
         float whitePct = (whitePips * 100f) / total;
         float bgPct = (cardBg * 100f) / total;
-        return whitePips >= 4 && whitePct >= 1.5f && whitePct <= 60.0f && bgPct >= 15.0f;
+        return whitePips >= 3 && whitePct <= 65.0f && bgPct >= 10.0f;
     }
 
     private List<BacBoCell> orderBacBoCells(List<BacBoCell> rawCandidates) {

@@ -192,11 +192,13 @@ export default function App() {
     lastOutcomeLabel: string;
     lastReadMs: number | null;
     consecutiveFailures: number;
+    ocrActive: boolean;
   }>({
     lastReadTime: '--:--:--',
     lastOutcomeLabel: '--',
     lastReadMs: null,
     consecutiveFailures: 0,
+    ocrActive: false,
   });
   const [lastBacBoLiveResultAt, setLastBacBoLiveResultAt] = useState<number | null>(null);
   const [bacboCycleNowMs, setBacboCycleNowMs] = useState<number>(() => Date.now());
@@ -317,6 +319,7 @@ export default function App() {
             lastReadTime: event.ocrOk ? nowStr : prev.lastReadTime,
             lastReadMs: event.elapsedMs,
             consecutiveFailures: event.ocrOk ? 0 : event.consecutiveFailures,
+            ocrActive: Boolean(event.ocrOk),
           }));
           return;
         }
@@ -552,6 +555,7 @@ export default function App() {
       lastOutcomeLabel: '--',
       lastReadMs: null,
       consecutiveFailures: 0,
+      ocrActive: false,
     });
   };
 
@@ -616,6 +620,10 @@ export default function App() {
 
       const colorNamePt = (o: BacBoOutcome) =>
         o === 'P' ? 'Azul' : o === 'B' ? 'Verm.' : 'Emp.';
+
+      const bbPCount = bacboRounds.filter((r) => r.outcome === 'P').length;
+      const bbTCount = bacboRounds.filter((r) => r.outcome === 'T').length;
+      const bbBCount = bacboRounds.filter((r) => r.outcome === 'B').length;
 
       return (
         <div className="h-screen overflow-y-auto bg-[#0B0F17] text-slate-100 p-2 space-y-1.5">
@@ -737,19 +745,19 @@ export default function App() {
               <div className="rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-1">
                 <div className="text-[9px] text-blue-300">PLAYER</div>
                 <div className="font-bold text-blue-200">
-                  {bbProbs.modelEstimate.player.toFixed(1)}%
+                  {bbProbs.observed.player.toFixed(1)}% ({bbPCount})
                 </div>
               </div>
               <div className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-1">
                 <div className="text-[9px] text-amber-300">TIE</div>
                 <div className="font-bold text-amber-200">
-                  {bbProbs.modelEstimate.tie.toFixed(1)}%
+                  {bbProbs.observed.tie.toFixed(1)}% ({bbTCount})
                 </div>
               </div>
               <div className="rounded border border-red-500/30 bg-red-500/10 px-1.5 py-1">
                 <div className="text-[9px] text-red-300">BANKER</div>
                 <div className="font-bold text-red-200">
-                  {bbProbs.modelEstimate.banker.toFixed(1)}%
+                  {bbProbs.observed.banker.toFixed(1)}% ({bbBCount})
                 </div>
               </div>
             </div>
@@ -808,17 +816,15 @@ export default function App() {
                 >
                   +B
                 </button>
-                {bacboRounds.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleResetAllBacBo}
-                    title="Limpar nossa tabela"
-                    className="inline-flex items-center gap-0.5 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[9px] text-slate-400 hover:text-red-300"
-                  >
-                    <RotateCcw className="h-2.5 w-2.5" />
-                    <span>Zerar</span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleResetAllBacBo}
+                  title="Zerar percentuais e nossa tabela para 0%"
+                  className="inline-flex items-center gap-0.5 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[9px] font-semibold text-slate-200 hover:text-red-300"
+                >
+                  <RotateCcw className="h-2.5 w-2.5" />
+                  <span>Zerar 0%</span>
+                </button>
               </div>
             </div>
 
@@ -931,7 +937,10 @@ export default function App() {
           <div className="rounded-md border border-slate-800/80 bg-[#090D14] px-2 py-1 font-mono text-[9px] leading-snug text-slate-400 tabular-nums">
             Última leitura: {bacboScanDebug.lastReadTime} · {bacboScanDebug.lastOutcomeLabel} ·{' '}
             {bacboScanDebug.lastReadMs !== null ? `${bacboScanDebug.lastReadMs}ms` : '--'} ·{' '}
-            Rodadas: {bacboRounds.length}
+            Rodadas: {bacboRounds.length} ·{' '}
+            <span className={bacboScanDebug.ocrActive ? 'text-emerald-400' : 'text-amber-300'}>
+              {bacboScanDebug.ocrActive ? '3 Blocos detetados' : 'A procurar 3 blocos'}
+            </span>
           </div>
         </div>
       );
@@ -1424,8 +1433,8 @@ export default function App() {
           <BacBoDashboard
             rounds={bacboRounds}
             analysis={bacboAnalysis}
-            roiTopPct={40}
-            roiHeightPct={36}
+            roiTopPct={34}
+            roiHeightPct={40}
             lastLiveResultAt={lastBacBoLiveResultAt}
             cycleNowMs={bacboCycleNowMs}
             scanDebug={bacboScanDebug}
