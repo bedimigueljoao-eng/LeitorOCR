@@ -67,6 +67,29 @@ public class BrowserScannerPlugin extends Plugin {
         instance.notifyListeners("scanTelemetry", payload);
     }
 
+    public static void emitBacBo(List<ScreenScanner.BacBoCell> cellsNewestFirst, boolean isFullPlate) {
+        if (instance == null || cellsNewestFirst == null || cellsNewestFirst.isEmpty()) {
+            return;
+        }
+        JSArray arr = new JSArray();
+        for (ScreenScanner.BacBoCell cell : cellsNewestFirst) {
+            JSObject item = new JSObject();
+            item.put("outcome", cell.outcome);
+            item.put("total", cell.total);
+            if (cell.playerTotal >= 2 && cell.playerTotal <= 12) {
+                item.put("playerTotal", cell.playerTotal);
+            }
+            if (cell.bankerTotal >= 2 && cell.bankerTotal <= 12) {
+                item.put("bankerTotal", cell.bankerTotal);
+            }
+            arr.put(item);
+        }
+        JSObject payload = new JSObject();
+        payload.put("itemsNewestFirst", arr);
+        payload.put("isFullPlate", isFullPlate);
+        instance.notifyListeners("bacboDetected", payload);
+    }
+
     @PluginMethod
     public void openBrowser(PluginCall call) {
         String url = call.getString("url", "");
@@ -141,6 +164,20 @@ public class BrowserScannerPlugin extends Plugin {
             MainActivity activity = (MainActivity) getActivity();
             activity.runOnUiThread(() -> {
                 activity.triggerImmediateScan();
+                call.resolve();
+            });
+        } else {
+            call.reject("MainActivity unavailable");
+        }
+    }
+
+    @PluginMethod
+    public void setGameMode(PluginCall call) {
+        String mode = call.getString("mode", "roulette");
+        if (getActivity() instanceof MainActivity) {
+            MainActivity activity = (MainActivity) getActivity();
+            activity.runOnUiThread(() -> {
+                activity.setActiveGameMode(mode);
                 call.resolve();
             });
         } else {

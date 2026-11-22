@@ -49,7 +49,10 @@ public class MainActivity extends BridgeActivity {
     private EditText etUrl;
     private View roiOverlay;
     private LinearLayout calibrationBar;
+    private TextView tvCalibTitle;
     private TextView tvCalibStatus;
+    private SeekBar seekRoiTop;
+    private SeekBar seekRoiHeight;
     private Button btnScanToggle;
 
     private View capacitorWebView;
@@ -68,6 +71,7 @@ public class MainActivity extends BridgeActivity {
 
     private float roiTopRatio = 0.04f;
     private float roiHeightRatio = 0.07f;
+    private String activeGameMode = "roulette";
 
     private SharedPreferences prefs;
 
@@ -273,15 +277,15 @@ public class MainActivity extends BridgeActivity {
         );
         bar.setLayoutParams(lp);
 
-        TextView title = new TextView(this);
-        title.setText("Alinhar caixa verde sobre os numeros da roleta");
-        title.setTextColor(Color.parseColor("#F1F5F9"));
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        tvCalibTitle = new TextView(this);
+        tvCalibTitle.setText("Alinhar caixa verde sobre os numeros da roleta");
+        tvCalibTitle.setTextColor(Color.parseColor("#F1F5F9"));
+        tvCalibTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
 
-        SeekBar seekTop = new SeekBar(this);
-        seekTop.setMax(45);
-        seekTop.setProgress((int) (roiTopRatio * 100));
-        seekTop.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        seekRoiTop = new SeekBar(this);
+        seekRoiTop.setMax(45);
+        seekRoiTop.setProgress((int) (roiTopRatio * 100));
+        seekRoiTop.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 roiTopRatio = progress / 100f;
@@ -291,10 +295,10 @@ public class MainActivity extends BridgeActivity {
             @Override public void onStopTrackingTouch(SeekBar seekBar) {}
         });
 
-        SeekBar seekHeight = new SeekBar(this);
-        seekHeight.setMax(18);
-        seekHeight.setProgress((int) (roiHeightRatio * 100));
-        seekHeight.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+        seekRoiHeight = new SeekBar(this);
+        seekRoiHeight.setMax(18);
+        seekRoiHeight.setProgress((int) (roiHeightRatio * 100));
+        seekRoiHeight.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 roiHeightRatio = Math.max(3, progress) / 100f;
@@ -323,10 +327,17 @@ public class MainActivity extends BridgeActivity {
         Button btnDone = createBarButton("Confirmar", "#0B0F17", "#10B981");
         btnDone.setLayoutParams(new LinearLayout.LayoutParams(0, dp(34), 1f));
         btnDone.setOnClickListener(v -> {
-            prefs.edit()
-                    .putFloat("roi_top", roiTopRatio)
-                    .putFloat("roi_height", roiHeightRatio)
-                    .apply();
+            if ("bacbo".equals(activeGameMode)) {
+                prefs.edit()
+                        .putFloat("bacbo_roi_top", roiTopRatio)
+                        .putFloat("bacbo_roi_height", roiHeightRatio)
+                        .apply();
+            } else {
+                prefs.edit()
+                        .putFloat("roi_top", roiTopRatio)
+                        .putFloat("roi_height", roiHeightRatio)
+                        .apply();
+            }
             calibrationBar.setVisibility(View.GONE);
             roiOverlay.setVisibility(View.GONE);
         });
@@ -334,9 +345,9 @@ public class MainActivity extends BridgeActivity {
         btnRow.addView(btnTest);
         btnRow.addView(btnDone);
 
-        bar.addView(title);
-        bar.addView(seekTop);
-        bar.addView(seekHeight);
+        bar.addView(tvCalibTitle);
+        bar.addView(seekRoiTop);
+        bar.addView(seekRoiHeight);
         bar.addView(tvCalibStatus);
         bar.addView(btnRow);
         return bar;
@@ -472,6 +483,45 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    public void setActiveGameMode(String mode) {
+        String nextMode = "bacbo".equals(mode) ? "bacbo" : "roulette";
+        this.activeGameMode = nextMode;
+        this.isScanningFrame = false;
+
+        if (prefs != null) {
+            if ("bacbo".equals(nextMode)) {
+                roiTopRatio = prefs.getFloat("bacbo_roi_top", 0.66f);
+                roiHeightRatio = prefs.getFloat("bacbo_roi_height", 0.15f);
+                if (seekRoiTop != null) {
+                    seekRoiTop.setMax(85);
+                    seekRoiTop.setProgress((int) (roiTopRatio * 100));
+                }
+                if (seekRoiHeight != null) {
+                    seekRoiHeight.setMax(28);
+                    seekRoiHeight.setProgress((int) (roiHeightRatio * 100));
+                }
+                if (tvCalibTitle != null) {
+                    tvCalibTitle.setText("Alinhar caixa verde sobre a grelha do Bac Bo");
+                }
+            } else {
+                roiTopRatio = prefs.getFloat("roi_top", 0.04f);
+                roiHeightRatio = prefs.getFloat("roi_height", 0.07f);
+                if (seekRoiTop != null) {
+                    seekRoiTop.setMax(45);
+                    seekRoiTop.setProgress((int) (roiTopRatio * 100));
+                }
+                if (seekRoiHeight != null) {
+                    seekRoiHeight.setMax(18);
+                    seekRoiHeight.setProgress((int) (roiHeightRatio * 100));
+                }
+                if (tvCalibTitle != null) {
+                    tvCalibTitle.setText("Alinhar caixa verde sobre os numeros da roleta");
+                }
+            }
+            updateRoiOverlayPosition();
+        }
+    }
+
     public void triggerImmediateScan() {
         if (!browserVisible) return;
         if (isScanningFrame) {
@@ -598,6 +648,10 @@ public class MainActivity extends BridgeActivity {
             boolean showCalibrationFeedback,
             long scanStartMs
     ) {
+        if ("bacbo".equals(activeGameMode)) {
+            processBacBoBitmap(bitmap, showCalibrationFeedback, scanStartMs);
+            return;
+        }
         scanner.scanHistoryStrip(bitmap, roiTopRatio, roiHeightRatio, (detectedNewestFirst, ocrOk) -> {
             bitmap.recycle();
             isScanningFrame = false;
@@ -779,6 +833,287 @@ public class MainActivity extends BridgeActivity {
         pendingFullStrip = null;
         pendingConfirmCount = 0;
         unrelatedStripCount = 0;
+    }
+
+    // ==================== BAC BO RECONCILIATION ====================
+
+    private final List<ScreenScanner.BacBoCell> confirmedBacBo = new ArrayList<>();
+    private List<ScreenScanner.BacBoCell> pendingBacBoNew = null;
+    private List<ScreenScanner.BacBoCell> pendingBacBoFull = null;
+    private int pendingBacBoConfirmCount = 0;
+    private int unrelatedBacBoCount = 0;
+    private String pendingBacBoInitSig = null;
+    private int pendingBacBoInitCount = 0;
+    private long lastLiveBacBoEmitMs = 0L;
+
+    private void processBacBoBitmap(
+            Bitmap bitmap,
+            boolean showCalibrationFeedback,
+            long scanStartMs
+    ) {
+        scanner.scanBacBoStrip(bitmap, roiTopRatio, roiHeightRatio, (cellsNewestFirst, ocrOk) -> {
+            long elapsedMs = Math.max(1L, System.currentTimeMillis() - scanStartMs);
+            totalReadTicks++;
+            boolean hasCells = ocrOk && cellsNewestFirst != null && !cellsNewestFirst.isEmpty();
+            if (hasCells) {
+                consecutiveFailures = 0;
+            } else {
+                consecutiveFailures++;
+            }
+
+            int headTotal = hasCells ? cellsNewestFirst.get(0).total : -1;
+            int stripSize = cellsNewestFirst != null ? cellsNewestFirst.size() : 0;
+            BrowserScannerPlugin.emitScanTelemetry(
+                    headTotal,
+                    elapsedMs,
+                    hasCells,
+                    consecutiveFailures,
+                    stripSize,
+                    totalReadTicks
+            );
+
+            if (showCalibrationFeedback) {
+                BrowserScannerPlugin.emitScanFeedback(stripSize, "bacbo-ocr");
+            }
+
+            if (showCalibrationFeedback && tvCalibStatus != null) {
+                if (!hasCells) {
+                    tvCalibStatus.setText("Bac Bo: Nenhum resultado lido. Ajuste a Mira sobre a grelha.");
+                } else {
+                    StringBuilder sb = new StringBuilder("Bac Bo lidos (" + stripSize + "): ");
+                    for (int i = 0; i < Math.min(8, cellsNewestFirst.size()); i++) {
+                        if (i > 0) sb.append(", ");
+                        ScreenScanner.BacBoCell c = cellsNewestFirst.get(i);
+                        sb.append(c.outcome).append(c.total > 0 ? c.total : "");
+                    }
+                    tvCalibStatus.setText(sb.toString());
+                }
+            }
+
+            if (stripSize >= 3) {
+                reconcileBacBoPlate(cellsNewestFirst, bitmap);
+            } else {
+                bitmap.recycle();
+                isScanningFrame = false;
+            }
+        });
+    }
+
+    private boolean bacBoCellsEqual(List<ScreenScanner.BacBoCell> a, List<ScreenScanner.BacBoCell> b) {
+        if (a.size() != b.size()) return false;
+        for (int i = 0; i < a.size(); i++) {
+            if (!a.get(i).signature().equals(b.get(i).signature())) return false;
+        }
+        return true;
+    }
+
+    /**
+     * Verifica quantos elementos de source[srcStart..] aparecem em ordem dentro target[tgtStart..].
+     * Tolera eventuais falhas pontuais de 1 célula no meio do Bead Plate de 6x20.
+     */
+    private int countOrderedMatches(
+            List<ScreenScanner.BacBoCell> source,
+            int srcStart,
+            List<ScreenScanner.BacBoCell> target,
+            int tgtStart,
+            int window
+    ) {
+        int matches = 0;
+        int tgtCursor = tgtStart;
+        int srcLimit = Math.min(source.size(), srcStart + window);
+        int tgtLimit = Math.min(target.size(), tgtStart + window + 3);
+        for (int i = srcStart; i < srcLimit; i++) {
+            String sig = source.get(i).signature();
+            for (int j = tgtCursor; j < tgtLimit && j <= tgtCursor + 2; j++) {
+                if (sig.equals(target.get(j).signature())) {
+                    matches++;
+                    tgtCursor = j + 1;
+                    break;
+                }
+            }
+        }
+        return matches;
+    }
+
+    private void emitBacBoWithScoreboard(
+            Bitmap fullBitmap,
+            List<ScreenScanner.BacBoCell> cellsToEmit,
+            boolean isFullPlate
+    ) {
+        if (cellsToEmit.isEmpty()) {
+            fullBitmap.recycle();
+            isScanningFrame = false;
+            return;
+        }
+        ScreenScanner.BacBoCell head = cellsToEmit.get(0);
+        scanner.scanBacBoScoreboard(fullBitmap, roiTopRatio, (pScore, bScore) -> {
+            fullBitmap.recycle();
+            isScanningFrame = false;
+
+            if (pScore >= 2 && pScore <= 12 && bScore >= 2 && bScore <= 12) {
+                String scoreOutcome = pScore > bScore ? "P" : (bScore > pScore ? "B" : "T");
+                int scoreWinTotal = Math.max(pScore, bScore);
+                if (scoreOutcome.equals(head.outcome)
+                        && (head.total < 2 || head.total == scoreWinTotal)) {
+                    head.playerTotal = pScore;
+                    head.bankerTotal = bScore;
+                }
+            }
+
+            if (!isFullPlate) {
+                lastLiveBacBoEmitMs = System.currentTimeMillis();
+                if (browserPanel != null) {
+                    browserPanel.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                }
+            }
+            BrowserScannerPlugin.emitBacBo(cellsToEmit, isFullPlate);
+        });
+    }
+
+    private void reconcileBacBoPlate(List<ScreenScanner.BacBoCell> newCells, Bitmap fullBitmap) {
+        if (newCells == null || newCells.size() < 4) {
+            fullBitmap.recycle();
+            isScanningFrame = false;
+            return;
+        }
+
+        if (confirmedBacBo.isEmpty()) {
+            if (newCells.size() < 5) {
+                fullBitmap.recycle();
+                isScanningFrame = false;
+                return;
+            }
+            String sig = newCells.get(0).signature();
+            if (sig.equals(pendingBacBoInitSig)) {
+                pendingBacBoInitCount++;
+            } else {
+                pendingBacBoInitSig = sig;
+                pendingBacBoInitCount = 1;
+            }
+            if (pendingBacBoInitCount >= 2) {
+                confirmedBacBo.clear();
+                confirmedBacBo.addAll(newCells);
+                pendingBacBoInitSig = null;
+                pendingBacBoInitCount = 0;
+                emitBacBoWithScoreboard(fullBitmap, newCells, true);
+                return;
+            }
+            fullBitmap.recycle();
+            isScanningFrame = false;
+            return;
+        }
+
+        if (bacBoCellsEqual(newCells, confirmedBacBo)) {
+            pendingBacBoNew = null;
+            pendingBacBoFull = null;
+            pendingBacBoConfirmCount = 0;
+            unrelatedBacBoCount = 0;
+            fullBitmap.recycle();
+            isScanningFrame = false;
+            return;
+        }
+
+        // 1. Verifica shift <= 0 (mesmo resultado mais recente ou células iniciais ocultadas no OCR)
+        int bestNegShift = 999;
+        int bestNegMatches = 0;
+        for (int shift = 0; shift >= -3; shift--) {
+            int offsetConf = -shift;
+            int avail = Math.min(6, Math.min(newCells.size(), confirmedBacBo.size() - offsetConf));
+            if (avail < 3) continue;
+            int matches = countOrderedMatches(newCells, 0, confirmedBacBo, offsetConf, avail);
+            boolean valid = (avail == 3 && matches == 3)
+                    || (avail >= 4 && matches >= Math.max(3, avail - 1));
+            if (valid && (matches > bestNegMatches || (matches == bestNegMatches && shift > bestNegShift))) {
+                bestNegMatches = matches;
+                bestNegShift = shift;
+            }
+        }
+
+        if (bestNegShift != 999) {
+            pendingBacBoNew = null;
+            pendingBacBoFull = null;
+            pendingBacBoConfirmCount = 0;
+            unrelatedBacBoCount = 0;
+            if (bestNegShift == 0 && newCells.size() >= confirmedBacBo.size() && bestNegMatches >= 4) {
+                confirmedBacBo.clear();
+                confirmedBacBo.addAll(newCells);
+            }
+            fullBitmap.recycle();
+            isScanningFrame = false;
+            return;
+        }
+
+        // 2. Verifica shift positivo (+1..+3): entrou novo(s) resultado(s) no Bead Plate
+        int bestPosShift = -1;
+        int bestPosMatches = 0;
+        for (int shift = 1; shift <= 3; shift++) {
+            int avail = Math.min(6, Math.min(newCells.size() - shift, confirmedBacBo.size()));
+            if (avail < 3) continue;
+            int matches = countOrderedMatches(newCells, shift, confirmedBacBo, 0, avail);
+            boolean valid = (avail == 3 && matches == 3)
+                    || (avail >= 4 && matches >= Math.max(3, avail - 1));
+            if (valid && matches > bestPosMatches) {
+                bestPosMatches = matches;
+                bestPosShift = shift;
+            }
+        }
+
+        if (bestPosShift > 0) {
+            unrelatedBacBoCount = 0;
+            // Cooldown de 8s entre rodadas ao vivo (ciclo real = ~9s pausa + 10-12s dados = ~20s)
+            if (lastLiveBacBoEmitMs > 0L && (System.currentTimeMillis() - lastLiveBacBoEmitMs) < 8000L) {
+                fullBitmap.recycle();
+                isScanningFrame = false;
+                return;
+            }
+            List<ScreenScanner.BacBoCell> candidateNew = new ArrayList<>(newCells.subList(0, bestPosShift));
+            if (pendingBacBoNew != null && bacBoCellsEqual(candidateNew, pendingBacBoNew)) {
+                pendingBacBoConfirmCount++;
+            } else {
+                pendingBacBoNew = candidateNew;
+                pendingBacBoFull = new ArrayList<>(newCells);
+                pendingBacBoConfirmCount = 1;
+            }
+
+            if (pendingBacBoConfirmCount >= 2) {
+                confirmedBacBo.clear();
+                confirmedBacBo.addAll(pendingBacBoFull != null ? pendingBacBoFull : newCells);
+                pendingBacBoNew = null;
+                pendingBacBoFull = null;
+                pendingBacBoConfirmCount = 0;
+                emitBacBoWithScoreboard(fullBitmap, candidateNew, false);
+                return;
+            }
+            fullBitmap.recycle();
+            isScanningFrame = false;
+            return;
+        }
+
+        // 3. Troca de mesa apenas após 4 leituras seguidas sem alinhamento e 2 confirmações
+        pendingBacBoNew = null;
+        pendingBacBoFull = null;
+        pendingBacBoConfirmCount = 0;
+        unrelatedBacBoCount++;
+        if (unrelatedBacBoCount >= 4 && newCells.size() >= 5) {
+            String sig = newCells.get(0).signature();
+            if (sig.equals(pendingBacBoInitSig)) {
+                pendingBacBoInitCount++;
+            } else {
+                pendingBacBoInitSig = sig;
+                pendingBacBoInitCount = 1;
+            }
+            if (pendingBacBoInitCount >= 2) {
+                confirmedBacBo.clear();
+                confirmedBacBo.addAll(newCells);
+                unrelatedBacBoCount = 0;
+                pendingBacBoInitSig = null;
+                pendingBacBoInitCount = 0;
+                emitBacBoWithScoreboard(fullBitmap, newCells, true);
+                return;
+            }
+        }
+        fullBitmap.recycle();
+        isScanningFrame = false;
     }
 
     private Button createBarButton(String label, String textColorHex, String bgColorHex) {

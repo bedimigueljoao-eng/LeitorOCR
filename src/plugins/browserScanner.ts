@@ -23,6 +23,18 @@ export interface ScanTelemetryEvent {
   totalReads: number;
 }
 
+export interface BacBoCellEvent {
+  outcome: 'P' | 'B' | 'T';
+  total: number; // 2..12 or -1 if unavailable
+  playerTotal?: number;
+  bankerTotal?: number;
+}
+
+export interface BacBoDetectedEvent {
+  itemsNewestFirst: BacBoCellEvent[];
+  isFullPlate: boolean;
+}
+
 export interface BrowserScannerPlugin {
   openBrowser(options?: { url?: string }): Promise<void>;
   closeBrowser(): Promise<void>;
@@ -30,9 +42,14 @@ export interface BrowserScannerPlugin {
   toggleCalibration(): Promise<void>;
   setAutoScan(options: { enabled: boolean }): Promise<void>;
   scanNow(): Promise<void>;
+  setGameMode(options: { mode: 'roulette' | 'bacbo' }): Promise<void>;
   addListener(
     eventName: 'spinsDetected',
     listenerFunc: (event: SpinsDetectedEvent) => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'bacboDetected',
+    listenerFunc: (event: BacBoDetectedEvent) => void
   ): Promise<PluginListenerHandle>;
   addListener(
     eventName: 'browserVisibilityChanged',

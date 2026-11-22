@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   RotateCcw,
   Plus,
@@ -20,8 +20,24 @@ import { EuropeanWheel } from './components/EuropeanWheel';
 import { CreedroomzBoard } from './components/CreedroomzBoard';
 import { ScreenshotScannerTab } from './components/ScreenshotScannerTab';
 import { AndroidBuilderTab } from './components/AndroidBuilderTab';
+import { BacBoDashboard } from './components/BacBoDashboard';
 import { BrowserScanner, isNativeAndroidApp } from './plugins/browserScanner';
+import {
+  analyzeBacBoEngine,
+  clearAllRounds,
+  formatOutcomeLabel,
+  getBacBoRoundCycleStatus,
+  loadRoundsFromIndexedDb,
+  loadRoundsSync,
+  processNativeBacBoDetection,
+  saveRounds,
+  validateAndBuildBacBoRound,
+  BacBoEngineAnalysis,
+  BacBoOutcome,
+  BacBoRoundRecord,
+} from './modules/bacbo';
 
+type GameMode = 'roulette' | 'bacbo';
 type ActiveTab = 'analyzer' | 'scanner' | 'board' | 'android';
 
 const STORAGE_KEY_SESSION_SPINS = 'roletavision_session_spins_v3';
@@ -78,6 +94,8 @@ function reconcileScannerSpins(
 }
 
 export default function App() {
+  const [gameMode, setGameMode] = useState<GameMode>('roulette');
+  const gameModeRef = useRef<GameMode>('roulette');
   const [activeTab, setActiveTab] = useState<ActiveTab>('analyzer');
   const isAndroidApk = isNativeAndroidApp();
   const [nativeBrowserOpen, setNativeBrowserOpen] = useState(false);
@@ -158,6 +176,76 @@ export default function App() {
     }
   }, [bankrollAoa]);
 
+  // ============================================================================
+  // ESTADO & ENGINE DA ABA 2: BAC BO INTELLIGENCE ENGINE (100% independente)
+  // ============================================================================
+  const [bacboRounds, setBacboRounds] = useState<BacBoRoundRecord[]>(() => loadRoundsSync());
+  const bacboLastProbsRef = useRef<{ player: number; tie: number; banker: number } | null>(null);
+  const [bacboAnalysis, setBacboAnalysis] = useState<BacBoEngineAnalysis>(() =>
+    analyzeBacBoEngine(loadRoundsSync(), null)
+  );
+  const bacboAnalysisRef = useRef<BacBoEngineAnalysis>(bacboAnalysis);
+  const [bacboScanDebug, setBacboScanDebug] = useState<{
+    lastReadTime: string;
+    lastOutcomeLabel: string;
+    lastReadMs: number | null;
+    consecutiveFailures: number;
+  }>({
+    lastReadTime: '--:--:--',
+    lastOutcomeLabel: '--',
+    lastReadMs: null,
+    consecutiveFailures: 0,
+  });
+  const [lastBacBoLiveResultAt, setLastBacBoLiveResultAt] = useState<number | null>(null);
+  const [bacboCycleNowMs, setBacboCycleNowMs] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    if (gameMode !== 'bacbo' || lastBacBoLiveResultAt === null) return;
+    if (Date.now() - lastBacBoLiveResultAt >= 23000) return;
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      setBacboCycleNowMs(now);
+      if (now - lastBacBoLiveResultAt >= 23000) {
+        window.clearInterval(id);
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [gameMode, lastBacBoLiveResultAt]);
+
+  useEffect(() => {
+    gameModeRef.current = gameMode;
+    if (isAndroidApk) {
+      void BrowserScanner.setGameMode({ mode: gameMode });
+    }
+  }, [gameMode, isAndroidApk]);
+
+  // Hidratação assíncrona do IndexedDB na montagem
+  useEffect(() => {
+    let active = true;
+    void loadRoundsFromIndexedDb().then((dbRounds) => {
+      if (!active || dbRounds.length === 0) return;
+      setBacboRounds((prev) => (dbRounds.length > prev.length ? dbRounds : prev));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Tarefa 2 (Bac Bo): Recálculo estatístico em segundo plano após gravação de nova rodada
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      const next = analyzeBacBoEngine(bacboRounds, bacboLastProbsRef.current);
+      bacboAnalysisRef.current = next;
+      bacboLastProbsRef.current = {
+        player: next.probabilities.modelEstimate.player,
+        tie: next.probabilities.modelEstimate.tie,
+        banker: next.probabilities.modelEstimate.banker,
+      };
+      setBacboAnalysis(next);
+    }, 0);
+    return () => window.clearTimeout(timerId);
+  }, [bacboRounds]);
+
   // Tarefa 1 - LEITURA: apenas lê números a cada 500ms e guarda na lista sem calcular percentuais
   useEffect(() => {
     if (!isAndroidApk) return;
@@ -183,9 +271,53 @@ export default function App() {
         });
       });
 
+      const bacboSub = await BrowserScanner.addListener('bacboDetected', (event) => {
+        if (!mounted || !Array.isArray(event.itemsNewestFirst)) return;
+        if (event.itemsNewestFirst.length === 0) return;
+
+        const nowStr = new Date().toLocaleTimeString('pt-PT', { hour12: false });
+        const snap = bacboAnalysisRef.current.currentSnapshot;
+
+        setBacboRounds((prev) => {
+          const intake = processNativeBacBoDetection(
+            event.itemsNewestFirst,
+            Boolean(event.isFullPlate),
+            prev,
+            snap
+          );
+          if (intake.newRecords.length === 0) {
+            return prev;
+          }
+          const updated = [...prev, ...intake.newRecords];
+          void saveRounds(updated);
+          if (!event.isFullPlate || intake.newRecords.length === 1) {
+            const ts = Date.now();
+            setLastBacBoLiveResultAt(ts);
+            setBacboCycleNowMs(ts);
+          }
+          setBacboScanDebug((dbg) => ({
+            ...dbg,
+            lastReadTime: nowStr,
+            lastOutcomeLabel: intake.lastDetectedSummary,
+            consecutiveFailures: 0,
+          }));
+          setScanStatusHint(`Bac Bo lido: ${intake.lastDetectedSummary}`);
+          return updated;
+        });
+      });
+
       const telemetrySub = await BrowserScanner.addListener('scanTelemetry', (event) => {
         if (!mounted) return;
         const nowStr = new Date().toLocaleTimeString('pt-PT', { hour12: false });
+        if (gameModeRef.current === 'bacbo') {
+          setBacboScanDebug((prev) => ({
+            ...prev,
+            lastReadTime: event.ocrOk ? nowStr : prev.lastReadTime,
+            lastReadMs: event.elapsedMs,
+            consecutiveFailures: event.ocrOk ? 0 : event.consecutiveFailures,
+          }));
+          return;
+        }
         setScanDebug((prev) => {
           if (event.ocrOk && event.lastNumber >= 0) {
             return {
@@ -216,16 +348,21 @@ export default function App() {
       const feedbackSub = await BrowserScanner.addListener('scanFeedback', (event) => {
         if (!mounted) return;
         if (event.count > 0) {
-          setScanStatusHint(`Leitura ativa (${event.count} números via ${event.mode || 'ocr'})`);
+          setScanStatusHint(
+            `Leitura ativa (${event.count} itens via ${event.mode || 'ocr'})`
+          );
         } else {
           setScanStatusHint(
-            'Nenhum número detetado. Abra a roleta e toque em Mira se precisar alinhar.'
+            gameModeRef.current === 'bacbo'
+              ? 'Nenhum resultado Bac Bo detetado. Alinhe a Mira sobre a grelha Bead Plate.'
+              : 'Nenhum número detetado. Abra a roleta e toque em Mira se precisar alinhar.'
           );
         }
       });
 
       return () => {
         void spinSub.remove();
+        void bacboSub.remove();
         void telemetrySub.remove();
         void visSub.remove();
         void feedbackSub.remove();
@@ -357,6 +494,61 @@ export default function App() {
     setSpinMemory({ session: [], backup: [] });
   };
 
+  // Handlers exclusivos da Aba 2: BAC BO
+  const handleAddBacBoRound = (input: {
+    outcome?: BacBoOutcome | null;
+    playerTotal?: number | null;
+    bankerTotal?: number | null;
+    winningTotal?: number | null;
+    playerDice?: [number, number] | null;
+    bankerDice?: [number, number] | null;
+    source: 'ocr' | 'manual' | 'import';
+  }): { valid: boolean; reason?: string } => {
+    const res = validateAndBuildBacBoRound(
+      input,
+      bacboRounds,
+      bacboAnalysisRef.current.currentSnapshot
+    );
+    if (!res.valid || !res.record) {
+      return { valid: false, reason: res.reason };
+    }
+    const updated = [...bacboRounds, res.record];
+    setBacboRounds(updated);
+    void saveRounds(updated);
+    const ts = Date.now();
+    setLastBacBoLiveResultAt(ts);
+    setBacboCycleNowMs(ts);
+    const nowStr = new Date().toLocaleTimeString('pt-PT', { hour12: false });
+    setBacboScanDebug((prev) => ({
+      ...prev,
+      lastReadTime: nowStr,
+      lastOutcomeLabel: `${formatOutcomeLabel(res.record!.outcome)}${
+        res.record!.winningTotal !== null ? ` (${res.record!.winningTotal})` : ''
+      }`,
+      lastReadMs: 0,
+      consecutiveFailures: 0,
+    }));
+    return { valid: true };
+  };
+
+  const handleImportBacBoRounds = (restored: BacBoRoundRecord[]) => {
+    setBacboRounds(restored);
+    void saveRounds(restored);
+  };
+
+  const handleResetAllBacBo = () => {
+    setBacboRounds([]);
+    bacboLastProbsRef.current = null;
+    setLastBacBoLiveResultAt(null);
+    void clearAllRounds();
+    setBacboScanDebug({
+      lastReadTime: '--:--:--',
+      lastOutcomeLabel: '--',
+      lastReadMs: null,
+      consecutiveFailures: 0,
+    });
+  };
+
   const { fieldSuggestions, accuracy } = analysis;
 
   const lastRoundMap = useMemo(() => {
@@ -385,6 +577,238 @@ export default function App() {
 
   // Modo integrado quando o navegador Kwanzabet está aberto em cima no APK
   if (nativeBrowserOpen) {
+    const splitLabel =
+      splitPresetIdx === 0 ? 'Tela 56%' : splitPresetIdx === 1 ? 'Tela 45%' : 'Tela 66%';
+
+    if (gameMode === 'bacbo') {
+      const bbLastRound =
+        bacboRounds.length > 0 ? bacboRounds[bacboRounds.length - 1] : null;
+      const bbSuggestion = bacboAnalysis.strategies.finalSuggestion;
+      const bbProbs = bacboAnalysis.probabilities;
+      const bbLastEval = bbLastRound?.predictionBefore;
+      const bbLastHit =
+        bbLastRound && bbLastEval && bbLastEval.suggestion !== 'NONE'
+          ? bbLastEval.suggestion === bbLastRound.outcome
+          : null;
+
+      return (
+        <div className="h-screen overflow-y-auto bg-[#0B0F17] text-slate-100 p-2 space-y-1.5">
+          {/* Cabeçalho compacto Split-Screen com seletor [ROLETA] [BAC BO] */}
+          <div className="flex flex-wrap items-center justify-between gap-1 border-b border-slate-800 pb-1.5">
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setGameMode('roulette')}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-slate-400"
+              >
+                ROLETA
+              </button>
+              <button
+                type="button"
+                onClick={() => setGameMode('bacbo')}
+                className="rounded border border-blue-500/60 bg-blue-600/20 px-2 py-0.5 text-[10px] font-bold text-blue-300"
+              >
+                BAC BO
+              </button>
+              {bbLastRound && (
+                <span
+                  className={`inline-flex h-5 min-w-[24px] px-1 items-center justify-center rounded border font-mono text-[10px] font-bold text-white ${
+                    bbLastRound.outcome === 'P'
+                      ? 'bg-blue-600 border-blue-400'
+                      : bbLastRound.outcome === 'B'
+                      ? 'bg-[#B91C1C] border-red-400'
+                      : 'bg-amber-600 border-amber-400'
+                  }`}
+                >
+                  {bbLastRound.outcome}
+                </span>
+              )}
+              {bbLastHit !== null && (
+                <span
+                  className={`rounded px-1 py-0.5 text-[9px] font-bold ${
+                    bbLastHit
+                      ? 'bg-emerald-500/20 text-emerald-400'
+                      : 'bg-red-500/20 text-red-400'
+                  }`}
+                >
+                  {bbLastHit ? 'OK' : 'X'}
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={handleManualBrowserScan}
+                className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-200"
+              >
+                <RefreshCw className="h-2.5 w-2.5" />
+                <span>Ler</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCycleSplitRatio}
+                className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-200"
+              >
+                <ArrowUpDown className="h-2.5 w-2.5" />
+                <span>{splitLabel}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleToggleAndroidCalibration}
+                className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-200"
+              >
+                <Crosshair className="h-2.5 w-2.5" />
+                <span>Mira</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenIntegratedBrowser}
+                className="rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950"
+              >
+                Painel
+              </button>
+            </div>
+          </div>
+
+          {/* Sequência rápida recente */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 flex-1">
+              {bacboRounds.length === 0 ? (
+                <span className="text-[10px] text-amber-300">
+                  Aguardando leitura da grelha Bac Bo ou registo manual abaixo.
+                </span>
+              ) : (
+                bacboRounds
+                  .slice(-16)
+                  .reverse()
+                  .map((r, idx) => (
+                    <span
+                      key={r.id}
+                      className={`inline-flex h-5 min-w-[22px] px-1 items-center justify-center rounded border font-mono text-[10px] font-bold text-white shrink-0 ${
+                        r.outcome === 'P'
+                          ? 'bg-blue-600 border-blue-400'
+                          : r.outcome === 'B'
+                          ? 'bg-[#B91C1C] border-red-400'
+                          : 'bg-amber-600 border-amber-400'
+                      } ${idx === 0 ? 'ring-1 ring-white/80' : ''}`}
+                    >
+                      {r.outcome}
+                    </span>
+                  ))
+              )}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleAddBacBoRound({ outcome: 'P', source: 'manual' })}
+                className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
+              >
+                +P
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAddBacBoRound({ outcome: 'T', source: 'manual' })}
+                className="rounded bg-amber-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
+              >
+                +T
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAddBacBoRound({ outcome: 'B', source: 'manual' })}
+                className="rounded bg-[#B91C1C] px-1.5 py-0.5 text-[10px] font-bold text-white"
+              >
+                +B
+              </button>
+            </div>
+          </div>
+
+          {/* Painel ao Vivo Bac Bo */}
+          <div className="rounded-md border border-slate-800 bg-[#131924] p-2 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[9px] uppercase tracking-wider text-slate-400">
+                  Sugestão Atual · {bacboAnalysis.strategies.agreeingCount} de{' '}
+                  {bacboAnalysis.strategies.totalStrategies} estratégias
+                </div>
+                <div
+                  className={`text-sm font-bold ${
+                    bbSuggestion === 'P'
+                      ? 'text-blue-400'
+                      : bbSuggestion === 'B'
+                      ? 'text-red-400'
+                      : bbSuggestion === 'T'
+                      ? 'text-amber-300'
+                      : 'text-slate-200'
+                  }`}
+                >
+                  {bbSuggestion === 'NONE'
+                    ? 'SEM SUGESTÃO'
+                    : `APOSTAR: ${formatOutcomeLabel(bbSuggestion).toUpperCase()}`}
+                </div>
+              </div>
+              <div className="text-right font-mono text-[10px] tabular-nums">
+                <div className="text-emerald-400 font-semibold">
+                  Acerto Geral: {bacboAnalysis.statistics.overall.hitRatePct.toFixed(1)}% (
+                  {bacboAnalysis.statistics.overall.hits}/{bacboAnalysis.statistics.overall.suggestions})
+                </div>
+                <div className="text-amber-300 text-[9px]">
+                  {getBacBoRoundCycleStatus(lastBacBoLiveResultAt, bacboCycleNowMs).label} ·{' '}
+                  {bacboAnalysis.probabilities.statisticalConfidence}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1 font-mono text-[10px] tabular-nums">
+              <div className="rounded border border-blue-500/30 bg-blue-500/10 px-1.5 py-1">
+                <div className="text-[9px] text-blue-300">PLAYER</div>
+                <div className="font-bold text-blue-200">
+                  {bbProbs.modelEstimate.player.toFixed(1)}%
+                </div>
+              </div>
+              <div className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-1">
+                <div className="text-[9px] text-amber-300">TIE</div>
+                <div className="font-bold text-amber-200">
+                  {bbProbs.modelEstimate.tie.toFixed(1)}%
+                </div>
+              </div>
+              <div className="rounded border border-red-500/30 bg-red-500/10 px-1.5 py-1">
+                <div className="text-[9px] text-red-300">BANKER</div>
+                <div className="font-bold text-red-200">
+                  {bbProbs.modelEstimate.banker.toFixed(1)}%
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-300">
+              <div className="rounded border border-slate-800 bg-[#0B0F17] px-1.5 py-1 truncate">
+                Corrida: {bacboAnalysis.currentSnapshot.streakLabel}
+              </div>
+              <div className="rounded border border-slate-800 bg-[#0B0F17] px-1.5 py-1 truncate">
+                Sem Tie: {bacboAnalysis.ties.roundsSinceLastTie} rod.
+              </div>
+            </div>
+
+            {bacboAnalysis.strategies.reasons.length > 0 && (
+              <div className="text-[9px] text-slate-400 leading-snug space-y-0.5">
+                {bacboAnalysis.strategies.reasons.slice(0, 2).map((reason, idx) => (
+                  <div key={idx} className="truncate">
+                    • {reason}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-md border border-slate-800/80 bg-[#090D14] px-2 py-1 font-mono text-[9px] leading-snug text-slate-400 tabular-nums">
+            Última leitura: {bacboScanDebug.lastReadTime} · {bacboScanDebug.lastOutcomeLabel} ·{' '}
+            {bacboScanDebug.lastReadMs !== null ? `${bacboScanDebug.lastReadMs}ms` : '--'} ·{' '}
+            Rodadas: {bacboRounds.length}
+          </div>
+        </div>
+      );
+    }
+
     const hasTableData = combinedSpins.length > 0;
     const compactOptions = [
       {
@@ -445,14 +869,25 @@ export default function App() {
       },
     ];
 
-    const splitLabel =
-      splitPresetIdx === 0 ? 'Tela 56%' : splitPresetIdx === 1 ? 'Tela 45%' : 'Tela 66%';
-
     return (
       <div className="h-screen overflow-y-auto bg-[#0B0F17] text-slate-100 p-2 space-y-1.5">
-        {/* Cabeçalho compacto com controles + resumo virgem ou ao vivo */}
+        {/* Cabeçalho compacto com controles + seletor [ROLETA] [BAC BO] */}
         <div className="flex flex-wrap items-center justify-between gap-1 border-b border-slate-800 pb-1.5">
           <div className="flex items-center gap-1.5 min-w-0">
+            <button
+              type="button"
+              onClick={() => setGameMode('roulette')}
+              className="rounded border border-amber-400/60 bg-amber-400/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-300 shrink-0"
+            >
+              ROLETA
+            </button>
+            <button
+              type="button"
+              onClick={() => setGameMode('bacbo')}
+              className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[9px] font-bold text-slate-400 shrink-0"
+            >
+              BAC BO
+            </button>
             {accuracy.lastRound ? (
               <>
                 <span
@@ -690,75 +1125,122 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#0B0F17] text-slate-100 flex flex-col">
-      {/* Top Bar Contract: exatamente 3 zonas separadas por gap-8 */}
+      {/* Top Bar: Abas principais [ ROLETA ] [ BAC BO ] + navegação + Abrir Navegador */}
       <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-[#0B0F17]/95 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-8 px-4 sm:px-6 h-16">
-          <a
-            href="#top"
-            onClick={(e) => {
-              e.preventDefault();
-              setActiveTab('analyzer');
-            }}
-            className="font-display text-lg font-bold tracking-tight text-slate-100 whitespace-nowrap shrink-0"
-          >
-            RoletaVision
-          </a>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 sm:gap-8 px-4 sm:px-6 h-16">
+          <div className="flex items-center gap-3 sm:gap-5 min-w-0">
+            <a
+              href="#top"
+              onClick={(e) => {
+                e.preventDefault();
+                setActiveTab('analyzer');
+              }}
+              className="font-display text-lg font-bold tracking-tight text-slate-100 whitespace-nowrap shrink-0"
+            >
+              RoletaVision
+            </a>
 
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
-            {[
-              { id: 'analyzer', label: 'Analisador' },
-              { id: 'scanner', label: 'Leitor de Tela' },
-              { id: 'board', label: 'Mesa e Roda' },
-              { id: 'android', label: 'App Android' },
-            ].map((item) => (
+            {/* Duas Abas Principais no Topo: [ ROLETA ] [ BAC BO ] */}
+            <div
+              role="tablist"
+              aria-label="Selecionar jogo principal"
+              className="inline-flex items-center rounded-lg border border-slate-800 bg-[#131924] p-0.5 shrink-0"
+            >
               <button
-                key={item.id}
                 type="button"
-                onClick={() => setActiveTab(item.id as ActiveTab)}
-                className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer border-b-2 ${
-                  activeTab === item.id
-                    ? 'border-amber-400 text-slate-100'
-                    : 'border-transparent text-slate-400 hover:text-slate-200'
+                role="tab"
+                aria-selected={gameMode === 'roulette'}
+                onClick={() => setGameMode('roulette')}
+                className={`rounded-md px-3 py-1.5 text-xs font-bold tracking-wide transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  gameMode === 'roulette'
+                    ? 'bg-amber-400 text-slate-950'
+                    : 'text-slate-400 hover:text-slate-100'
                 }`}
               >
-                {item.label}
+                ROLETA
               </button>
-            ))}
-          </nav>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={gameMode === 'bacbo'}
+                onClick={() => setGameMode('bacbo')}
+                className={`rounded-md px-3 py-1.5 text-xs font-bold tracking-wide transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  gameMode === 'bacbo'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-400 hover:text-slate-100'
+                }`}
+              >
+                BAC BO
+              </button>
+            </div>
+          </div>
+
+          {gameMode === 'roulette' ? (
+            <nav className="hidden lg:flex items-center gap-6 text-sm font-medium">
+              {[
+                { id: 'analyzer', label: 'Analisador' },
+                { id: 'scanner', label: 'Leitor de Tela' },
+                { id: 'board', label: 'Mesa e Roda' },
+                { id: 'android', label: 'App Android' },
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveTab(item.id as ActiveTab)}
+                  className={`py-1 transition-colors whitespace-nowrap shrink-0 cursor-pointer border-b-2 ${
+                    activeTab === item.id
+                      ? 'border-amber-400 text-slate-100'
+                      : 'border-transparent text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          ) : (
+            <div className="hidden lg:flex items-center gap-3 text-xs text-slate-400 font-mono tabular-nums">
+              <span className="text-blue-400 font-semibold">BAC BO INTELLIGENCE ENGINE</span>
+              <span aria-hidden="true">·</span>
+              <span>{bacboRounds.length} rodadas guardadas</span>
+            </div>
+          )}
 
           <div className="shrink-0">
             <button
               type="button"
               onClick={handleOpenIntegratedBrowser}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 sm:px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
               <Globe className="h-3.5 w-3.5" />
-              <span>Abrir Navegador</span>
+              <span className="hidden sm:inline">Abrir Navegador</span>
+              <span className="sm:hidden">Navegador</span>
             </button>
           </div>
         </div>
 
-        <div className="flex md:hidden border-t border-slate-800/80 px-2 overflow-x-auto">
-          {[
-            { id: 'analyzer', label: 'Analisador' },
-            { id: 'scanner', label: 'Leitor' },
-            { id: 'board', label: 'Mesa' },
-            { id: 'android', label: 'APK' },
-          ].map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setActiveTab(item.id as ActiveTab)}
-              className={`flex-1 py-2.5 px-3 text-xs font-medium whitespace-nowrap shrink-0 border-b-2 ${
-                activeTab === item.id
-                  ? 'border-amber-400 text-slate-100'
-                  : 'border-transparent text-slate-400'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        {gameMode === 'roulette' && (
+          <div className="flex lg:hidden border-t border-slate-800/80 px-2 overflow-x-auto">
+            {[
+              { id: 'analyzer', label: 'Analisador' },
+              { id: 'scanner', label: 'Leitor' },
+              { id: 'board', label: 'Mesa' },
+              { id: 'android', label: 'APK' },
+            ].map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveTab(item.id as ActiveTab)}
+                className={`flex-1 py-2.5 px-3 text-xs font-medium whitespace-nowrap shrink-0 border-b-2 ${
+                  activeTab === item.id
+                    ? 'border-amber-400 text-slate-100'
+                    : 'border-transparent text-slate-400'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 sm:px-6 py-6 space-y-6">
@@ -784,7 +1266,9 @@ export default function App() {
               </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 {isAndroidApk
-                  ? 'Abra a Kwanzabet dentro do app em tela dividida para ler os resultados em tempo real.'
+                  ? gameMode === 'bacbo'
+                    ? 'Abra o Bac Bo na Kwanzabet em tela dividida para o OCR ler Player, Banker, Tie e a grelha em tempo real.'
+                    : 'Abra a Kwanzabet dentro do app em tela dividida para ler os resultados em tempo real.'
                   : 'No APK Android, o botão abaixo abre a Kwanzabet na parte superior enquanto as sugestões ficam fixas embaixo.'}
               </p>
             </div>
@@ -793,7 +1277,7 @@ export default function App() {
                 type="url"
                 value={browserUrlInput}
                 onChange={(e) => setBrowserUrlInput(e.target.value)}
-                aria-label="Endereço do site da roleta"
+                aria-label="Endereço do site do jogo"
                 className="w-full sm:w-64 rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-2 font-mono text-xs text-slate-200 focus:border-emerald-500 focus:outline-none"
               />
               <button
@@ -808,7 +1292,22 @@ export default function App() {
           </div>
         </section>
 
-        {/* Faixa de Histórico Sincronizada + Backup de Aprendizagem */}
+        {gameMode === 'bacbo' ? (
+          <BacBoDashboard
+            rounds={bacboRounds}
+            analysis={bacboAnalysis}
+            roiTopPct={66}
+            roiHeightPct={15}
+            lastLiveResultAt={lastBacBoLiveResultAt}
+            cycleNowMs={bacboCycleNowMs}
+            scanDebug={bacboScanDebug}
+            onAddRound={handleAddBacBoRound}
+            onImportRounds={handleImportBacBoRounds}
+            onResetAll={handleResetAllBacBo}
+          />
+        ) : (
+          <>
+            {/* Faixa de Histórico Sincronizada + Backup de Aprendizagem */}
         <section className="rounded-xl border border-slate-800 bg-[#131924] p-4 sm:p-5">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="space-y-1">
@@ -1488,6 +1987,8 @@ export default function App() {
             Giros lidos: {sessionSpins.length} / {Math.max(5, sessionSpins.length)}
           </div>
         </footer>
+          </>
+        )}
       </main>
     </div>
   );
