@@ -329,8 +329,8 @@ public class MainActivity extends BridgeActivity {
         btnDone.setOnClickListener(v -> {
             if ("bacbo".equals(activeGameMode)) {
                 prefs.edit()
-                        .putFloat("bacbo_roi_top", roiTopRatio)
-                        .putFloat("bacbo_roi_height", roiHeightRatio)
+                        .putFloat("bacbo_blocks_roi_top", roiTopRatio)
+                        .putFloat("bacbo_blocks_roi_height", roiHeightRatio)
                         .apply();
             } else {
                 prefs.edit()
@@ -490,18 +490,18 @@ public class MainActivity extends BridgeActivity {
 
         if (prefs != null) {
             if ("bacbo".equals(nextMode)) {
-                roiTopRatio = prefs.getFloat("bacbo_roi_top", 0.66f);
-                roiHeightRatio = prefs.getFloat("bacbo_roi_height", 0.15f);
+                roiTopRatio = prefs.getFloat("bacbo_blocks_roi_top", 0.40f);
+                roiHeightRatio = prefs.getFloat("bacbo_blocks_roi_height", 0.36f);
                 if (seekRoiTop != null) {
                     seekRoiTop.setMax(85);
                     seekRoiTop.setProgress((int) (roiTopRatio * 100));
                 }
                 if (seekRoiHeight != null) {
-                    seekRoiHeight.setMax(28);
+                    seekRoiHeight.setMax(45);
                     seekRoiHeight.setProgress((int) (roiHeightRatio * 100));
                 }
                 if (tvCalibTitle != null) {
-                    tvCalibTitle.setText("Alinhar caixa verde sobre a grelha do Bac Bo");
+                    tvCalibTitle.setText("Alinhar caixa verde sobre os 3 blocos (JOGADOR | EMPATE | BANCA)");
                 }
             } else {
                 roiTopRatio = prefs.getFloat("roi_top", 0.04f);
@@ -835,8 +835,18 @@ public class MainActivity extends BridgeActivity {
         unrelatedStripCount = 0;
     }
 
-    // ==================== BAC BO RECONCILIATION ====================
+    // ==================== BAC BO RECONCILIATION (3 BLOCOS + BEAD PLATE) ====================
 
+    // Estado para leitura direta nos 3 blocos (JOGADOR | EMPATE | BANCA) em Split-Screen
+    private boolean blockRoundLocked = false;
+    private int lockedPlayerTotal = -1;
+    private int lockedBankerTotal = -1;
+    private int pendingBlockP = -1;
+    private int pendingBlockB = -1;
+    private int pendingBlockStableCount = 0;
+    private int emptyBlockFrames = 0;
+
+    // Estado para leitura de Bead Plate quando visível
     private final List<ScreenScanner.BacBoCell> confirmedBacBo = new ArrayList<>();
     private List<ScreenScanner.BacBoCell> pendingBacBoNew = null;
     private List<ScreenScanner.BacBoCell> pendingBacBoFull = null;
@@ -851,52 +861,117 @@ public class MainActivity extends BridgeActivity {
             boolean showCalibrationFeedback,
             long scanStartMs
     ) {
-        scanner.scanBacBoStrip(bitmap, roiTopRatio, roiHeightRatio, (cellsNewestFirst, ocrOk) -> {
+        scanner.scanBacBoFrame(bitmap, roiTopRatio, roiHeightRatio, (pTotal, bTotal, blocksVisible, plateCells, ocrOk) -> {
+            bitmap.recycle();
+            isScanningFrame = false;
+
             long elapsedMs = Math.max(1L, System.currentTimeMillis() - scanStartMs);
             totalReadTicks++;
-            boolean hasCells = ocrOk && cellsNewestFirst != null && !cellsNewestFirst.isEmpty();
-            if (hasCells) {
+
+            boolean hasScore = pTotal >= 2 && bTotal >= 2;
+            int stripSize = plateCells != null ? plateCells.size() : 0;
+            boolean hasSignal = ocrOk && (hasScore || blocksVisible || stripSize >= 6);
+            if (hasSignal) {
                 consecutiveFailures = 0;
             } else {
                 consecutiveFailures++;
             }
 
-            int headTotal = hasCells ? cellsNewestFirst.get(0).total : -1;
-            int stripSize = cellsNewestFirst != null ? cellsNewestFirst.size() : 0;
+            int headTotal = hasScore
+                    ? Math.max(pTotal, bTotal)
+                    : (stripSize > 0 ? plateCells.get(0).total : -1);
+
             BrowserScannerPlugin.emitScanTelemetry(
                     headTotal,
                     elapsedMs,
-                    hasCells,
+                    hasSignal,
                     consecutiveFailures,
-                    stripSize,
+                    hasScore ? 2 : stripSize,
                     totalReadTicks
             );
 
             if (showCalibrationFeedback) {
-                BrowserScannerPlugin.emitScanFeedback(stripSize, "bacbo-ocr");
+                BrowserScannerPlugin.emitScanFeedback(hasScore ? 2 : (blocksVisible ? 1 : stripSize), "bacbo-ocr");
             }
 
             if (showCalibrationFeedback && tvCalibStatus != null) {
-                if (!hasCells) {
-                    tvCalibStatus.setText("Bac Bo: Nenhum resultado lido. Ajuste a Mira sobre a grelha.");
+                if (hasScore) {
+                    String winner = pTotal > bTotal ? "JOGADOR" : (bTotal > pTotal ? "BANCA" : "EMPATE");
+                    tvCalibStatus.setText("3 Blocos: JOGADOR " + pTotal + " x " + bTotal + " BANCA (" + winner + ")");
+                } else if (blocksVisible) {
+                    tvCalibStatus.setText("3 Blocos visiveis! Aguardando dados pararem...");
+                } else if (stripSize >= 6) {
+                    tvCalibStatus.setText("Grelha Bac Bo: " + stripSize + " resultados lidos.");
                 } else {
-                    StringBuilder sb = new StringBuilder("Bac Bo lidos (" + stripSize + "): ");
-                    for (int i = 0; i < Math.min(8, cellsNewestFirst.size()); i++) {
-                        if (i > 0) sb.append(", ");
-                        ScreenScanner.BacBoCell c = cellsNewestFirst.get(i);
-                        sb.append(c.outcome).append(c.total > 0 ? c.total : "");
-                    }
-                    tvCalibStatus.setText(sb.toString());
+                    tvCalibStatus.setText("Bac Bo: Ajuste a Mira verde sobre os 3 blocos (JOGADOR | EMPATE | BANCA).");
                 }
             }
 
-            if (stripSize >= 3) {
-                reconcileBacBoPlate(cellsNewestFirst, bitmap);
-            } else {
-                bitmap.recycle();
-                isScanningFrame = false;
+            if (hasScore || blocksVisible) {
+                reconcileBacBoBlocks(pTotal, bTotal);
+            } else if (stripSize >= 6) {
+                reconcileBacBoPlate(plateCells);
             }
         });
+    }
+
+    private void reconcileBacBoBlocks(int pTotal, int bTotal) {
+        long nowMs = System.currentTimeMillis();
+
+        if (pTotal >= 2 && bTotal >= 2) {
+            emptyBlockFrames = 0;
+
+            if (blockRoundLocked) {
+                boolean sameResult = (pTotal == lockedPlayerTotal && bTotal == lockedBankerTotal);
+                boolean withinMinCycle = (nowMs - lastLiveBacBoEmitMs) < 12000L;
+                if (sameResult || withinMinCycle) {
+                    return;
+                }
+                // Passaram >= 12s e ambos os placares mudaram diretamente -> desbloqueia
+                blockRoundLocked = false;
+            }
+
+            if (pTotal == pendingBlockP && bTotal == pendingBlockB) {
+                pendingBlockStableCount++;
+            } else {
+                pendingBlockP = pTotal;
+                pendingBlockB = bTotal;
+                pendingBlockStableCount = 1;
+            }
+
+            // 3 leituras idênticas (1.5s) garantem que os 4 dados já pararam totalmente
+            if (pendingBlockStableCount >= 3) {
+                String outcome = pTotal > bTotal ? "P" : (bTotal > pTotal ? "B" : "T");
+                int winTotal = Math.max(pTotal, bTotal);
+
+                ScreenScanner.BacBoCell cell = new ScreenScanner.BacBoCell(outcome, winTotal, 0, 0, 0);
+                cell.playerTotal = pTotal;
+                cell.bankerTotal = bTotal;
+
+                blockRoundLocked = true;
+                lockedPlayerTotal = pTotal;
+                lockedBankerTotal = bTotal;
+                pendingBlockP = -1;
+                pendingBlockB = -1;
+                pendingBlockStableCount = 0;
+                lastLiveBacBoEmitMs = nowMs;
+
+                if (browserPanel != null) {
+                    browserPanel.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                }
+                BrowserScannerPlugin.emitBacBo(Collections.singletonList(cell), false);
+            }
+            return;
+        }
+
+        // Cartões ficaram vazios (dados a girar / nova rodada)
+        pendingBlockP = -1;
+        pendingBlockB = -1;
+        pendingBlockStableCount = 0;
+        emptyBlockFrames++;
+        if (emptyBlockFrames >= 2) {
+            blockRoundLocked = false;
+        }
     }
 
     private boolean bacBoCellsEqual(List<ScreenScanner.BacBoCell> a, List<ScreenScanner.BacBoCell> b) {
@@ -907,10 +982,6 @@ public class MainActivity extends BridgeActivity {
         return true;
     }
 
-    /**
-     * Verifica quantos elementos de source[srcStart..] aparecem em ordem dentro target[tgtStart..].
-     * Tolera eventuais falhas pontuais de 1 célula no meio do Bead Plate de 6x20.
-     */
     private int countOrderedMatches(
             List<ScreenScanner.BacBoCell> source,
             int srcStart,
@@ -935,54 +1006,10 @@ public class MainActivity extends BridgeActivity {
         return matches;
     }
 
-    private void emitBacBoWithScoreboard(
-            Bitmap fullBitmap,
-            List<ScreenScanner.BacBoCell> cellsToEmit,
-            boolean isFullPlate
-    ) {
-        if (cellsToEmit.isEmpty()) {
-            fullBitmap.recycle();
-            isScanningFrame = false;
-            return;
-        }
-        ScreenScanner.BacBoCell head = cellsToEmit.get(0);
-        scanner.scanBacBoScoreboard(fullBitmap, roiTopRatio, (pScore, bScore) -> {
-            fullBitmap.recycle();
-            isScanningFrame = false;
-
-            if (pScore >= 2 && pScore <= 12 && bScore >= 2 && bScore <= 12) {
-                String scoreOutcome = pScore > bScore ? "P" : (bScore > pScore ? "B" : "T");
-                int scoreWinTotal = Math.max(pScore, bScore);
-                if (scoreOutcome.equals(head.outcome)
-                        && (head.total < 2 || head.total == scoreWinTotal)) {
-                    head.playerTotal = pScore;
-                    head.bankerTotal = bScore;
-                }
-            }
-
-            if (!isFullPlate) {
-                lastLiveBacBoEmitMs = System.currentTimeMillis();
-                if (browserPanel != null) {
-                    browserPanel.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-                }
-            }
-            BrowserScannerPlugin.emitBacBo(cellsToEmit, isFullPlate);
-        });
-    }
-
-    private void reconcileBacBoPlate(List<ScreenScanner.BacBoCell> newCells, Bitmap fullBitmap) {
-        if (newCells == null || newCells.size() < 4) {
-            fullBitmap.recycle();
-            isScanningFrame = false;
-            return;
-        }
+    private void reconcileBacBoPlate(List<ScreenScanner.BacBoCell> newCells) {
+        if (newCells == null || newCells.size() < 6) return;
 
         if (confirmedBacBo.isEmpty()) {
-            if (newCells.size() < 5) {
-                fullBitmap.recycle();
-                isScanningFrame = false;
-                return;
-            }
             String sig = newCells.get(0).signature();
             if (sig.equals(pendingBacBoInitSig)) {
                 pendingBacBoInitCount++;
@@ -995,11 +1022,8 @@ public class MainActivity extends BridgeActivity {
                 confirmedBacBo.addAll(newCells);
                 pendingBacBoInitSig = null;
                 pendingBacBoInitCount = 0;
-                emitBacBoWithScoreboard(fullBitmap, newCells, true);
-                return;
+                BrowserScannerPlugin.emitBacBo(newCells, true);
             }
-            fullBitmap.recycle();
-            isScanningFrame = false;
             return;
         }
 
@@ -1008,12 +1032,9 @@ public class MainActivity extends BridgeActivity {
             pendingBacBoFull = null;
             pendingBacBoConfirmCount = 0;
             unrelatedBacBoCount = 0;
-            fullBitmap.recycle();
-            isScanningFrame = false;
             return;
         }
 
-        // 1. Verifica shift <= 0 (mesmo resultado mais recente ou células iniciais ocultadas no OCR)
         int bestNegShift = 999;
         int bestNegMatches = 0;
         for (int shift = 0; shift >= -3; shift--) {
@@ -1038,12 +1059,9 @@ public class MainActivity extends BridgeActivity {
                 confirmedBacBo.clear();
                 confirmedBacBo.addAll(newCells);
             }
-            fullBitmap.recycle();
-            isScanningFrame = false;
             return;
         }
 
-        // 2. Verifica shift positivo (+1..+3): entrou novo(s) resultado(s) no Bead Plate
         int bestPosShift = -1;
         int bestPosMatches = 0;
         for (int shift = 1; shift <= 3; shift++) {
@@ -1060,10 +1078,7 @@ public class MainActivity extends BridgeActivity {
 
         if (bestPosShift > 0) {
             unrelatedBacBoCount = 0;
-            // Cooldown de 8s entre rodadas ao vivo (ciclo real = ~9s pausa + 10-12s dados = ~20s)
             if (lastLiveBacBoEmitMs > 0L && (System.currentTimeMillis() - lastLiveBacBoEmitMs) < 8000L) {
-                fullBitmap.recycle();
-                isScanningFrame = false;
                 return;
             }
             List<ScreenScanner.BacBoCell> candidateNew = new ArrayList<>(newCells.subList(0, bestPosShift));
@@ -1081,20 +1096,20 @@ public class MainActivity extends BridgeActivity {
                 pendingBacBoNew = null;
                 pendingBacBoFull = null;
                 pendingBacBoConfirmCount = 0;
-                emitBacBoWithScoreboard(fullBitmap, candidateNew, false);
-                return;
+                lastLiveBacBoEmitMs = System.currentTimeMillis();
+                if (browserPanel != null) {
+                    browserPanel.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                }
+                BrowserScannerPlugin.emitBacBo(candidateNew, false);
             }
-            fullBitmap.recycle();
-            isScanningFrame = false;
             return;
         }
 
-        // 3. Troca de mesa apenas após 4 leituras seguidas sem alinhamento e 2 confirmações
         pendingBacBoNew = null;
         pendingBacBoFull = null;
         pendingBacBoConfirmCount = 0;
         unrelatedBacBoCount++;
-        if (unrelatedBacBoCount >= 4 && newCells.size() >= 5) {
+        if (unrelatedBacBoCount >= 4 && newCells.size() >= 6) {
             String sig = newCells.get(0).signature();
             if (sig.equals(pendingBacBoInitSig)) {
                 pendingBacBoInitCount++;
@@ -1108,12 +1123,9 @@ public class MainActivity extends BridgeActivity {
                 unrelatedBacBoCount = 0;
                 pendingBacBoInitSig = null;
                 pendingBacBoInitCount = 0;
-                emitBacBoWithScoreboard(fullBitmap, newCells, true);
-                return;
+                BrowserScannerPlugin.emitBacBo(newCells, true);
             }
         }
-        fullBitmap.recycle();
-        isScanningFrame = false;
     }
 
     private Button createBarButton(String label, String textColorHex, String bgColorHex) {

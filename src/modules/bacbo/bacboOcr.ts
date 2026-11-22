@@ -120,9 +120,16 @@ export function processNativeBacBoDetection(
   }
 
   const head = itemsNewestFirst[0];
-  const summary = `${head.outcome === 'P' ? 'Player' : head.outcome === 'B' ? 'Banker' : 'Tie'}${
-    head.total >= 2 && head.total <= 12 ? ` (${head.total})` : ''
-  }`;
+  const scorePart =
+    typeof head.playerTotal === 'number' &&
+    head.playerTotal >= 2 &&
+    typeof head.bankerTotal === 'number' &&
+    head.bankerTotal >= 2
+      ? ` ${head.playerTotal}×${head.bankerTotal}`
+      : head.total >= 2 && head.total <= 12
+      ? ` (${head.total})`
+      : '';
+  const summary = `${head.outcome === 'P' ? 'Player' : head.outcome === 'B' ? 'Banker' : 'Tie'}${scorePart}`;
 
   return {
     newRecords: created,

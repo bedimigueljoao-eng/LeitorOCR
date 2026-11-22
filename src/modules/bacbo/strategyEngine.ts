@@ -36,12 +36,12 @@ export const BACBO_STRATEGIES: StrategyDefinition[] = [
     id: 'streak_continuation',
     name: 'Estratégia de Corridas',
     description: 'Analisa o comportamento histórico de continuação vs quebra após corridas 2x+.',
-    activationConditions: 'Corrida atual >= 2x em Player ou Banker e amostra histórica >= 3 ocorrências.',
+    activationConditions: 'Corrida atual >= 2x em Player ou Banker.',
     evaluate: (rounds) => {
       const id = 'streak_continuation';
       const name = 'Estratégia de Corridas';
-      if (rounds.length < 6) {
-        return makeInactive(id, name, 'Mínimo 6 rodadas necessárias', 'Corrida');
+      if (rounds.length < 3) {
+        return makeInactive(id, name, 'Mínimo 3 rodadas necessárias', 'Corrida');
       }
       const streaks = analyzeStreaks(rounds);
       if (!streaks.currentSide || streaks.currentSide === 'T' || streaks.currentLength < 2) {
@@ -70,7 +70,18 @@ export const BACBO_STRATEGIES: StrategyDefinition[] = [
       }
 
       const totalSamples = continued + brokeToOpp;
-      if (totalSamples < 3) {
+      if (totalSamples < 2) {
+        if (rounds.length < 12) {
+          return {
+            strategyId: id,
+            strategyName: name,
+            active: true,
+            suggestion: side,
+            reason: `Corrida ${len}x ${side === 'P' ? 'Player' : 'Banker'} ativa (início de sessão — acompanhamento de tendência)`,
+            patternTag: 'Corrida',
+            confidenceScore: 0.56,
+          };
+        }
         return makeInactive(id, name, `Amostra insuficiente para corrida ${len}x (${totalSamples})`, 'Corrida');
       }
       if (continued > brokeToOpp) {
@@ -106,8 +117,8 @@ export const BACBO_STRATEGIES: StrategyDefinition[] = [
     evaluate: (rounds) => {
       const id = 'alternation_pingpong';
       const name = 'Estratégia de Alternância';
-      if (rounds.length < 4) {
-        return makeInactive(id, name, 'Mínimo 4 rodadas necessárias', 'Ping-Pong');
+      if (rounds.length < 3) {
+        return makeInactive(id, name, 'Mínimo 3 rodadas necessárias', 'Ping-Pong');
       }
       const tail3 = rounds.slice(-3).map((r) => r.outcome);
       if (tail3.includes('T')) {
@@ -133,35 +144,37 @@ export const BACBO_STRATEGIES: StrategyDefinition[] = [
     id: 'repetition_2_1',
     name: 'Estratégia de Repetição (2-1)',
     description: 'Identifica ciclos 2-1 (B-B-P / P-P-B) ou repetições imediatas no histórico.',
-    activationConditions: 'Formação parcial B-B-P-B-B ou P-P-B-P-P ou padrão 2-1 recorrente.',
+    activationConditions: 'Formação parcial B-B-P ou P-P-B e blocos 2-1 recorrentes.',
     evaluate: (rounds) => {
       const id = 'repetition_2_1';
       const name = 'Estratégia de Repetição';
-      if (rounds.length < 6) {
-        return makeInactive(id, name, 'Mínimo 6 rodadas necessárias', 'Padrão 2-1');
+      if (rounds.length < 3) {
+        return makeInactive(id, name, 'Mínimo 3 rodadas necessárias', 'Padrão 2-1');
       }
-      const tail5 = rounds.slice(-5).map((r) => r.outcome).join('-');
-      if (tail5 === 'B-B-P-B-B') {
-        return {
-          strategyId: id,
-          strategyName: name,
-          active: true,
-          suggestion: 'P',
-          reason: 'Ciclo 2-1 ativo (B-B-P-B-B -> fecha com Player)',
-          patternTag: 'Padrão 2-1',
-          confidenceScore: 0.66,
-        };
-      }
-      if (tail5 === 'P-P-B-P-P') {
-        return {
-          strategyId: id,
-          strategyName: name,
-          active: true,
-          suggestion: 'B',
-          reason: 'Ciclo 2-1 ativo (P-P-B-P-P -> fecha com Banker)',
-          patternTag: 'Padrão 2-1',
-          confidenceScore: 0.66,
-        };
+      if (rounds.length >= 5) {
+        const tail5 = rounds.slice(-5).map((r) => r.outcome).join('-');
+        if (tail5 === 'B-B-P-B-B') {
+          return {
+            strategyId: id,
+            strategyName: name,
+            active: true,
+            suggestion: 'P',
+            reason: 'Ciclo 2-1 ativo (B-B-P-B-B -> fecha com Player)',
+            patternTag: 'Padrão 2-1',
+            confidenceScore: 0.66,
+          };
+        }
+        if (tail5 === 'P-P-B-P-P') {
+          return {
+            strategyId: id,
+            strategyName: name,
+            active: true,
+            suggestion: 'B',
+            reason: 'Ciclo 2-1 ativo (P-P-B-P-P -> fecha com Banker)',
+            patternTag: 'Padrão 2-1',
+            confidenceScore: 0.66,
+          };
+        }
       }
       const tail3 = rounds.slice(-3).map((r) => r.outcome).join('-');
       if (tail3 === 'B-B-P') {
@@ -197,8 +210,8 @@ export const BACBO_STRATEGIES: StrategyDefinition[] = [
     evaluate: (rounds) => {
       const id = 'blocks_ngram';
       const name = 'Estratégia de Blocos';
-      if (rounds.length < 12) {
-        return makeInactive(id, name, 'Mínimo 12 rodadas para validar blocos históricos', 'Blocos');
+      if (rounds.length < 10) {
+        return makeInactive(id, name, 'Mínimo 10 rodadas para validar blocos históricos', 'Blocos');
       }
       const seq = rounds.map((r) => r.outcome);
       for (const len of [4, 3, 2]) {
@@ -241,12 +254,12 @@ export const BACBO_STRATEGIES: StrategyDefinition[] = [
     id: 'markov_transition',
     name: 'Estratégia de Transição',
     description: 'Calcula a matriz empírica de transição de ordem 1 e ordem 2 para o próximo estado.',
-    activationConditions: 'Diferença de probabilidade condicional >= 12 p.p. entre P e B com n >= 10.',
+    activationConditions: 'Diferença de probabilidade condicional >= 14 p.p. entre P e B após último resultado.',
     evaluate: (rounds) => {
       const id = 'markov_transition';
       const name = 'Estratégia de Transição';
-      if (rounds.length < 12) {
-        return makeInactive(id, name, 'Mínimo 12 rodadas para matriz de transição', 'Alternância');
+      if (rounds.length < 6) {
+        return makeInactive(id, name, 'Mínimo 6 rodadas para matriz de transição', 'Alternância');
       }
       const last = rounds[rounds.length - 1].outcome;
       const counts: Record<BacBoOutcome, number> = { P: 0, B: 0, T: 0 };
@@ -256,7 +269,7 @@ export const BACBO_STRATEGIES: StrategyDefinition[] = [
         }
       }
       const pbTotal = counts.P + counts.B;
-      if (pbTotal < 8) {
+      if (pbTotal < 3) {
         return makeInactive(id, name, 'Amostra de transição insuficiente', 'Alternância');
       }
       const pShare = counts.P / pbTotal;
@@ -311,15 +324,15 @@ export const BACBO_STRATEGIES: StrategyDefinition[] = [
     id: 'totals_momentum',
     name: 'Estratégia de Análise de Totais',
     description: 'Avalia desvios recentes dos totais Player vs Banker quando os valores dos dados estão disponíveis.',
-    activationConditions: 'Pelo menos 8 rodadas recentes com totais válidos (2..12) registados.',
+    activationConditions: 'Pelo menos 3 rodadas recentes com totais válidos (2..12) registados.',
     evaluate: (rounds) => {
       const id = 'totals_momentum';
       const name = 'Estratégia de Análise de Totais';
       const withTotals = rounds.filter(
         (r) => r.playerTotal !== null && r.bankerTotal !== null
       );
-      if (withTotals.length < 8) {
-        return makeInactive(id, name, 'Dados insuficientes de totais P/B (mínimo 8 rodadas)', 'Padrões de Totais');
+      if (withTotals.length < 3) {
+        return makeInactive(id, name, 'Dados insuficientes de totais P/B (mínimo 3 rodadas)', 'Padrões de Totais');
       }
       const recent = withTotals.slice(-8);
       let sumP = 0;
@@ -330,7 +343,7 @@ export const BACBO_STRATEGIES: StrategyDefinition[] = [
       }
       const avgP = sumP / recent.length;
       const avgB = sumB / recent.length;
-      if (Math.abs(avgP - avgB) < 0.85) {
+      if (Math.abs(avgP - avgB) < 0.7) {
         return makeInactive(id, name, `Médias de totais equilibradas (P:${avgP.toFixed(1)} vs B:${avgB.toFixed(1)})`, 'Padrões de Totais');
       }
       const pick: BacBoOutcome = avgP > avgB ? 'P' : 'B';
@@ -382,8 +395,8 @@ export const BACBO_STRATEGIES: StrategyDefinition[] = [
     evaluate: (rounds) => {
       const id = 'combined_consensus';
       const name = 'Estratégia Combinada';
-      if (rounds.length < 8) {
-        return makeInactive(id, name, 'Aguardando mínimo de 8 rodadas para consenso', 'Combinada');
+      if (rounds.length < 3) {
+        return makeInactive(id, name, 'Aguardando mínimo de 3 rodadas para consenso', 'Combinada');
       }
       const baseSignals = BACBO_STRATEGIES.slice(0, 8).map((s) => s.evaluate(rounds));
       const votes: Record<BacBoOutcome, { count: number; score: number }> = {
@@ -429,11 +442,11 @@ export function evaluateCurrentConsensus(rounds: BacBoRoundRecord[]): {
 } {
   const signals = BACBO_STRATEGIES.map((s) => s.evaluate(rounds));
 
-  if (rounds.length < 8) {
+  if (rounds.length < 3) {
     return {
       signals,
       finalSuggestion: 'NONE',
-      reasons: [`Amostra insuficiente (${rounds.length}/8 rodadas mínimas).`],
+      reasons: [`Amostra inicial (${rounds.length}/3 rodadas mínimas para leitura).`],
       activeCount: 0,
       agreeingCount: 0,
       agreeingNames: [],
@@ -442,18 +455,6 @@ export function evaluateCurrentConsensus(rounds: BacBoRoundRecord[]): {
   }
 
   const activeSignals = signals.filter((s) => s.active && s.suggestion !== 'NONE');
-  if (activeSignals.length < 2) {
-    return {
-      signals,
-      finalSuggestion: 'NONE',
-      reasons: ['Nenhuma convergência forte entre estratégias neste momento.'],
-      activeCount: activeSignals.length,
-      agreeingCount: activeSignals.length,
-      agreeingNames: activeSignals.map((s) => s.strategyName),
-      statusLabel: 'DADOS INSUFICIENTES',
-    };
-  }
-
   const votes: Record<BacBoOutcome, StrategySignal[]> = { P: [], B: [], T: [] };
   for (const sig of activeSignals) {
     if (sig.suggestion !== 'NONE') {
@@ -461,13 +462,55 @@ export function evaluateCurrentConsensus(rounds: BacBoRoundRecord[]): {
     }
   }
 
+  const voteScore = (list: StrategySignal[]) =>
+    list.reduce((acc, s) => acc + s.confidenceScore, 0);
+
   const ranked: BacBoOutcome[] = (['P', 'B', 'T'] as BacBoOutcome[]).sort(
-    (a, b) => votes[b].length - votes[a].length
+    (a, b) =>
+      votes[b].length - votes[a].length ||
+      voteScore(votes[b]) - voteScore(votes[a])
   );
   const top = ranked[0];
   const second = ranked[1];
+  const earlyLabel: StrategyEngineReport['statusLabel'] =
+    rounds.length < 8 ? 'DADOS INSUFICIENTES' : 'PADRÃO IDENTIFICADO';
 
-  if (votes[top].length < 2 || votes[top].length === votes[second].length) {
+  // Caso 1: Maioria clara entre estratégias ativas (1+ vs 0 ou N vs M)
+  if (votes[top].length >= 1 && votes[top].length > votes[second].length) {
+    const winners = votes[top];
+    return {
+      signals,
+      finalSuggestion: top,
+      reasons: winners.slice(0, 4).map((w) => w.reason),
+      activeCount: activeSignals.length,
+      agreeingCount: winners.length,
+      agreeingNames: winners.map((w) => w.strategyName),
+      statusLabel: earlyLabel,
+    };
+  }
+
+  // Caso 2: Empate entre 1 vs 1 estratégia -> desempatar por força de confiança ou tendência recente
+  if (votes[top].length === 1 && votes[second].length === 1) {
+    const diffScore = voteScore(votes[top]) - voteScore(votes[second]);
+    if (diffScore >= 0.06) {
+      const winners = votes[top];
+      return {
+        signals,
+        finalSuggestion: top,
+        reasons: [
+          ...winners.map((w) => w.reason),
+          `Desempate técnico a favor de ${top === 'P' ? 'Player' : top === 'B' ? 'Banker' : 'Tie'} (${votes[top].length} vs ${votes[second].length})`,
+        ],
+        activeCount: activeSignals.length,
+        agreeingCount: winners.length,
+        agreeingNames: winners.map((w) => w.strategyName),
+        statusLabel: earlyLabel,
+      };
+    }
+  }
+
+  // Caso 3: Contradição forte real (2+ vs 2+)
+  if (votes[top].length >= 2 && votes[top].length === votes[second].length) {
     return {
       signals,
       finalSuggestion: 'NONE',
@@ -481,15 +524,41 @@ export function evaluateCurrentConsensus(rounds: BacBoRoundRecord[]): {
     };
   }
 
-  const winners = votes[top];
+  // Caso 4: Nenhuma estratégia especializada disparou -> usa leitura empírica real da janela recente
+  const recent = rounds.slice(-12);
+  const pCount = recent.filter((r) => r.outcome === 'P').length;
+  const bCount = recent.filter((r) => r.outcome === 'B').length;
+  const pbSum = pCount + bCount;
+  const minEdge = pbSum <= 5 ? 1 : 2;
+
+  if (Math.abs(pCount - bCount) >= minEdge) {
+    const pick: BacBoOutcome = pCount > bCount ? 'P' : 'B';
+    return {
+      signals,
+      finalSuggestion: pick,
+      reasons: [
+        `Tendência recente: ${pick === 'P' ? 'Player' : 'Banker'} liderou ${Math.max(pCount, bCount)} de ${pbSum} decisões P/B`,
+      ],
+      activeCount: activeSignals.length,
+      agreeingCount: Math.max(1, votes[pick].length),
+      agreeingNames:
+        votes[pick].length > 0
+          ? votes[pick].map((w) => w.strategyName)
+          : ['Tendência Empírica Recente'],
+      statusLabel: earlyLabel,
+    };
+  }
+
   return {
     signals,
-    finalSuggestion: top,
-    reasons: winners.slice(0, 4).map((w) => w.reason),
+    finalSuggestion: 'NONE',
+    reasons: [
+      `Equilíbrio entre Player (${pCount}) e Banker (${bCount}) nas últimas ${recent.length} rodadas.`,
+    ],
     activeCount: activeSignals.length,
-    agreeingCount: winners.length,
-    agreeingNames: winners.map((w) => w.strategyName),
-    statusLabel: 'PADRÃO IDENTIFICADO',
+    agreeingCount: 0,
+    agreeingNames: [],
+    statusLabel: activeSignals.length >= 2 ? 'SINAIS CONTRADITÓRIOS' : 'DADOS INSUFICIENTES',
   };
 }
 
@@ -514,7 +583,7 @@ export function runStrategyEngine(rounds: BacBoRoundRecord[]): StrategyEngineRep
   }
 
   // Avaliação rigorosa walk-forward: na rodada i, usa apenas [0..i-1] para prever i
-  for (let i = 4; i < rounds.length; i++) {
+  for (let i = 3; i < rounds.length; i++) {
     const prefix = rounds.slice(0, i);
     const actual = rounds[i].outcome;
     const seqKey = prefix

@@ -24,6 +24,7 @@ import { BacBoDashboard } from './components/BacBoDashboard';
 import { BrowserScanner, isNativeAndroidApp } from './plugins/browserScanner';
 import {
   analyzeBacBoEngine,
+  BEAD_PLATE_ROWS,
   clearAllRounds,
   formatOutcomeLabel,
   getBacBoRoundCycleStatus,
@@ -32,6 +33,7 @@ import {
   processNativeBacBoDetection,
   saveRounds,
   validateAndBuildBacBoRound,
+  BacBoBeadCell,
   BacBoEngineAnalysis,
   BacBoOutcome,
   BacBoRoundRecord,
@@ -354,7 +356,7 @@ export default function App() {
         } else {
           setScanStatusHint(
             gameModeRef.current === 'bacbo'
-              ? 'Nenhum resultado Bac Bo detetado. Alinhe a Mira sobre a grelha Bead Plate.'
+              ? 'Nenhum resultado Bac Bo detetado. Alinhe a Mira sobre os 3 blocos (JOGADOR | EMPATE | BANCA).'
               : 'Nenhum número detetado. Abra a roleta e toque em Mira se precisar alinhar.'
           );
         }
@@ -519,12 +521,16 @@ export default function App() {
     setLastBacBoLiveResultAt(ts);
     setBacboCycleNowMs(ts);
     const nowStr = new Date().toLocaleTimeString('pt-PT', { hour12: false });
+    const scoreTxt =
+      res.record.playerTotal !== null && res.record.bankerTotal !== null
+        ? ` ${res.record.playerTotal}×${res.record.bankerTotal}`
+        : res.record.winningTotal !== null
+        ? ` (${res.record.winningTotal})`
+        : '';
     setBacboScanDebug((prev) => ({
       ...prev,
       lastReadTime: nowStr,
-      lastOutcomeLabel: `${formatOutcomeLabel(res.record!.outcome)}${
-        res.record!.winningTotal !== null ? ` (${res.record!.winningTotal})` : ''
-      }`,
+      lastOutcomeLabel: `${formatOutcomeLabel(res.record!.outcome)}${scoreTxt}`,
       lastReadMs: 0,
       consecutiveFailures: 0,
     }));
@@ -591,6 +597,26 @@ export default function App() {
           ? bbLastEval.suggestion === bbLastRound.outcome
           : null;
 
+      const bbRoundMap = new Map<string, BacBoRoundRecord>();
+      for (const r of bacboRounds) {
+        bbRoundMap.set(r.id, r);
+      }
+      const recentCells = bacboAnalysis.beadPlate.slice(-60);
+      const offsetCol = recentCells.length > 0 ? recentCells[0].col : 0;
+      const bbCols: BacBoBeadCell[][] = [];
+      for (const cell of recentCells) {
+        const cIdx = cell.col - offsetCol;
+        if (!bbCols[cIdx]) bbCols[cIdx] = [];
+        bbCols[cIdx][cell.row] = cell;
+      }
+      const evaluatedRecent = bacboRounds
+        .filter((r) => r.predictionBefore && r.predictionBefore.suggestion !== 'NONE')
+        .slice(-3)
+        .reverse();
+
+      const colorNamePt = (o: BacBoOutcome) =>
+        o === 'P' ? 'Azul' : o === 'B' ? 'Verm.' : 'Emp.';
+
       return (
         <div className="h-screen overflow-y-auto bg-[#0B0F17] text-slate-100 p-2 space-y-1.5">
           {/* Cabeçalho compacto Split-Screen com seletor [ROLETA] [BAC BO] */}
@@ -620,7 +646,7 @@ export default function App() {
                       : 'bg-amber-600 border-amber-400'
                   }`}
                 >
-                  {bbLastRound.outcome}
+                  {bbLastRound.winningTotal ?? bbLastRound.outcome}
                 </span>
               )}
               {bbLastHit !== null && (
@@ -631,7 +657,7 @@ export default function App() {
                       : 'bg-red-500/20 text-red-400'
                   }`}
                 >
-                  {bbLastHit ? 'OK' : 'X'}
+                  {bbLastHit ? 'OK' : 'ERRO'}
                 </span>
               )}
             </div>
@@ -671,58 +697,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Sequência rápida recente */}
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1 overflow-x-auto pb-0.5 flex-1">
-              {bacboRounds.length === 0 ? (
-                <span className="text-[10px] text-amber-300">
-                  Aguardando leitura da grelha Bac Bo ou registo manual abaixo.
-                </span>
-              ) : (
-                bacboRounds
-                  .slice(-16)
-                  .reverse()
-                  .map((r, idx) => (
-                    <span
-                      key={r.id}
-                      className={`inline-flex h-5 min-w-[22px] px-1 items-center justify-center rounded border font-mono text-[10px] font-bold text-white shrink-0 ${
-                        r.outcome === 'P'
-                          ? 'bg-blue-600 border-blue-400'
-                          : r.outcome === 'B'
-                          ? 'bg-[#B91C1C] border-red-400'
-                          : 'bg-amber-600 border-amber-400'
-                      } ${idx === 0 ? 'ring-1 ring-white/80' : ''}`}
-                    >
-                      {r.outcome}
-                    </span>
-                  ))
-              )}
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                type="button"
-                onClick={() => handleAddBacBoRound({ outcome: 'P', source: 'manual' })}
-                className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
-              >
-                +P
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAddBacBoRound({ outcome: 'T', source: 'manual' })}
-                className="rounded bg-amber-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
-              >
-                +T
-              </button>
-              <button
-                type="button"
-                onClick={() => handleAddBacBoRound({ outcome: 'B', source: 'manual' })}
-                className="rounded bg-[#B91C1C] px-1.5 py-0.5 text-[10px] font-bold text-white"
-              >
-                +B
-              </button>
-            </div>
-          </div>
-
           {/* Painel ao Vivo Bac Bo */}
           <div className="rounded-md border border-slate-800 bg-[#131924] p-2 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
@@ -749,7 +723,7 @@ export default function App() {
               </div>
               <div className="text-right font-mono text-[10px] tabular-nums">
                 <div className="text-emerald-400 font-semibold">
-                  Acerto Geral: {bacboAnalysis.statistics.overall.hitRatePct.toFixed(1)}% (
+                  Acerto: {bacboAnalysis.statistics.overall.hitRatePct.toFixed(1)}% (
                   {bacboAnalysis.statistics.overall.hits}/{bacboAnalysis.statistics.overall.suggestions})
                 </div>
                 <div className="text-amber-300 text-[9px]">
@@ -781,10 +755,10 @@ export default function App() {
             </div>
 
             <div className="grid grid-cols-2 gap-1 text-[10px] text-slate-300">
-              <div className="rounded border border-slate-800 bg-[#0B0F17] px-1.5 py-1 truncate">
+              <div className="rounded border border-slate-800 bg-[#0B0F17] px-1.5 py-0.5 truncate">
                 Corrida: {bacboAnalysis.currentSnapshot.streakLabel}
               </div>
-              <div className="rounded border border-slate-800 bg-[#0B0F17] px-1.5 py-1 truncate">
+              <div className="rounded border border-slate-800 bg-[#0B0F17] px-1.5 py-0.5 truncate">
                 Sem Tie: {bacboAnalysis.ties.roundsSinceLastTie} rod.
               </div>
             </div>
@@ -796,6 +770,160 @@ export default function App() {
                     • {reason}
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          {/* Nossa Tabela (6 Linhas: Cor que Veio + Nosso Acerto/Erro) */}
+          <div className="rounded-md border border-slate-800 bg-[#131924] p-2 space-y-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-1">
+              <div className="flex items-center gap-1.5 text-[10px]">
+                <span className="font-semibold text-slate-200">Nossa Tabela</span>
+                <span className="font-mono text-[9px] text-emerald-400 tabular-nums">
+                  OK:{bacboAnalysis.statistics.overall.hits}
+                </span>
+                <span className="font-mono text-[9px] text-red-400 tabular-nums">
+                  Erro:{bacboAnalysis.statistics.overall.misses}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleAddBacBoRound({ outcome: 'P', source: 'manual' })}
+                  className="rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
+                >
+                  +P
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddBacBoRound({ outcome: 'T', source: 'manual' })}
+                  className="rounded bg-amber-600 px-1.5 py-0.5 text-[10px] font-bold text-white"
+                >
+                  +T
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddBacBoRound({ outcome: 'B', source: 'manual' })}
+                  className="rounded bg-[#B91C1C] px-1.5 py-0.5 text-[10px] font-bold text-white"
+                >
+                  +B
+                </button>
+                {bacboRounds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleResetAllBacBo}
+                    title="Limpar nossa tabela"
+                    className="inline-flex items-center gap-0.5 rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[9px] text-slate-400 hover:text-red-300"
+                  >
+                    <RotateCcw className="h-2.5 w-2.5" />
+                    <span>Zerar</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {bacboRounds.length === 0 ? (
+              <div className="rounded border border-dashed border-slate-800 px-2 py-2 text-[10px] text-amber-300 text-center">
+                Aguardando leitura dos 3 blocos (JOGADOR | EMPATE | BANCA) ou toque +P / +T / +B.
+              </div>
+            ) : (
+              <div className="overflow-x-auto pb-0.5">
+                <div className="inline-flex gap-1">
+                  {bbCols.map((colCells, colIdx) => (
+                    <div key={colIdx} className="grid grid-rows-6 gap-0.5">
+                      {Array.from({ length: BEAD_PLATE_ROWS }, (_, rowIdx) => {
+                        const cell = colCells?.[rowIdx];
+                        if (!cell) {
+                          return (
+                            <span
+                              key={rowIdx}
+                              className="h-5 w-5 rounded-full border border-slate-800/70 bg-[#0B0F17]"
+                            />
+                          );
+                        }
+                        const rec = bbRoundMap.get(cell.recordId);
+                        const pred = rec?.predictionBefore;
+                        const evaluated = pred && pred.suggestion !== 'NONE';
+                        const isHit = evaluated ? pred.suggestion === cell.outcome : null;
+                        const isLatest =
+                          bbLastRound && bbLastRound.id === cell.recordId;
+                        const cellBg =
+                          cell.outcome === 'P'
+                            ? 'bg-blue-600 border-blue-400'
+                            : cell.outcome === 'B'
+                            ? 'bg-[#B91C1C] border-red-400'
+                            : 'bg-amber-600 border-amber-400';
+
+                        return (
+                          <span
+                            key={cell.recordId}
+                            className={`relative inline-flex h-5 w-5 items-center justify-center rounded-full border font-mono text-[9px] font-bold text-white tabular-nums ${cellBg} ${
+                              isLatest ? 'ring-1 ring-white' : ''
+                            }`}
+                          >
+                            {cell.winningTotal ?? cell.outcome}
+                            {isHit !== null && (
+                              <span
+                                className={`absolute -top-1 -right-1 inline-flex h-2.5 w-2.5 items-center justify-center rounded-full text-[7px] font-black leading-none ring-1 ring-[#0B0F17] ${
+                                  isHit
+                                    ? 'bg-emerald-400 text-slate-950'
+                                    : 'bg-slate-950 text-red-400 border border-red-400'
+                                }`}
+                              >
+                                {isHit ? '✓' : '✕'}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {evaluatedRecent.length > 0 && (
+              <div className="space-y-0.5 border-t border-slate-800/80 pt-1 text-[9px] font-mono tabular-nums">
+                {evaluatedRecent.map((r) => {
+                  const sug = r.predictionBefore!.suggestion as BacBoOutcome;
+                  const hit = sug === r.outcome;
+                  const score =
+                    r.playerTotal !== null && r.bankerTotal !== null
+                      ? ` ${r.playerTotal}×${r.bankerTotal}`
+                      : r.winningTotal !== null
+                      ? ` (${r.winningTotal})`
+                      : '';
+                  return (
+                    <div
+                      key={r.id}
+                      className="flex items-center justify-between gap-2 text-slate-300"
+                    >
+                      <span className="truncate">
+                        #{r.roundNumber} Veio{' '}
+                        <strong
+                          className={
+                            r.outcome === 'P'
+                              ? 'text-blue-400'
+                              : r.outcome === 'B'
+                              ? 'text-red-400'
+                              : 'text-amber-300'
+                          }
+                        >
+                          {colorNamePt(r.outcome)}
+                          {score}
+                        </strong>{' '}
+                        · Nossa: {formatOutcomeLabel(sug)}
+                      </span>
+                      <span
+                        className={`shrink-0 font-bold ${
+                          hit ? 'text-emerald-400' : 'text-red-400'
+                        }`}
+                      >
+                        {hit ? 'OK ✓' : 'ERRO ✕'}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1296,8 +1424,8 @@ export default function App() {
           <BacBoDashboard
             rounds={bacboRounds}
             analysis={bacboAnalysis}
-            roiTopPct={66}
-            roiHeightPct={15}
+            roiTopPct={40}
+            roiHeightPct={36}
             lastLiveResultAt={lastBacBoLiveResultAt}
             cycleNowMs={bacboCycleNowMs}
             scanDebug={bacboScanDebug}

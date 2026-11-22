@@ -222,8 +222,16 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
     if (!file) return;
     setOcrImageMsg('A analisar imagem Bead Plate...');
     try {
-      const scanTop = roiTopPct === 4 && roiHeightPct === 7 ? 66 : roiTopPct;
-      const scanHeight = roiTopPct === 4 && roiHeightPct === 7 ? 15 : roiHeightPct;
+      const scanTop =
+        (roiTopPct === 4 && roiHeightPct === 7) ||
+        (roiTopPct === 40 && roiHeightPct === 36)
+          ? 66
+          : roiTopPct;
+      const scanHeight =
+        (roiTopPct === 4 && roiHeightPct === 7) ||
+        (roiTopPct === 40 && roiHeightPct === 36)
+          ? 15
+          : roiHeightPct;
       const scan = await scanBacBoScreenshotImage(file, scanTop, scanHeight);
       if (scan.outcomes.length === 0) {
         setOcrImageMsg('Nenhuma célula azul/vermelha/dourada detetada na grelha Bead Plate.');
@@ -296,6 +304,14 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
         .reverse(),
     [rounds, dateFrom, dateTo, outcomeFilter, patternQuery]
   );
+
+  const roundById = useMemo(() => {
+    const map = new Map<string, BacBoRoundRecord>();
+    for (const r of rounds) {
+      map.set(r.id, r);
+    }
+    return map;
+  }, [rounds]);
 
   // Monta colunas da grelha Bead Plate (6 linhas por coluna)
   const beadColumns = useMemo(() => {
@@ -637,13 +653,15 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
             {/* Grelha Bead Plate + Probabilidades Separadas */}
             <div className="lg:col-span-7 space-y-5">
               <div className="rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-3">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <h2 className="text-base font-semibold text-slate-100">
-                    Grelha Bead Plate (6 Linhas)
+                    Nossa Tabela · Bead Plate (6 Linhas)
                   </h2>
-                  <span className="font-mono text-xs text-slate-400 tabular-nums">
-                    {rounds.length} rodadas
-                  </span>
+                  <div className="flex items-center gap-2 font-mono text-xs tabular-nums">
+                    <span className="text-emerald-400">✓ {statistics.overall.hits}</span>
+                    <span className="text-red-400">✕ {statistics.overall.misses}</span>
+                    <span className="text-slate-400">({rounds.length} rod.)</span>
+                  </div>
                 </div>
 
                 {rounds.length === 0 ? (
@@ -666,15 +684,42 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
                               );
                             }
                             const st = outcomeStyle(cell.outcome);
+                            const rec = roundById.get(cell.recordId);
+                            const pred = rec?.predictionBefore;
+                            const evaluated = pred && pred.suggestion !== 'NONE';
+                            const isHit = evaluated ? pred.suggestion === cell.outcome : null;
+                            const scoreTxt =
+                              rec && rec.playerTotal !== null && rec.bankerTotal !== null
+                                ? ` ${rec.playerTotal}×${rec.bankerTotal}`
+                                : cell.winningTotal
+                                ? ` (${cell.winningTotal})`
+                                : '';
+                            const evalTxt =
+                              isHit !== null && pred
+                                ? ` · Nossa: ${formatOutcomeLabel(pred.suggestion)} (${
+                                    isHit ? 'ACERTOU' : 'ERRO NOSSO'
+                                  })`
+                                : '';
                             return (
                               <span
                                 key={cell.recordId}
-                                title={`Rodada #${cell.roundNumber} · ${formatOutcomeLabel(cell.outcome)}${
-                                  cell.winningTotal ? ` (${cell.winningTotal})` : ''
-                                }`}
-                                className={`inline-flex h-7 w-7 items-center justify-center rounded-full border font-mono text-[11px] font-bold text-white tabular-nums ${st.bg}`}
+                                title={`Rodada #${cell.roundNumber} · ${formatOutcomeLabel(
+                                  cell.outcome
+                                )}${scoreTxt}${evalTxt}`}
+                                className={`relative inline-flex h-7 w-7 items-center justify-center rounded-full border font-mono text-[11px] font-bold text-white tabular-nums ${st.bg}`}
                               >
                                 {cell.winningTotal ?? cell.outcome}
+                                {isHit !== null && (
+                                  <span
+                                    className={`absolute -top-1 -right-1 inline-flex h-3 w-3 items-center justify-center rounded-full text-[8px] font-black leading-none ring-1 ring-[#131924] ${
+                                      isHit
+                                        ? 'bg-emerald-400 text-slate-950'
+                                        : 'bg-slate-950 text-red-400 border border-red-400'
+                                    }`}
+                                  >
+                                    {isHit ? '✓' : '✕'}
+                                  </span>
+                                )}
                               </span>
                             );
                           })}

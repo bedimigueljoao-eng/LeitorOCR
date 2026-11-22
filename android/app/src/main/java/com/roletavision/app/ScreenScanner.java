@@ -271,146 +271,126 @@ public class ScreenScanner {
         }
     }
 
-    public interface BacBoCallback {
-        void onResult(List<BacBoCell> cellsNewestFirst, boolean ocrOk);
+    public interface BacBoFrameCallback {
+        void onResult(
+                int playerTotal,
+                int bankerTotal,
+                boolean blocksVisible,
+                List<BacBoCell> plateCellsNewestFirst,
+                boolean ocrOk
+        );
     }
 
-    public interface BacBoScoreboardCallback {
-        void onResult(int playerTotal, int bankerTotal);
-    }
-
-    public void scanBacBoStrip(
+    /**
+     * Scanner unificado para Bac Bo:
+     * 1) Modo 3 Blocos (Split-Screen): lê diretamente o total grande no cartão azul JOGADOR (esquerda)
+     *    e no cartão vermelho BANCA (direita), ignorando completamente a tabela fixa central do EMPATE.
+     * 2) Modo Grelha (Bead Plate): se a área contiver >= 6 células com bolas Azuis/Vermelhas, lê a grelha.
+     */
+    public void scanBacBoFrame(
             Bitmap fullBitmap,
             float roiTopRatio,
             float roiHeightRatio,
-            BacBoCallback callback
+            BacBoFrameCallback callback
     ) {
         int width = fullBitmap.getWidth();
         int height = fullBitmap.getHeight();
         if (width < 40 || height < 40) {
-            callback.onResult(Collections.emptyList(), false);
+            callback.onResult(-1, -1, false, Collections.emptyList(), false);
             return;
         }
 
         int topY = Math.max(0, Math.min(height - 20, (int) (height * roiTopRatio)));
-        int cropH = Math.max(20, Math.min(height - topY, (int) (height * roiHeightRatio)));
+        int cropH = Math.max(24, Math.min(height - topY, (int) (height * roiHeightRatio)));
 
         Bitmap cropped = Bitmap.createBitmap(fullBitmap, 0, topY, width, cropH);
-        int scaleFactor = cropH < 260 ? 3 : 2;
-        Bitmap scaled = Bitmap.createScaledBitmap(
-                cropped,
-                cropped.getWidth() * scaleFactor,
-                cropped.getHeight() * scaleFactor,
-                true
-        );
+        int scaleFactor = cropH < 240 ? 2 : 1;
+        Bitmap scaled = scaleFactor > 1
+                ? Bitmap.createScaledBitmap(cropped, cropped.getWidth() * scaleFactor, cropped.getHeight() * scaleFactor, true)
+                : cropped;
         if (scaled != cropped) {
             cropped.recycle();
         }
 
-        final int scaledH = scaled.getHeight();
+        final int sw = scaled.getWidth();
+        final int sh = scaled.getHeight();
         InputImage image = InputImage.fromBitmap(scaled, 0);
-        recognizer.process(image)
-                .addOnSuccessListener(visionText -> {
-                    List<BacBoCell> rawCells = new ArrayList<>();
-                    for (Text.TextBlock block : visionText.getTextBlocks()) {
-                        for (Text.Line line : block.getLines()) {
-                            for (Text.Element element : line.getElements()) {
-                                Rect box = element.getBoundingBox();
-                                if (box == null) continue;
-                                int bh = box.height();
-                                int bw = box.width();
-                                if (bh < 8 || bh > scaledH * 0.48f || bw > scaledH * 1.4f) {
-                                    continue;
-                                }
-                                String outcome = sampleBacBoOutcomeColor(scaled, box);
-                                if (outcome == null) continue;
-                                Integer total = parseBacBoToken(element.getText(), outcome);
-                                if (total != null) {
-                                    rawCells.add(new BacBoCell(
-                                            outcome,
-                                            total,
-                                            (box.left + box.right) / 2,
-                                            (box.top + box.bottom) / 2,
-                                            bh
-                                    ));
-                                }
-                            }
-                        }
-                    }
-                    scaled.recycle();
-
-                    List<BacBoCell> ordered = orderBacBoCells(rawCells);
-                    callback.onResult(ordered, true);
-                })
-                .addOnFailureListener(e -> {
-                    scaled.recycle();
-                    callback.onResult(Collections.emptyList(), false);
-                });
-    }
-
-    /**
-     * Lê o placar ao vivo (cartão azul PLAYER à esquerda e cartão vermelho BANKER à direita)
-     * imediatamente acima do Bead Plate quando um novo resultado entra na grelha.
-     */
-    public void scanBacBoScoreboard(
-            Bitmap fullBitmap,
-            float beadPlateTopRatio,
-            BacBoScoreboardCallback callback
-    ) {
-        int width = fullBitmap.getWidth();
-        int height = fullBitmap.getHeight();
-        if (width < 80 || height < 120 || beadPlateTopRatio < 0.20f) {
-            callback.onResult(-1, -1);
-            return;
-        }
-
-        float bandTopRatio = Math.max(0.10f, beadPlateTopRatio - 0.30f);
-        float bandBottomRatio = Math.max(bandTopRatio + 0.08f, beadPlateTopRatio - 0.02f);
-        int topY = (int) (height * bandTopRatio);
-        int cropH = Math.max(30, (int) (height * (bandBottomRatio - bandTopRatio)));
-        if (topY + cropH > height) {
-            cropH = height - topY;
-        }
-
-        Bitmap cropped = Bitmap.createBitmap(fullBitmap, 0, topY, width, cropH);
-        final int cw = cropped.getWidth();
-        final int ch = cropped.getHeight();
-        InputImage image = InputImage.fromBitmap(cropped, 0);
         recognizer.process(image)
                 .addOnSuccessListener(visionText -> {
                     int bestP = -1;
                     int bestPH = 0;
                     int bestB = -1;
                     int bestBH = 0;
+                    boolean blocksVisible = false;
+
+                    List<BacBoCell> plateCandidates = new ArrayList<>();
+                    int pbPlateCount = 0;
 
                     for (Text.TextBlock block : visionText.getTextBlocks()) {
                         for (Text.Line line : block.getLines()) {
                             for (Text.Element element : line.getElements()) {
+                                String rawText = element.getText();
+                                if (rawText == null) continue;
+                                String upper = rawText.trim().toUpperCase();
+                                if (upper.contains("JOGADOR") || upper.contains("PLAYER")
+                                        || upper.contains("BANCA") || upper.contains("BANKER")
+                                        || upper.contains("EMPATE") || upper.equals("1:1")) {
+                                    blocksVisible = true;
+                                }
+
                                 Rect box = element.getBoundingBox();
                                 if (box == null) continue;
                                 int bh = box.height();
-                                if (bh < Math.max(14, ch * 0.09f)) continue;
-                                Integer val = parseBacBoNumberOnly(element.getText());
-                                if (val == null) continue;
-
+                                int bw = box.width();
                                 int cx = (box.left + box.right) / 2;
-                                String col = sampleBacBoOutcomeColor(cropped, box);
-                                if ("P".equals(col) && cx < cw * 0.46f && bh > bestPH) {
-                                    bestP = val;
-                                    bestPH = bh;
-                                } else if ("B".equals(col) && cx > cw * 0.54f && bh > bestBH) {
-                                    bestB = val;
-                                    bestBH = bh;
+                                int cy = (box.top + box.bottom) / 2;
+
+                                Integer num = parseBacBoNumberOnly(upper);
+                                if (num == null) continue;
+
+                                String colorOutcome = sampleBacBoOutcomeColor(scaled, box);
+
+                                // 1. Deteção nos 3 Blocos (JOGADOR à esquerda | BANCA à direita)
+                                // Ignora zona central (0.37..0.63 = círculo dourado EMPATE) e texto pequeno inferior (y >= 0.78)
+                                if (bh >= Math.max(16, (int) (sh * 0.10f)) && cy < sh * 0.78f) {
+                                    if (cx < sw * 0.37f && "P".equals(colorOutcome) && bh > bestPH) {
+                                        bestP = num;
+                                        bestPH = bh;
+                                        blocksVisible = true;
+                                    } else if (cx > sw * 0.63f && "B".equals(colorOutcome) && bh > bestBH) {
+                                        bestB = num;
+                                        bestBH = bh;
+                                        blocksVisible = true;
+                                    }
+                                }
+
+                                // 2. Candidato a Bead Plate (células menores e uniformes; exige bolas Azuis/Vermelhas)
+                                if (colorOutcome != null
+                                        && bh >= 8
+                                        && bh <= sh * 0.34f
+                                        && bw <= sh * 1.1f) {
+                                    plateCandidates.add(new BacBoCell(colorOutcome, num, cx, cy, bh));
+                                    if ("P".equals(colorOutcome) || "B".equals(colorOutcome)) {
+                                        pbPlateCount++;
+                                    }
                                 }
                             }
                         }
                     }
-                    cropped.recycle();
-                    callback.onResult(bestP, bestB);
+                    scaled.recycle();
+
+                    // Só aceita Bead Plate se não for o círculo central EMPATE (exige bolas Azuis/Vermelhas reais)
+                    List<BacBoCell> orderedPlate = Collections.emptyList();
+                    if (bestP < 2 && bestB < 2 && plateCandidates.size() >= 6 && pbPlateCount >= 2) {
+                        orderedPlate = orderBacBoCells(plateCandidates);
+                    }
+
+                    boolean ocrOk = blocksVisible || (bestP >= 2 && bestB >= 2) || !orderedPlate.isEmpty();
+                    callback.onResult(bestP, bestB, blocksVisible, orderedPlate, ocrOk);
                 })
                 .addOnFailureListener(e -> {
-                    cropped.recycle();
-                    callback.onResult(-1, -1);
+                    scaled.recycle();
+                    callback.onResult(-1, -1, false, Collections.emptyList(), false);
                 });
     }
 
