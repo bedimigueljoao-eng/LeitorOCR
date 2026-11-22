@@ -36,6 +36,7 @@ import android.widget.TextView;
 import com.getcapacitor.BridgeActivity;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class MainActivity extends BridgeActivity {
