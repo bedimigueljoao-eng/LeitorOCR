@@ -13,8 +13,10 @@ import {
   Play,
   Plus,
   RotateCcw,
+  Send,
   ShieldAlert,
   Sliders,
+  Sparkles,
   Square,
   Target,
   Upload,
@@ -24,6 +26,7 @@ import {
 } from 'lucide-react';
 import {
   analyzeAviatorScreenshotImage,
+  answerAviatorQuestionLocally,
   AviatorAutoBetConfig,
   AviatorAutoBetState,
   AviatorBankrollConfig,
@@ -147,6 +150,16 @@ export const AviatorDashboard: React.FC<AviatorDashboardProps> = ({
   const [testReport, setTestReport] = useState<AviatorTestReport | null>(null);
   const [screenshotScan, setScreenshotScan] = useState<AviatorScreenshotScanResult | null>(null);
 
+  // Estado do Analista IA (Híbrido: Gemini Gratuito + IA Estatística Local Offline)
+  const [aiQuestion, setAiQuestion] = useState(
+    'Quando sai um número muito alto (>=10x), a seguir vêm números baixos?'
+  );
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResponse, setAiResponse] = useState<{
+    answer: string;
+    sourceLabel: string;
+  } | null>(null);
+
   // Filtros do Histórico (B)
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -248,12 +261,107 @@ export const AviatorDashboard: React.FC<AviatorDashboardProps> = ({
     }
   };
 
+  const handleAskAi = async (customQuestion?: string) => {
+    const q = (customQuestion ?? aiQuestion).trim();
+    if (customQuestion) setAiQuestion(customQuestion);
+
+    if (rounds.length < 5) {
+      setAiResponse({
+        answer: `Registe pelo menos 5 rodadas (atual: ${rounds.length}) para a IA analisar os dados reais.`,
+        sourceLabel: 'IA Estatística Local',
+      });
+      return;
+    }
+
+    setAiLoading(true);
+    const localFallbackAnswer = answerAviatorQuestionLocally(rounds, analysis.ai, q);
+
+    // No APK offline (https://localhost sem porta de servidor Node), usa direto a IA Local para resposta instantânea
+    const isOfflineApkOrigin =
+      isAndroidApk &&
+      (window.location.hostname === 'localhost' || window.location.protocol === 'capacitor:');
+
+    if (isOfflineApkOrigin) {
+      setAiResponse({
+        answer: localFallbackAnswer,
+        sourceLabel: 'IA Estatística Local (APK Offline · 100% Gratuito)',
+      });
+      setAiLoading(false);
+      return;
+    }
+
+    try {
+      const postPeakSummary = analysis.ai.postPeakBuckets
+        .map((b) => {
+          const h1 = b.horizons[0];
+          const h3 = b.horizons[1];
+          return `${b.label}: ${b.totalOccurrences}x | Próx.1: ${h1.under150Pct.toFixed(1)}% <1.5x (delta ${
+            h1.under150DeltaPct >= 0 ? '+' : ''
+          }${h1.under150DeltaPct.toFixed(1)}pp, z=${h1.zScoreUnder150.toFixed(2)}) | Próx.3: ${h3.under150Pct.toFixed(
+            1
+          )}% <1.5x`;
+        })
+        .join(' ; ');
+
+      const strategiesSummary = analysis.strategies.rankingByRoi
+        .slice(0, 4)
+        .map((s) => `${s.name}: acerto ${s.hitRatePct.toFixed(1)}%, ROI ${s.simulatedRoiPct.toFixed(1)}%`)
+        .join(' | ');
+
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 7000);
+      const res = await fetch('/api/analyze-aviator-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          totalRounds: rounds.length,
+          recentMultipliers: rounds.slice(-40).map((r) => r.multiplier),
+          question: q,
+          localSummary: analysis.ai.localNarrativeSummary,
+          postPeakSummary,
+          regimeSummary: `${analysis.ai.regime.regimeLabel} (Cautela ${analysis.ai.regime.cautionScore}/100) - ${analysis.ai.regime.recommendedAction}`,
+          strategiesSummary,
+        }),
+      });
+      window.clearTimeout(timeout);
+
+      if (!res.ok) {
+        setAiResponse({
+          answer: localFallbackAnswer,
+          sourceLabel: 'IA Estatística Local (Modo Offline Automático)',
+        });
+        return;
+      }
+
+      const data = (await res.json()) as { answer?: string; model?: string };
+      if (data.answer && data.answer.trim().length > 0) {
+        setAiResponse({
+          answer: data.answer.trim(),
+          sourceLabel: `Gemini AI (${data.model ?? 'gemini-4-hydrogen'} · Gratuito)`,
+        });
+      } else {
+        setAiResponse({
+          answer: localFallbackAnswer,
+          sourceLabel: 'IA Estatística Local (Fallback)',
+        });
+      }
+    } catch {
+      setAiResponse({
+        answer: localFallbackAnswer,
+        sourceLabel: 'IA Estatística Local (Offline · 100% Gratuito)',
+      });
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const sections: Array<{ id: AviatorSection; label: string; icon: React.ReactNode }> = [
     { id: 'live', label: 'A. Ao Vivo', icon: <Activity className="h-3.5 w-3.5" /> },
     { id: 'history', label: 'B. Histórico', icon: <Database className="h-3.5 w-3.5" /> },
     { id: 'patterns', label: 'C. Padrões', icon: <Layers className="h-3.5 w-3.5" /> },
     { id: 'strategies', label: 'D. Estratégias', icon: <Target className="h-3.5 w-3.5" /> },
-    { id: 'learning', label: 'E. Aprendizagem', icon: <Brain className="h-3.5 w-3.5" /> },
+    { id: 'learning', label: 'E. IA & Pós-Pico', icon: <Brain className="h-3.5 w-3.5" /> },
     { id: 'bankroll', label: 'F. Banca', icon: <Wallet className="h-3.5 w-3.5" /> },
     { id: 'autobet', label: 'G. Auto Bet', icon: <Zap className="h-3.5 w-3.5" /> },
     { id: 'cashout', label: 'H. Cash Out', icon: <ShieldAlert className="h-3.5 w-3.5" /> },
@@ -556,6 +664,29 @@ export const AviatorDashboard: React.FC<AviatorDashboardProps> = ({
                     : 'AGUARDAR PRÓXIMA JANELA'}
                 </div>
                 <p className="text-xs text-slate-400">{activeSug.reason}</p>
+              </div>
+
+              {/* Cartão Resumo IA: Regime & Alerta Pós-Pico */}
+              <div className="rounded-lg border border-slate-800 bg-[#0B0F17] p-4 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    <span>IA Estatística: {analysis.ai.regime.regimeLabel}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[11px] text-slate-300">
+                      Cautela: {analysis.ai.regime.cautionScore}/100
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSection('learning')}
+                      className="rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-amber-300 hover:bg-slate-800 cursor-pointer"
+                    >
+                      Abrir Painel IA
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[11px] text-slate-400">{analysis.ai.localNarrativeSummary}</p>
               </div>
 
               {/* Captura de Ecrã Android (MediaProjection Externa) */}
@@ -960,97 +1091,360 @@ export const AviatorDashboard: React.FC<AviatorDashboardProps> = ({
         </section>
       )}
 
-      {/* ==================== E. INTELIGÊNCIA & APRENDIZAGEM ==================== */}
+      {/* ==================== E. IA, PÓS-PICO & APRENDIZAGEM ==================== */}
       {section === 'learning' && (
-        <section className="rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-slate-100">
-                E. Aprendizagem Contínua & Prevenção de Sobreajuste
-              </h2>
-              <p className="text-xs text-slate-400">{analysis.learning.recommendationNote}</p>
-            </div>
-            <button
-              type="button"
-              onClick={onSaveLearningSnapshot}
-              className="rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800 cursor-pointer shrink-0"
-            >
-              Guardar Avaliação Atual
-            </button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {(['50', '100', '500', '1000', 'all'] as LearningWindowKey[]).map((wk) => (
-              <button
-                key={wk}
-                type="button"
-                onClick={() => onSelectLearningWindow(wk)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium cursor-pointer ${
-                  selectedWindow === wk
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-[#0B0F17] border border-slate-800 text-slate-400'
+        <div className="space-y-5">
+          {/* Painel Analista IA (Pós-Pico + Regime + Perguntar aos Dados) */}
+          <section className="rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-amber-400" />
+                  <span>E. IA Quantitativa · Analisador Pós-Pico &amp; Sequências</span>
+                </h2>
+                <p className="text-xs text-slate-400">
+                  Mede nos teus dados reais se números muito altos (ex: &gt;=10x, &gt;=25x) trazem números baixos a seguir — 100% gratuito no APK e na Web.
+                </p>
+              </div>
+              <span
+                className={`rounded-md border px-2.5 py-1 font-mono text-xs font-bold shrink-0 ${
+                  analysis.ai.regime.regime === 'FRIO_CRISE'
+                    ? 'border-red-500/50 bg-red-500/15 text-red-300'
+                    : analysis.ai.regime.regime === 'VOLATIL_PICOS'
+                    ? 'border-amber-500/50 bg-amber-500/15 text-amber-300'
+                    : analysis.ai.regime.regime === 'NORMAL'
+                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                    : 'border-slate-700 bg-slate-800 text-slate-300'
                 }`}
               >
-                {wk === 'all' ? 'Todo Histórico' : `Últimas ${wk}`}
-              </button>
-            ))}
-            <span className="ml-auto font-mono text-xs text-slate-300">
-              Risco Overfitting:{' '}
-              <strong
-                className={
-                  analysis.learning.overfittingRisk === 'ELEVADO'
-                    ? 'text-red-400'
-                    : analysis.learning.overfittingRisk === 'MODERADO'
-                    ? 'text-amber-300'
-                    : 'text-emerald-400'
-                }
-              >
-                {analysis.learning.overfittingRisk}
-              </strong>
-            </span>
-          </div>
-
-          {analysis.learning.degradationWarning && (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
-              {analysis.learning.degradationWarning}
+                Cautela IA: {analysis.ai.regime.cautionScore}/100
+              </span>
             </div>
-          )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-mono tabular-nums">
-              <thead>
-                <tr className="border-b border-slate-800 text-slate-400 font-sans">
-                  <th className="py-2 pr-3">Janela</th>
-                  <th className="py-2 px-2 text-right">Amostra</th>
-                  <th className="py-2 px-2">Melhor no Treino (70%)</th>
-                  <th className="py-2 px-2 text-right">Treino</th>
-                  <th className="py-2 px-2 text-right">Validação (30%)</th>
-                  <th className="py-2 pl-2 text-right">ROI Validação</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/70">
-                {analysis.learning.windows.map((w) => (
-                  <tr key={w.windowKey}>
-                    <td className="py-2 pr-3 font-sans text-slate-200">{w.label}</td>
-                    <td className="py-2 px-2 text-right text-slate-300">{w.sampleSize}</td>
-                    <td className="py-2 px-2 font-sans text-slate-300">{w.bestStrategyName}</td>
-                    <td className="py-2 px-2 text-right text-slate-200">{w.trainHitRatePct.toFixed(1)}%</td>
-                    <td className="py-2 px-2 text-right text-slate-200">
-                      {w.validationHitRatePct.toFixed(1)}%
-                    </td>
-                    <td
-                      className={`py-2 pl-2 text-right font-semibold ${
-                        w.validationRoiPct >= 0 ? 'text-emerald-400' : 'text-red-400'
-                      }`}
-                    >
-                      {w.validationRoiPct.toFixed(1)}%
-                    </td>
-                  </tr>
+            {/* Regime Atual & Resumo */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+              <div className="md:col-span-2 rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5 space-y-1.5">
+                <div className="font-semibold text-amber-300">{analysis.ai.regime.regimeLabel}</div>
+                <p className="text-slate-300 leading-relaxed">{analysis.ai.localNarrativeSummary}</p>
+                <p className="text-[11px] text-slate-400">{analysis.ai.regime.recommendedAction}</p>
+              </div>
+              <div className="rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5 space-y-1.5 font-mono tabular-nums">
+                <div className="font-sans text-[11px] text-slate-400">Baseline Global ({rounds.length} rod.)</div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Baixos (&lt;1.50x):</span>
+                  <span className="text-sky-300 font-bold">{analysis.ai.baselineUnder150Pct.toFixed(1)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Acima &gt;=2.00x:</span>
+                  <span className="text-purple-300 font-bold">{analysis.ai.baselineAbove200Pct.toFixed(1)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">15 rec. &lt;1.50x:</span>
+                  <span className="text-amber-300 font-bold">{analysis.ai.regime.recent15LowPct.toFixed(1)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Índice Volat.:</span>
+                  <span className="text-slate-200 font-bold">{analysis.ai.regime.volatilityIndex.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabela Pós-Pico */}
+            <div className="space-y-2">
+              <div className="text-xs font-semibold text-slate-200">
+                Teste Empírico Pós-Pico: O que saiu logo após um número muito alto?
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono tabular-nums">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-400 font-sans">
+                      <th className="py-2 pr-3">Faixa de Pico</th>
+                      <th className="py-2 px-2 text-right">Ocorr.</th>
+                      <th className="py-2 px-2 text-right">1ª Rod. &lt;1.5x</th>
+                      <th className="py-2 px-2 text-right">Desvio vs Normal</th>
+                      <th className="py-2 px-2 text-right">Próx. 3 &lt;1.5x</th>
+                      <th className="py-2 px-2 text-right">Próx. 5 &lt;1.5x</th>
+                      <th className="py-2 pl-2 font-sans">Conclusão Estatística (1ª Rod.)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/70">
+                    {analysis.ai.postPeakBuckets.map((b) => {
+                      const h1 = b.horizons[0];
+                      const h3 = b.horizons[1];
+                      const h5 = b.horizons[2];
+                      return (
+                        <tr key={b.threshold} className={b.activeJustHappened ? 'bg-amber-500/10' : ''}>
+                          <td className="py-2 pr-3 font-sans text-slate-100">
+                            <span className="font-semibold">{b.label}</span>
+                            {b.activeJustHappened && (
+                              <span className="ml-1.5 rounded bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
+                                AGORA
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-right text-slate-300">{b.totalOccurrences}</td>
+                          <td className="py-2 px-2 text-right text-sky-300">
+                            {h1.evaluatedRounds > 0 ? `${h1.under150Pct.toFixed(1)}%` : '--'}
+                          </td>
+                          <td
+                            className={`py-2 px-2 text-right font-semibold ${
+                              h1.evaluatedRounds === 0
+                                ? 'text-slate-500'
+                                : h1.under150DeltaPct > 6
+                                ? 'text-red-400'
+                                : h1.under150DeltaPct < -6
+                                ? 'text-emerald-400'
+                                : 'text-slate-300'
+                            }`}
+                          >
+                            {h1.evaluatedRounds > 0
+                              ? `${h1.under150DeltaPct >= 0 ? '+' : ''}${h1.under150DeltaPct.toFixed(1)}pp (z=${h1.zScoreUnder150.toFixed(1)})`
+                              : '--'}
+                          </td>
+                          <td className="py-2 px-2 text-right text-slate-300">
+                            {h3.evaluatedRounds > 0 ? `${h3.under150Pct.toFixed(1)}%` : '--'}
+                          </td>
+                          <td className="py-2 px-2 text-right text-slate-300">
+                            {h5.evaluatedRounds > 0 ? `${h5.under150Pct.toFixed(1)}%` : '--'}
+                          </td>
+                          <td className="py-2 pl-2 font-sans text-[11px] text-slate-300">{h1.verdictLabel}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Intervalos de Pico + Matriz Markov */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="rounded-lg border border-slate-800 bg-[#0B0F17] p-4 space-y-2.5">
+                <div className="text-xs font-semibold text-slate-200">
+                  Sequências &amp; Espaçamento Entre Picos
+                </div>
+                <div className="space-y-2 text-xs font-mono tabular-nums">
+                  {analysis.ai.peakIntervals.map((pi) => (
+                    <div key={pi.threshold} className="rounded border border-slate-800/80 p-2.5 space-y-1">
+                      <div className="font-sans font-semibold text-fuchsia-300 flex justify-between">
+                        <span>{pi.label}</span>
+                        <span>{pi.count}x registados</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-1 text-[11px] text-slate-300">
+                        <div>Mín: {pi.minGap !== null ? `${pi.minGap}r` : '--'}</div>
+                        <div>Mediana: {pi.medianGap !== null ? `${pi.medianGap.toFixed(0)}r` : '--'}</div>
+                        <div>Máx: {pi.maxGap !== null ? `${pi.maxGap}r` : '--'}</div>
+                        <div>Atual: {pi.currentGap}r</div>
+                      </div>
+                      <div className="font-sans text-[11px] text-slate-400">
+                        Cluster (outro pico dentro de 3 rodadas):{' '}
+                        <strong className="font-mono text-amber-300">{pi.clusterRatePct.toFixed(1)}%</strong>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-slate-800 bg-[#0B0F17] p-4 space-y-2.5">
+                <div className="text-xs font-semibold text-slate-200">
+                  Matriz de Transição (Cadeia de Markov · Próxima Rodada)
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-[11px] font-mono tabular-nums">
+                    <thead>
+                      <tr className="border-b border-slate-800 text-slate-400 font-sans">
+                        <th className="py-1.5 pr-2">Estado Atual</th>
+                        <th className="py-1.5 px-1.5 text-right">&lt;1.5x</th>
+                        <th className="py-1.5 px-1.5 text-right">1.5–2x</th>
+                        <th className="py-1.5 px-1.5 text-right">2–5x</th>
+                        <th className="py-1.5 px-1.5 text-right">&gt;=5x</th>
+                        <th className="py-1.5 pl-1.5 text-right">Média Seg.</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/70">
+                      {analysis.ai.markovRows.map((row) => {
+                        const isCur = analysis.ai.currentMarkovState === row.fromState;
+                        const ge5 = row.probsPct['5_00_to_10_00'] + row.probsPct.over_10_00;
+                        return (
+                          <tr key={row.fromState} className={isCur ? 'bg-blue-500/15' : ''}>
+                            <td className="py-1.5 pr-2 font-sans text-slate-200">
+                              {row.fromLabel}
+                              {isCur && <span className="ml-1 text-[10px] text-blue-300 font-bold">(ATUAL)</span>}
+                            </td>
+                            <td className="py-1.5 px-1.5 text-right text-sky-300">
+                              {row.sampleCount > 0 ? `${row.probsPct.under_1_50.toFixed(0)}%` : '--'}
+                            </td>
+                            <td className="py-1.5 px-1.5 text-right text-slate-300">
+                              {row.sampleCount > 0 ? `${row.probsPct['1_50_to_2_00'].toFixed(0)}%` : '--'}
+                            </td>
+                            <td className="py-1.5 px-1.5 text-right text-purple-300">
+                              {row.sampleCount > 0 ? `${row.probsPct['2_00_to_5_00'].toFixed(0)}%` : '--'}
+                            </td>
+                            <td className="py-1.5 px-1.5 text-right text-fuchsia-300">
+                              {row.sampleCount > 0 ? `${ge5.toFixed(0)}%` : '--'}
+                            </td>
+                            <td className="py-1.5 pl-1.5 text-right text-emerald-300">
+                              {row.sampleCount > 0 ? `${row.nextAvgMultiplier.toFixed(2)}x` : '--'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Pergunte ao Analista IA (Gemini Gratuito na Web + IA Estatística Local Offline no APK) */}
+            <div className="rounded-lg border border-blue-500/30 bg-[#0B0F17] p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="text-xs font-semibold text-blue-300 flex items-center gap-1.5">
+                  <Brain className="h-3.5 w-3.5" />
+                  <span>Analista IA dos Teus Dados (Gemini Gratuito + Motor Local APK)</span>
+                </div>
+                <span className="text-[11px] text-slate-400">
+                  Zero configurações externas: funciona direto no APK (Local) e no Servidor Web (Gemini)
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  'Quando sai >=10x vêm números baixos a seguir?',
+                  'Como estão os intervalos e clusters de pico?',
+                  'Qual a transição provável do estado atual (Markov)?',
+                ].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => handleAskAi(preset)}
+                    disabled={aiLoading}
+                    className="rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] text-slate-300 hover:border-blue-500/60 hover:text-white cursor-pointer disabled:opacity-50"
+                  >
+                    {preset}
+                  </button>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input
+                  type="text"
+                  value={aiQuestion}
+                  onChange={(e) => setAiQuestion(e.target.value)}
+                  placeholder="Pergunte sobre picos, números baixos após >=10x, ou risco..."
+                  className="flex-1 rounded-lg border border-slate-700 bg-[#131924] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleAskAi()}
+                  disabled={aiLoading}
+                  className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>{aiLoading ? 'A analisar...' : 'Analisar com IA'}</span>
+                </button>
+              </div>
+
+              {aiResponse && (
+                <div className="rounded-lg border border-slate-800 bg-[#131924] p-3.5 space-y-1.5">
+                  <div className="text-[11px] font-mono text-amber-300">{aiResponse.sourceLabel}</div>
+                  <div className="text-xs text-slate-200 whitespace-pre-line leading-relaxed">
+                    {aiResponse.answer}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Tabela de Validação Cruzada & Prevenção de Overfitting */}
+          <section className="rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-slate-100">
+                  Aprendizagem Contínua &amp; Prevenção de Sobreajuste
+                </h2>
+                <p className="text-xs text-slate-400">{analysis.learning.recommendationNote}</p>
+              </div>
+              <button
+                type="button"
+                onClick={onSaveLearningSnapshot}
+                className="rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800 cursor-pointer shrink-0"
+              >
+                Guardar Avaliação Atual
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {(['50', '100', '500', '1000', 'all'] as LearningWindowKey[]).map((wk) => (
+                <button
+                  key={wk}
+                  type="button"
+                  onClick={() => onSelectLearningWindow(wk)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium cursor-pointer ${
+                    selectedWindow === wk
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-[#0B0F17] border border-slate-800 text-slate-400'
+                  }`}
+                >
+                  {wk === 'all' ? 'Todo Histórico' : `Últimas ${wk}`}
+                </button>
+              ))}
+              <span className="ml-auto font-mono text-xs text-slate-300">
+                Risco Overfitting:{' '}
+                <strong
+                  className={
+                    analysis.learning.overfittingRisk === 'ELEVADO'
+                      ? 'text-red-400'
+                      : analysis.learning.overfittingRisk === 'MODERADO'
+                      ? 'text-amber-300'
+                      : 'text-emerald-400'
+                  }
+                >
+                  {analysis.learning.overfittingRisk}
+                </strong>
+              </span>
+            </div>
+
+            {analysis.learning.degradationWarning && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200">
+                {analysis.learning.degradationWarning}
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs font-mono tabular-nums">
+                <thead>
+                  <tr className="border-b border-slate-800 text-slate-400 font-sans">
+                    <th className="py-2 pr-3">Janela</th>
+                    <th className="py-2 px-2 text-right">Amostra</th>
+                    <th className="py-2 px-2">Melhor no Treino (70%)</th>
+                    <th className="py-2 px-2 text-right">Treino</th>
+                    <th className="py-2 px-2 text-right">Validação (30%)</th>
+                    <th className="py-2 pl-2 text-right">ROI Validação</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/70">
+                  {analysis.learning.windows.map((w) => (
+                    <tr key={w.windowKey}>
+                      <td className="py-2 pr-3 font-sans text-slate-200">{w.label}</td>
+                      <td className="py-2 px-2 text-right text-slate-300">{w.sampleSize}</td>
+                      <td className="py-2 px-2 font-sans text-slate-300">{w.bestStrategyName}</td>
+                      <td className="py-2 px-2 text-right text-slate-200">{w.trainHitRatePct.toFixed(1)}%</td>
+                      <td className="py-2 px-2 text-right text-slate-200">
+                        {w.validationHitRatePct.toFixed(1)}%
+                      </td>
+                      <td
+                        className={`py-2 pl-2 text-right font-semibold ${
+                          w.validationRoiPct >= 0 ? 'text-emerald-400' : 'text-red-400'
+                        }`}
+                      >
+                        {w.validationRoiPct.toFixed(1)}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       )}
 
       {/* ==================== F. GESTÃO DE BANCA ==================== */}

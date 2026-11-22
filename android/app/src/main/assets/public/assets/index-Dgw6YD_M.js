@@ -12060,6 +12060,19 @@ var Search = createLucideIcon("search", [["path", {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Send = createLucideIcon("send", [["path", {
+	d: "M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z",
+	key: "1ffxy3"
+}], ["path", {
+	d: "m21.854 2.147-10.94 10.939",
+	key: "12cjpa"
+}]]);
+/**
+* @license lucide-react v0.546.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var ShieldAlert = createLucideIcon("shield-alert", [
 	["path", {
 		d: "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z",
@@ -18016,6 +18029,310 @@ var BacBoDashboard = ({ rounds, analysis, roiTopPct, roiHeightPct, lastLiveResul
 		]
 	});
 };
+// src/modules/aviator/aviatorAiAnalyzer.ts
+var MARKOV_STATES = [
+	{
+		key: "under_1_50",
+		label: "< 1.50x (Baixo)"
+	},
+	{
+		key: "1_50_to_2_00",
+		label: "1.50x – 1.99x"
+	},
+	{
+		key: "2_00_to_5_00",
+		label: "2.00x – 4.99x (Roxo)"
+	},
+	{
+		key: "5_00_to_10_00",
+		label: "5.00x – 9.99x (Alto)"
+	},
+	{
+		key: "over_10_00",
+		label: ">= 10.00x (Rosa)"
+	}
+];
+function classifyMarkovState(mult) {
+	if (mult < 1.5) return "under_1_50";
+	if (mult < 2) return "1_50_to_2_00";
+	if (mult < 5) return "2_00_to_5_00";
+	if (mult < 10) return "5_00_to_10_00";
+	return "over_10_00";
+}
+function quantile(sorted, q) {
+	if (sorted.length === 0) return null;
+	if (sorted.length === 1) return sorted[0];
+	const pos = (sorted.length - 1) * q;
+	const base = Math.floor(pos);
+	const rest = pos - base;
+	const next = sorted[base + 1] ?? sorted[base];
+	return sorted[base] + rest * (next - sorted[base]);
+}
+function computePostPeakBucket(rounds, threshold, label, baselineUnder150Pct) {
+	const peakIndices = [];
+	for (let i = 0; i < rounds.length; i++) if (rounds[i].multiplier >= threshold) peakIndices.push(i);
+	const totalOccurrences = peakIndices.length;
+	const lastIdx = totalOccurrences > 0 ? peakIndices[totalOccurrences - 1] : null;
+	const lastSeenRoundsAgo = lastIdx !== null ? rounds.length - 1 - lastIdx : null;
+	const activeJustHappened = lastSeenRoundsAgo === 0;
+	const p0 = baselineUnder150Pct / 100;
+	return {
+		threshold,
+		label,
+		totalOccurrences,
+		lastSeenRoundsAgo,
+		activeJustHappened,
+		horizons: [
+			1,
+			3,
+			5
+		].map((h) => {
+			const validEvents = peakIndices.filter((idx) => idx + h < rounds.length);
+			const nextMults = [];
+			for (const idx of validEvents) for (let step = 1; step <= h; step++) nextMults.push(rounds[idx + step].multiplier);
+			const evaluatedRounds = nextMults.length;
+			if (evaluatedRounds === 0) return {
+				horizonRounds: h,
+				sampleEvents: 0,
+				evaluatedRounds: 0,
+				under150Pct: 0,
+				under150DeltaPct: 0,
+				above200Pct: 0,
+				above500Pct: 0,
+				avgMultiplier: 0,
+				zScoreUnder150: 0,
+				statisticallySignificant: false,
+				verdictLabel: "Amostra insuficiente"
+			};
+			const under150Count = nextMults.filter((m) => m < 1.5).length;
+			const above200Count = nextMults.filter((m) => m >= 2).length;
+			const above500Count = nextMults.filter((m) => m >= 5).length;
+			const sum = nextMults.reduce((acc, m) => acc + m, 0);
+			const under150Pct = under150Count / evaluatedRounds * 100;
+			const under150DeltaPct = under150Pct - baselineUnder150Pct;
+			const above200Pct = above200Count / evaluatedRounds * 100;
+			const above500Pct = above500Count / evaluatedRounds * 100;
+			const avgMultiplier = sum / evaluatedRounds;
+			let zScoreUnder150 = 0;
+			if (p0 > .01 && p0 < .99 && evaluatedRounds > 0) {
+				const p1 = under150Count / evaluatedRounds;
+				const se = Math.sqrt(p0 * (1 - p0) / evaluatedRounds);
+				zScoreUnder150 = se > 0 ? (p1 - p0) / se : 0;
+			}
+			const statisticallySignificant = evaluatedRounds >= 15 && Math.abs(zScoreUnder150) >= 1.96;
+			let verdictLabel = "Comportamento normal / aleatório";
+			if (evaluatedRounds < 10) verdictLabel = "Amostra insuficiente (<10 rod.)";
+			else if (statisticallySignificant && under150DeltaPct > 0) verdictLabel = "Mais baixos que o normal (significativo)";
+			else if (statisticallySignificant && under150DeltaPct < 0) verdictLabel = "Menos baixos após pico (significativo)";
+			else if (under150DeltaPct >= 8) verdictLabel = "Leve alta de baixos (sem significância)";
+			else if (under150DeltaPct <= -8) verdictLabel = "Leve queda de baixos (sem significância)";
+			return {
+				horizonRounds: h,
+				sampleEvents: validEvents.length,
+				evaluatedRounds,
+				under150Pct,
+				under150DeltaPct,
+				above200Pct,
+				above500Pct,
+				avgMultiplier,
+				zScoreUnder150,
+				statisticallySignificant,
+				verdictLabel
+			};
+		})
+	};
+}
+function computeMarkovMatrix(rounds) {
+	const buckets = /* @__PURE__ */ new Map();
+	for (const st of MARKOV_STATES) buckets.set(st.key, {
+		counts: {
+			under_1_50: 0,
+			"1_50_to_2_00": 0,
+			"2_00_to_5_00": 0,
+			"5_00_to_10_00": 0,
+			over_10_00: 0
+		},
+		total: 0,
+		nextSum: 0
+	});
+	for (let i = 0; i < rounds.length - 1; i++) {
+		const fromKey = classifyMarkovState(rounds[i].multiplier);
+		const toKey = classifyMarkovState(rounds[i + 1].multiplier);
+		const entry = buckets.get(fromKey);
+		entry.counts[toKey]++;
+		entry.total++;
+		entry.nextSum += rounds[i + 1].multiplier;
+	}
+	return MARKOV_STATES.map((st) => {
+		const entry = buckets.get(st.key);
+		const total = entry.total;
+		const probsPct = {
+			under_1_50: total > 0 ? entry.counts.under_1_50 / total * 100 : 0,
+			"1_50_to_2_00": total > 0 ? entry.counts["1_50_to_2_00"] / total * 100 : 0,
+			"2_00_to_5_00": total > 0 ? entry.counts["2_00_to_5_00"] / total * 100 : 0,
+			"5_00_to_10_00": total > 0 ? entry.counts["5_00_to_10_00"] / total * 100 : 0,
+			over_10_00: total > 0 ? entry.counts.over_10_00 / total * 100 : 0
+		};
+		return {
+			fromState: st.key,
+			fromLabel: st.label,
+			sampleCount: total,
+			probsPct,
+			nextAvgMultiplier: total > 0 ? entry.nextSum / total : 0
+		};
+	});
+}
+function computePeakIntervals(rounds, threshold, label) {
+	const indices = [];
+	for (let i = 0; i < rounds.length; i++) if (rounds[i].multiplier >= threshold) indices.push(i);
+	const gaps = [];
+	let clustered = 0;
+	for (let k = 1; k < indices.length; k++) {
+		const gap = indices[k] - indices[k - 1] - 1;
+		gaps.push(gap);
+		if (gap <= 2) clustered++;
+	}
+	gaps.sort((a, b) => a - b);
+	let currentGap = 0;
+	for (let i = rounds.length - 1; i >= 0; i--) {
+		if (rounds[i].multiplier >= threshold) break;
+		currentGap++;
+	}
+	return {
+		threshold,
+		label,
+		count: indices.length,
+		minGap: gaps.length > 0 ? gaps[0] : null,
+		medianGap: quantile(gaps, .5),
+		p90Gap: quantile(gaps, .9),
+		maxGap: gaps.length > 0 ? gaps[gaps.length - 1] : null,
+		currentGap,
+		clusterRatePct: gaps.length > 0 ? clustered / gaps.length * 100 : 0
+	};
+}
+function computeRegimeAnalysis(rounds, baselineUnder150Pct, postPeak10x) {
+	if (rounds.length < 15) return {
+		regime: "INSUFICIENTE",
+		regimeLabel: "Amostra Insuficiente (<15 rodadas)",
+		cautionScore: 30,
+		recent15LowPct: 0,
+		recent15PeakCount: 0,
+		volatilityIndex: 0,
+		recommendedAction: "Recolher pelo menos 15 rodadas antes de ativar filtros de regime."
+	};
+	const recent15 = rounds.slice(-15);
+	const recent15LowPct = recent15.filter((r) => r.multiplier < 1.5).length / recent15.length * 100;
+	const recent15PeakCount = recent15.filter((r) => r.multiplier >= 5).length;
+	const mean = recent15.reduce((acc, r) => acc + r.multiplier, 0) / recent15.length;
+	const variance = recent15.reduce((acc, r) => acc + (r.multiplier - mean) ** 2, 0) / recent15.length;
+	const volatilityIndex = mean > 0 ? Math.sqrt(variance) / mean : 0;
+	let cautionScore = 35;
+	if (recent15LowPct >= 60) cautionScore += 30;
+	else if (recent15LowPct >= baselineUnder150Pct + 12) cautionScore += 18;
+	if (volatilityIndex >= 1.5) cautionScore += 18;
+	if (postPeak10x?.activeJustHappened) cautionScore += 12;
+	cautionScore = Math.max(10, Math.min(98, Math.round(cautionScore)));
+	if (recent15LowPct >= 55) return {
+		regime: "FRIO_CRISE",
+		regimeLabel: "Regime Frio / Alta Sequência de Baixos",
+		cautionScore,
+		recent15LowPct,
+		recent15PeakCount,
+		volatilityIndex,
+		recommendedAction: "Predomínio de crashes < 1.50x nas últimas 15 rodadas. Priorizar pausa ou alvos mínimos (<= 1.30x) sem aumentar aposta."
+	};
+	if (recent15PeakCount >= 3 || volatilityIndex >= 1.45) return {
+		regime: "VOLATIL_PICOS",
+		regimeLabel: "Regime Volátil / Presença de Picos",
+		cautionScore,
+		recent15LowPct,
+		recent15PeakCount,
+		volatilityIndex,
+		recommendedAction: "Variância elevada por picos recentes. Picos podem alternar com crashes instantâneos; mantenha banca fixa e gestão rígida."
+	};
+	return {
+		regime: "NORMAL",
+		regimeLabel: "Regime Equilibrado / Normal",
+		cautionScore,
+		recent15LowPct,
+		recent15PeakCount,
+		volatilityIndex,
+		recommendedAction: "Distribuição recente próxima da média histórica. Operar apenas dentro das regras e limites da banca."
+	};
+}
+function analyzeAviatorLocalAi(rounds) {
+	const total = rounds.length;
+	const baselineUnder150Pct = total > 0 ? rounds.filter((r) => r.multiplier < 1.5).length / total * 100 : 0;
+	const baselineAbove200Pct = total > 0 ? rounds.filter((r) => r.multiplier >= 2).length / total * 100 : 0;
+	const baselineAvgMultiplier = total > 0 ? rounds.reduce((acc, r) => acc + r.multiplier, 0) / total : 0;
+	const postPeakBuckets = [
+		computePostPeakBucket(rounds, 5, "Picos >= 5.00x", baselineUnder150Pct),
+		computePostPeakBucket(rounds, 10, "Rosas >= 10.00x", baselineUnder150Pct),
+		computePostPeakBucket(rounds, 25, "Grandes Picos >= 25.00x", baselineUnder150Pct),
+		computePostPeakBucket(rounds, 50, "Extremos >= 50.00x", baselineUnder150Pct)
+	];
+	const markovRows = computeMarkovMatrix(rounds);
+	const currentMarkovState = total > 0 ? classifyMarkovState(rounds[total - 1].multiplier) : null;
+	const peakIntervals = [computePeakIntervals(rounds, 5, "Intervalos entre >= 5.00x"), computePeakIntervals(rounds, 10, "Intervalos entre >= 10.00x (Rosas)")];
+	const post10 = postPeakBuckets.find((b) => b.threshold === 10);
+	const regime = computeRegimeAnalysis(rounds, baselineUnder150Pct, post10);
+	let localNarrativeSummary = "Registe pelo menos 15 rodadas para a IA estatística medir comportamento pós-pico, transições e regime atual.";
+	if (total >= 15) {
+		const h1_10 = post10?.horizons[0];
+		const h3_10 = post10?.horizons[1];
+		const post10Text = h1_10 && h1_10.evaluatedRounds >= 3 ? `Após rosas (>=10x), a rodada seguinte caiu <1.50x em ${h1_10.under150Pct.toFixed(1)}% (${h1_10.under150DeltaPct >= 0 ? "+" : ""}${h1_10.under150DeltaPct.toFixed(1)} p.p. vs média global de ${baselineUnder150Pct.toFixed(1)}%, z=${h1_10.zScoreUnder150.toFixed(2)}: ${h1_10.verdictLabel}). Nas 3 rodadas seguintes: ${h3_10?.under150Pct.toFixed(1) ?? "0.0"}% abaixo de 1.50x.` : "Ainda há poucas ocorrências >= 10.00x no histórico para medir o pós-pico com fiabilidade.";
+		const p10Int = peakIntervals[1];
+		const intervalText = p10Int && p10Int.medianGap !== null ? `Intervalo mediano entre >=10x: ${p10Int.medianGap.toFixed(0)} rodadas (máx: ${p10Int.maxGap}, atual: ${p10Int.currentGap} rodadas sem >=10x, cluster <=3 rodadas: ${p10Int.clusterRatePct.toFixed(0)}%).` : "Ainda sem 2 picos >=10x para medir espaçamento.";
+		localNarrativeSummary = `${regime.regimeLabel} (Cautela ${regime.cautionScore}/100). ${post10Text} ${intervalText}`;
+	}
+	return {
+		baselineUnder150Pct,
+		baselineAbove200Pct,
+		baselineAvgMultiplier,
+		postPeakBuckets,
+		markovRows,
+		currentMarkovState,
+		peakIntervals,
+		regime,
+		localNarrativeSummary
+	};
+}
+function answerAviatorQuestionLocally(rounds, report, question) {
+	if (rounds.length < 5) return `Ainda existem apenas ${rounds.length} rodadas registadas. Recolha pelo menos 15–30 rodadas para a IA analisar o comportamento pós-pico e os padrões com rigor estatístico.`;
+	const q = question.toLowerCase();
+	const post5 = report.postPeakBuckets.find((b) => b.threshold === 5);
+	const post10 = report.postPeakBuckets.find((b) => b.threshold === 10);
+	const post25 = report.postPeakBuckets.find((b) => b.threshold === 25);
+	if (q.includes("alto") || q.includes("grave") || q.includes("pico") || q.includes("10x") || q.includes("25x") || q.includes("50x") || q.includes("baixo") || q.includes("depois") || q.includes("após")) {
+		const lines = [`Análise Pós-Pico nos teus ${rounds.length} voos reais (média global <1.50x = ${report.baselineUnder150Pct.toFixed(1)}%):`];
+		for (const bucket of [
+			post5,
+			post10,
+			post25
+		]) {
+			if (!bucket) continue;
+			const h1 = bucket.horizons[0];
+			const h3 = bucket.horizons[1];
+			if (bucket.totalOccurrences === 0) lines.push(`• ${bucket.label}: 0 ocorrências registadas até agora.`);
+			else lines.push(`• ${bucket.label} (${bucket.totalOccurrences}x): na 1ª rodada após = ${h1.under150Pct.toFixed(1)}% <1.50x (${h1.under150DeltaPct >= 0 ? "+" : ""}${h1.under150DeltaPct.toFixed(1)} p.p., z=${h1.zScoreUnder150.toFixed(2)} — ${h1.verdictLabel}); nas 3 seguintes = ${h3.under150Pct.toFixed(1)}% <1.50x.`);
+		}
+		const p10Int = report.peakIntervals[1];
+		if (p10Int && p10Int.medianGap !== null) lines.push(`• Sequências de pico (>=10x): ${p10Int.clusterRatePct.toFixed(1)}% repetiram outro pico dentro de 3 rodadas; intervalo mediano de ${p10Int.medianGap.toFixed(0)} rodadas (atual sem >=10x: ${p10Int.currentGap}).`);
+		lines.push("Nota honesta: mesmo se houver variação na amostra, o RNG do Aviator é independente em cada rodada — trate qualquer excesso pós-pico como alerta de cautela, nunca como certeza.");
+		return lines.join("\n");
+	}
+	if (q.includes("markov") || q.includes("próxima") || q.includes("transição") || q.includes("padr")) {
+		const curRow = report.markovRows.find((r) => r.fromState === report.currentMarkovState);
+		if (!curRow || curRow.sampleCount === 0) return `${report.localNarrativeSummary}\nAinda sem transições suficientes a partir do estado atual.`;
+		return [
+			`Estado atual (${curRow.fromLabel}, ${curRow.sampleCount} amostras históricas):`,
+			`• Próx. <1.50x: ${curRow.probsPct.under_1_50.toFixed(1)}% | 1.50–1.99x: ${curRow.probsPct["1_50_to_2_00"].toFixed(1)}% | >=2.00x: ${(curRow.probsPct["2_00_to_5_00"] + curRow.probsPct["5_00_to_10_00"] + curRow.probsPct.over_10_00).toFixed(1)}%`,
+			`• Média seguinte após este estado: ${curRow.nextAvgMultiplier.toFixed(2)}x.`,
+			`Regime atual: ${report.regime.regimeLabel} (Cautela ${report.regime.cautionScore}/100).`
+		].join("\n");
+	}
+	return `${report.localNarrativeSummary}\nRecomendação atual: ${report.regime.recommendedAction}`;
+}
 // src/modules/aviator/aviatorBankrollManager.ts
 function evaluateBankrollLimits(cfg, state) {
 	const reasons = [];
@@ -19852,6 +20169,12 @@ function runAllAviatorTests() {
 	});
 	const coClosed = recordCashOutOutcomeOnCrash(coCfg, coAlert, 2.2, true);
 	cases.push(assert(coAlert.alertActiveNow && coClosed.reachedCount === 1 && !coClosed.alertActiveNow, "12. Cash Out Manager: Alerta em Tempo Real e Registo", `Alerta ativo em 1.58x=${coAlert.alertActiveNow}, atingidos=${coClosed.reachedCount}`));
+	const aiReport = analyzeAviatorLocalAi(dataset);
+	const bucket10 = aiReport.postPeakBuckets.find((b) => b.threshold === 10);
+	const markovTotal = aiReport.markovRows.reduce((acc, r) => acc + r.sampleCount, 0);
+	cases.push(assert(aiReport.postPeakBuckets.length === 4 && (bucket10?.totalOccurrences ?? 0) === 2 && markovTotal === dataset.length - 1 && aiReport.regime.regime !== "INSUFICIENTE", "13. IA Pós-Pico, Matriz Markov & Detetor de Regimes", `>=10x=${bucket10?.totalOccurrences ?? 0}x, Transições=${markovTotal}, Regime=${aiReport.regime.regimeLabel}`));
+	const qaAnswer = answerAviatorQuestionLocally(dataset, aiReport, "Quando sai número muito alto acima de 10x vem números baixos depois?");
+	cases.push(assert(qaAnswer.includes("Análise Pós-Pico") && qaAnswer.includes("independente"), "14. Resposta Offline da IA sobre Pós-Pico", `Diagnóstico gerado (${qaAnswer.length} chars) com aviso de independência RNG`));
 	const passedCount = cases.filter((c) => c.passed).length;
 	return {
 		passedCount,
@@ -19875,6 +20198,7 @@ function analyzeAviatorEngine(params) {
 	});
 	const statistics = computeAviatorStatistics(rounds, catConfig);
 	const bankrollStatus = evaluateBankrollLimits(bankrollCfg, bankrollState);
+	const ai = analyzeAviatorLocalAi(rounds);
 	return {
 		totalRounds: rounds.length,
 		lastRound: rounds.length > 0 ? rounds[rounds.length - 1] : null,
@@ -19883,6 +20207,7 @@ function analyzeAviatorEngine(params) {
 		learning,
 		statistics,
 		bankrollStatus,
+		ai,
 		disclaimer: "Sistema de análise estatística e simulação educacional. Não garante lucro nem prevê com certeza multiplicadores gerados aleatoriamente."
 	};
 }
@@ -19901,6 +20226,9 @@ var AviatorDashboard = ({ rounds, analysis, liveState, captureStatus, bankrollCf
 	const [confirmReset, setConfirmReset] = (0, import_react.useState)(false);
 	const [testReport, setTestReport] = (0, import_react.useState)(null);
 	const [screenshotScan, setScreenshotScan] = (0, import_react.useState)(null);
+	const [aiQuestion, setAiQuestion] = (0, import_react.useState)("Quando sai um número muito alto (>=10x), a seguir vêm números baixos?");
+	const [aiLoading, setAiLoading] = (0, import_react.useState)(false);
+	const [aiResponse, setAiResponse] = (0, import_react.useState)(null);
 	const [dateFrom, setDateFrom] = (0, import_react.useState)("");
 	const [dateTo, setDateTo] = (0, import_react.useState)("");
 	const [categoryFilter, setCategoryFilter] = (0, import_react.useState)("ALL");
@@ -19990,6 +20318,75 @@ var AviatorDashboard = ({ rounds, analysis, liveState, captureStatus, bankrollCf
 			e.target.value = "";
 		}
 	};
+	const handleAskAi = async (customQuestion) => {
+		const q = (customQuestion ?? aiQuestion).trim();
+		if (customQuestion) setAiQuestion(customQuestion);
+		if (rounds.length < 5) {
+			setAiResponse({
+				answer: `Registe pelo menos 5 rodadas (atual: ${rounds.length}) para a IA analisar os dados reais.`,
+				sourceLabel: "IA Estatística Local"
+			});
+			return;
+		}
+		setAiLoading(true);
+		const localFallbackAnswer = answerAviatorQuestionLocally(rounds, analysis.ai, q);
+		if (isAndroidApk && (window.location.hostname === "localhost" || window.location.protocol === "capacitor:")) {
+			setAiResponse({
+				answer: localFallbackAnswer,
+				sourceLabel: "IA Estatística Local (APK Offline · 100% Gratuito)"
+			});
+			setAiLoading(false);
+			return;
+		}
+		try {
+			const postPeakSummary = analysis.ai.postPeakBuckets.map((b) => {
+				const h1 = b.horizons[0];
+				const h3 = b.horizons[1];
+				return `${b.label}: ${b.totalOccurrences}x | Próx.1: ${h1.under150Pct.toFixed(1)}% <1.5x (delta ${h1.under150DeltaPct >= 0 ? "+" : ""}${h1.under150DeltaPct.toFixed(1)}pp, z=${h1.zScoreUnder150.toFixed(2)}) | Próx.3: ${h3.under150Pct.toFixed(1)}% <1.5x`;
+			}).join(" ; ");
+			const strategiesSummary = analysis.strategies.rankingByRoi.slice(0, 4).map((s) => `${s.name}: acerto ${s.hitRatePct.toFixed(1)}%, ROI ${s.simulatedRoiPct.toFixed(1)}%`).join(" | ");
+			const controller = new AbortController();
+			const timeout = window.setTimeout(() => controller.abort(), 7e3);
+			const res = await fetch("/api/analyze-aviator-ai", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				signal: controller.signal,
+				body: JSON.stringify({
+					totalRounds: rounds.length,
+					recentMultipliers: rounds.slice(-40).map((r) => r.multiplier),
+					question: q,
+					localSummary: analysis.ai.localNarrativeSummary,
+					postPeakSummary,
+					regimeSummary: `${analysis.ai.regime.regimeLabel} (Cautela ${analysis.ai.regime.cautionScore}/100) - ${analysis.ai.regime.recommendedAction}`,
+					strategiesSummary
+				})
+			});
+			window.clearTimeout(timeout);
+			if (!res.ok) {
+				setAiResponse({
+					answer: localFallbackAnswer,
+					sourceLabel: "IA Estatística Local (Modo Offline Automático)"
+				});
+				return;
+			}
+			const data = await res.json();
+			if (data.answer && data.answer.trim().length > 0) setAiResponse({
+				answer: data.answer.trim(),
+				sourceLabel: `Gemini AI (${data.model ?? "gemini-4-hydrogen"} · Gratuito)`
+			});
+			else setAiResponse({
+				answer: localFallbackAnswer,
+				sourceLabel: "IA Estatística Local (Fallback)"
+			});
+		} catch {
+			setAiResponse({
+				answer: localFallbackAnswer,
+				sourceLabel: "IA Estatística Local (Offline · 100% Gratuito)"
+			});
+		} finally {
+			setAiLoading(false);
+		}
+	};
 	const sections = [
 		{
 			id: "live",
@@ -20013,7 +20410,7 @@ var AviatorDashboard = ({ rounds, analysis, liveState, captureStatus, bankrollCf
 		},
 		{
 			id: "learning",
-			label: "E. Aprendizagem",
+			label: "E. IA & Pós-Pico",
 			icon: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Brain, { className: "h-3.5 w-3.5" })
 		},
 		{
@@ -20354,6 +20751,34 @@ var AviatorDashboard = ({ rounds, analysis, liveState, captureStatus, bankrollCf
 										children: activeSug.reason
 									})
 								]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "rounded-lg border border-slate-800 bg-[#0B0F17] p-4 space-y-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex flex-wrap items-center justify-between gap-2",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "inline-flex items-center gap-1.5 text-xs font-semibold text-amber-300",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sparkles, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: ["IA Estatística: ", analysis.ai.regime.regimeLabel] })]
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex items-center gap-2",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+											className: "font-mono text-[11px] text-slate-300",
+											children: [
+												"Cautela: ",
+												analysis.ai.regime.cautionScore,
+												"/100"
+											]
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+											type: "button",
+											onClick: () => setSection("learning"),
+											className: "rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-[11px] text-amber-300 hover:bg-slate-800 cursor-pointer",
+											children: "Abrir Painel IA"
+										})]
+									})]
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+									className: "text-[11px] text-slate-400",
+									children: analysis.ai.localNarrativeSummary
+								})]
 							}),
 							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 								className: "rounded-lg border border-slate-800 bg-[#0B0F17] p-4 space-y-2.5",
@@ -20865,117 +21290,482 @@ var AviatorDashboard = ({ rounds, analysis, liveState, captureStatus, bankrollCf
 					})
 				})]
 			}),
-			section === "learning" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
-				className: "rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4",
-				children: [
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "flex flex-col sm:flex-row sm:items-center justify-between gap-3",
-						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
-							className: "text-base font-semibold text-slate-100",
-							children: "E. Aprendizagem Contínua & Prevenção de Sobreajuste"
-						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
-							className: "text-xs text-slate-400",
-							children: analysis.learning.recommendationNote
-						})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: onSaveLearningSnapshot,
-							className: "rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800 cursor-pointer shrink-0",
-							children: "Guardar Avaliação Atual"
-						})]
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-						className: "flex flex-wrap items-center gap-2",
-						children: [[
-							"50",
-							"100",
-							"500",
-							"1000",
-							"all"
-						].map((wk) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
-							type: "button",
-							onClick: () => onSelectLearningWindow(wk),
-							className: `rounded-lg px-3 py-1.5 text-xs font-medium cursor-pointer ${selectedWindow === wk ? "bg-blue-600 text-white" : "bg-[#0B0F17] border border-slate-800 text-slate-400"}`,
-							children: wk === "all" ? "Todo Histórico" : `Últimas ${wk}`
-						}, wk)), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
-							className: "ml-auto font-mono text-xs text-slate-300",
-							children: [
-								"Risco Overfitting:",
-								" ",
-								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
-									className: analysis.learning.overfittingRisk === "ELEVADO" ? "text-red-400" : analysis.learning.overfittingRisk === "MODERADO" ? "text-amber-300" : "text-emerald-400",
-									children: analysis.learning.overfittingRisk
-								})
-							]
-						})]
-					}),
-					analysis.learning.degradationWarning && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200",
-						children: analysis.learning.degradationWarning
-					}),
-					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
-						className: "overflow-x-auto",
-						children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
-							className: "w-full text-left text-xs font-mono tabular-nums",
-							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
-								className: "border-b border-slate-800 text-slate-400 font-sans",
+			section === "learning" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "space-y-5",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex flex-col sm:flex-row sm:items-center justify-between gap-3",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", {
+								className: "text-base font-semibold text-slate-100 flex items-center gap-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sparkles, { className: "h-4 w-4 text-amber-400" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "E. IA Quantitativa · Analisador Pós-Pico & Sequências" })]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "text-xs text-slate-400",
+								children: "Mede nos teus dados reais se números muito altos (ex: >=10x, >=25x) trazem números baixos a seguir — 100% gratuito no APK e na Web."
+							})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+								className: `rounded-md border px-2.5 py-1 font-mono text-xs font-bold shrink-0 ${analysis.ai.regime.regime === "FRIO_CRISE" ? "border-red-500/50 bg-red-500/15 text-red-300" : analysis.ai.regime.regime === "VOLATIL_PICOS" ? "border-amber-500/50 bg-amber-500/15 text-amber-300" : analysis.ai.regime.regime === "NORMAL" ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-slate-700 bg-slate-800 text-slate-300"}`,
 								children: [
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
-										className: "py-2 pr-3",
-										children: "Janela"
+									"Cautela IA: ",
+									analysis.ai.regime.cautionScore,
+									"/100"
+								]
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "grid grid-cols-1 md:grid-cols-3 gap-3 text-xs",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "md:col-span-2 rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5 space-y-1.5",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "font-semibold text-amber-300",
+										children: analysis.ai.regime.regimeLabel
 									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
-										className: "py-2 px-2 text-right",
-										children: "Amostra"
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+										className: "text-slate-300 leading-relaxed",
+										children: analysis.ai.localNarrativeSummary
 									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
-										className: "py-2 px-2",
-										children: "Melhor no Treino (70%)"
-									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
-										className: "py-2 px-2 text-right",
-										children: "Treino"
-									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
-										className: "py-2 px-2 text-right",
-										children: "Validação (30%)"
-									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
-										className: "py-2 pl-2 text-right",
-										children: "ROI Validação"
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+										className: "text-[11px] text-slate-400",
+										children: analysis.ai.regime.recommendedAction
 									})
 								]
-							}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", {
-								className: "divide-y divide-slate-800/70",
-								children: analysis.learning.windows.map((w) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
-										className: "py-2 pr-3 font-sans text-slate-200",
-										children: w.label
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5 space-y-1.5 font-mono tabular-nums",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "font-sans text-[11px] text-slate-400",
+										children: [
+											"Baseline Global (",
+											rounds.length,
+											" rod.)"
+										]
 									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
-										className: "py-2 px-2 text-right text-slate-300",
-										children: w.sampleSize
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex justify-between",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "text-slate-400",
+											children: "Baixos (<1.50x):"
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+											className: "text-sky-300 font-bold",
+											children: [analysis.ai.baselineUnder150Pct.toFixed(1), "%"]
+										})]
 									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
-										className: "py-2 px-2 font-sans text-slate-300",
-										children: w.bestStrategyName
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex justify-between",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "text-slate-400",
+											children: "Acima >=2.00x:"
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+											className: "text-purple-300 font-bold",
+											children: [analysis.ai.baselineAbove200Pct.toFixed(1), "%"]
+										})]
 									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
-										className: "py-2 px-2 text-right text-slate-200",
-										children: [w.trainHitRatePct.toFixed(1), "%"]
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex justify-between",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "text-slate-400",
+											children: "15 rec. <1.50x:"
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+											className: "text-amber-300 font-bold",
+											children: [analysis.ai.regime.recent15LowPct.toFixed(1), "%"]
+										})]
 									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
-										className: "py-2 px-2 text-right text-slate-200",
-										children: [w.validationHitRatePct.toFixed(1), "%"]
-									}),
-									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
-										className: `py-2 pl-2 text-right font-semibold ${w.validationRoiPct >= 0 ? "text-emerald-400" : "text-red-400"}`,
-										children: [w.validationRoiPct.toFixed(1), "%"]
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex justify-between",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "text-slate-400",
+											children: "Índice Volat.:"
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "text-slate-200 font-bold",
+											children: analysis.ai.regime.volatilityIndex.toFixed(2)
+										})]
 									})
-								] }, w.windowKey))
+								]
 							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "space-y-2",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "text-xs font-semibold text-slate-200",
+								children: "Teste Empírico Pós-Pico: O que saiu logo após um número muito alto?"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "overflow-x-auto",
+								children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+									className: "w-full text-left text-xs font-mono tabular-nums",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+										className: "border-b border-slate-800 text-slate-400 font-sans",
+										children: [
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+												className: "py-2 pr-3",
+												children: "Faixa de Pico"
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+												className: "py-2 px-2 text-right",
+												children: "Ocorr."
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+												className: "py-2 px-2 text-right",
+												children: "1ª Rod. <1.5x"
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+												className: "py-2 px-2 text-right",
+												children: "Desvio vs Normal"
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+												className: "py-2 px-2 text-right",
+												children: "Próx. 3 <1.5x"
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+												className: "py-2 px-2 text-right",
+												children: "Próx. 5 <1.5x"
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+												className: "py-2 pl-2 font-sans",
+												children: "Conclusão Estatística (1ª Rod.)"
+											})
+										]
+									}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", {
+										className: "divide-y divide-slate-800/70",
+										children: analysis.ai.postPeakBuckets.map((b) => {
+											const h1 = b.horizons[0];
+											const h3 = b.horizons[1];
+											const h5 = b.horizons[2];
+											return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+												className: b.activeJustHappened ? "bg-amber-500/10" : "",
+												children: [
+													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
+														className: "py-2 pr-3 font-sans text-slate-100",
+														children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+															className: "font-semibold",
+															children: b.label
+														}), b.activeJustHappened && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+															className: "ml-1.5 rounded bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-300",
+															children: "AGORA"
+														})]
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+														className: "py-2 px-2 text-right text-slate-300",
+														children: b.totalOccurrences
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+														className: "py-2 px-2 text-right text-sky-300",
+														children: h1.evaluatedRounds > 0 ? `${h1.under150Pct.toFixed(1)}%` : "--"
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+														className: `py-2 px-2 text-right font-semibold ${h1.evaluatedRounds === 0 ? "text-slate-500" : h1.under150DeltaPct > 6 ? "text-red-400" : h1.under150DeltaPct < -6 ? "text-emerald-400" : "text-slate-300"}`,
+														children: h1.evaluatedRounds > 0 ? `${h1.under150DeltaPct >= 0 ? "+" : ""}${h1.under150DeltaPct.toFixed(1)}pp (z=${h1.zScoreUnder150.toFixed(1)})` : "--"
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+														className: "py-2 px-2 text-right text-slate-300",
+														children: h3.evaluatedRounds > 0 ? `${h3.under150Pct.toFixed(1)}%` : "--"
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+														className: "py-2 px-2 text-right text-slate-300",
+														children: h5.evaluatedRounds > 0 ? `${h5.under150Pct.toFixed(1)}%` : "--"
+													}),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+														className: "py-2 pl-2 font-sans text-[11px] text-slate-300",
+														children: h1.verdictLabel
+													})
+												]
+											}, b.threshold);
+										})
+									})]
+								})
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "grid grid-cols-1 lg:grid-cols-2 gap-4",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "rounded-lg border border-slate-800 bg-[#0B0F17] p-4 space-y-2.5",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "text-xs font-semibold text-slate-200",
+									children: "Sequências & Espaçamento Entre Picos"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "space-y-2 text-xs font-mono tabular-nums",
+									children: analysis.ai.peakIntervals.map((pi) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "rounded border border-slate-800/80 p-2.5 space-y-1",
+										children: [
+											/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "font-sans font-semibold text-fuchsia-300 flex justify-between",
+												children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: pi.label }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [pi.count, "x registados"] })]
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "grid grid-cols-4 gap-1 text-[11px] text-slate-300",
+												children: [
+													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: ["Mín: ", pi.minGap !== null ? `${pi.minGap}r` : "--"] }),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: ["Mediana: ", pi.medianGap !== null ? `${pi.medianGap.toFixed(0)}r` : "--"] }),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: ["Máx: ", pi.maxGap !== null ? `${pi.maxGap}r` : "--"] }),
+													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+														"Atual: ",
+														pi.currentGap,
+														"r"
+													] })
+												]
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "font-sans text-[11px] text-slate-400",
+												children: [
+													"Cluster (outro pico dentro de 3 rodadas):",
+													" ",
+													/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("strong", {
+														className: "font-mono text-amber-300",
+														children: [pi.clusterRatePct.toFixed(1), "%"]
+													})
+												]
+											})
+										]
+									}, pi.threshold))
+								})]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "rounded-lg border border-slate-800 bg-[#0B0F17] p-4 space-y-2.5",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "text-xs font-semibold text-slate-200",
+									children: "Matriz de Transição (Cadeia de Markov · Próxima Rodada)"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "overflow-x-auto",
+									children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+										className: "w-full text-left text-[11px] font-mono tabular-nums",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+											className: "border-b border-slate-800 text-slate-400 font-sans",
+											children: [
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+													className: "py-1.5 pr-2",
+													children: "Estado Atual"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+													className: "py-1.5 px-1.5 text-right",
+													children: "<1.5x"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+													className: "py-1.5 px-1.5 text-right",
+													children: "1.5–2x"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+													className: "py-1.5 px-1.5 text-right",
+													children: "2–5x"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+													className: "py-1.5 px-1.5 text-right",
+													children: ">=5x"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+													className: "py-1.5 pl-1.5 text-right",
+													children: "Média Seg."
+												})
+											]
+										}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", {
+											className: "divide-y divide-slate-800/70",
+											children: analysis.ai.markovRows.map((row) => {
+												const isCur = analysis.ai.currentMarkovState === row.fromState;
+												const ge5 = row.probsPct["5_00_to_10_00"] + row.probsPct.over_10_00;
+												return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+													className: isCur ? "bg-blue-500/15" : "",
+													children: [
+														/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
+															className: "py-1.5 pr-2 font-sans text-slate-200",
+															children: [row.fromLabel, isCur && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+																className: "ml-1 text-[10px] text-blue-300 font-bold",
+																children: "(ATUAL)"
+															})]
+														}),
+														/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+															className: "py-1.5 px-1.5 text-right text-sky-300",
+															children: row.sampleCount > 0 ? `${row.probsPct.under_1_50.toFixed(0)}%` : "--"
+														}),
+														/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+															className: "py-1.5 px-1.5 text-right text-slate-300",
+															children: row.sampleCount > 0 ? `${row.probsPct["1_50_to_2_00"].toFixed(0)}%` : "--"
+														}),
+														/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+															className: "py-1.5 px-1.5 text-right text-purple-300",
+															children: row.sampleCount > 0 ? `${row.probsPct["2_00_to_5_00"].toFixed(0)}%` : "--"
+														}),
+														/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+															className: "py-1.5 px-1.5 text-right text-fuchsia-300",
+															children: row.sampleCount > 0 ? `${ge5.toFixed(0)}%` : "--"
+														}),
+														/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+															className: "py-1.5 pl-1.5 text-right text-emerald-300",
+															children: row.sampleCount > 0 ? `${row.nextAvgMultiplier.toFixed(2)}x` : "--"
+														})
+													]
+												}, row.fromState);
+											})
+										})]
+									})
+								})]
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "rounded-lg border border-blue-500/30 bg-[#0B0F17] p-4 space-y-3",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex flex-col sm:flex-row sm:items-center justify-between gap-2",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "text-xs font-semibold text-blue-300 flex items-center gap-1.5",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Brain, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Analista IA dos Teus Dados (Gemini Gratuito + Motor Local APK)" })]
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: "text-[11px] text-slate-400",
+										children: "Zero configurações externas: funciona direto no APK (Local) e no Servidor Web (Gemini)"
+									})]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "flex flex-wrap gap-1.5",
+									children: [
+										"Quando sai >=10x vêm números baixos a seguir?",
+										"Como estão os intervalos e clusters de pico?",
+										"Qual a transição provável do estado atual (Markov)?"
+									].map((preset) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+										type: "button",
+										onClick: () => handleAskAi(preset),
+										disabled: aiLoading,
+										className: "rounded-md border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] text-slate-300 hover:border-blue-500/60 hover:text-white cursor-pointer disabled:opacity-50",
+										children: preset
+									}, preset))
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex flex-col sm:flex-row gap-2",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+										type: "text",
+										value: aiQuestion,
+										onChange: (e) => setAiQuestion(e.target.value),
+										placeholder: "Pergunte sobre picos, números baixos após >=10x, ou risco...",
+										className: "flex-1 rounded-lg border border-slate-700 bg-[#131924] px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:outline-none"
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+										type: "button",
+										onClick: () => handleAskAi(),
+										disabled: aiLoading,
+										className: "inline-flex items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 cursor-pointer disabled:opacity-50 shrink-0",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Send, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: aiLoading ? "A analisar..." : "Analisar com IA" })]
+									})]
+								}),
+								aiResponse && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "rounded-lg border border-slate-800 bg-[#131924] p-3.5 space-y-1.5",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "text-[11px] font-mono text-amber-300",
+										children: aiResponse.sourceLabel
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "text-xs text-slate-200 whitespace-pre-line leading-relaxed",
+										children: aiResponse.answer
+									})]
+								})
+							]
 						})
-					})
-				]
+					]
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex flex-col sm:flex-row sm:items-center justify-between gap-3",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+								className: "text-base font-semibold text-slate-100",
+								children: "Aprendizagem Contínua & Prevenção de Sobreajuste"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "text-xs text-slate-400",
+								children: analysis.learning.recommendationNote
+							})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: onSaveLearningSnapshot,
+								className: "rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-800 cursor-pointer shrink-0",
+								children: "Guardar Avaliação Atual"
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex flex-wrap items-center gap-2",
+							children: [[
+								"50",
+								"100",
+								"500",
+								"1000",
+								"all"
+							].map((wk) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+								type: "button",
+								onClick: () => onSelectLearningWindow(wk),
+								className: `rounded-lg px-3 py-1.5 text-xs font-medium cursor-pointer ${selectedWindow === wk ? "bg-blue-600 text-white" : "bg-[#0B0F17] border border-slate-800 text-slate-400"}`,
+								children: wk === "all" ? "Todo Histórico" : `Últimas ${wk}`
+							}, wk)), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+								className: "ml-auto font-mono text-xs text-slate-300",
+								children: [
+									"Risco Overfitting:",
+									" ",
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
+										className: analysis.learning.overfittingRisk === "ELEVADO" ? "text-red-400" : analysis.learning.overfittingRisk === "MODERADO" ? "text-amber-300" : "text-emerald-400",
+										children: analysis.learning.overfittingRisk
+									})
+								]
+							})]
+						}),
+						analysis.learning.degradationWarning && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-200",
+							children: analysis.learning.degradationWarning
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "overflow-x-auto",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+								className: "w-full text-left text-xs font-mono tabular-nums",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+									className: "border-b border-slate-800 text-slate-400 font-sans",
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 pr-3",
+											children: "Janela"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 px-2 text-right",
+											children: "Amostra"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 px-2",
+											children: "Melhor no Treino (70%)"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 px-2 text-right",
+											children: "Treino"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 px-2 text-right",
+											children: "Validação (30%)"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 pl-2 text-right",
+											children: "ROI Validação"
+										})
+									]
+								}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", {
+									className: "divide-y divide-slate-800/70",
+									children: analysis.learning.windows.map((w) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", { children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+											className: "py-2 pr-3 font-sans text-slate-200",
+											children: w.label
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+											className: "py-2 px-2 text-right text-slate-300",
+											children: w.sampleSize
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+											className: "py-2 px-2 font-sans text-slate-300",
+											children: w.bestStrategyName
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
+											className: "py-2 px-2 text-right text-slate-200",
+											children: [w.trainHitRatePct.toFixed(1), "%"]
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
+											className: "py-2 px-2 text-right text-slate-200",
+											children: [w.validationHitRatePct.toFixed(1), "%"]
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
+											className: `py-2 pl-2 text-right font-semibold ${w.validationRoiPct >= 0 ? "text-emerald-400" : "text-red-400"}`,
+											children: [w.validationRoiPct.toFixed(1), "%"]
+										})
+									] }, w.windowKey))
+								})]
+							})
+						})
+					]
+				})]
 			}),
 			section === "bankroll" && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "grid grid-cols-1 lg:grid-cols-12 gap-5",
@@ -23340,9 +24130,9 @@ function App() {
 									})
 								]
 							}),
-							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 								className: "text-[9px] text-slate-400 truncate",
-								children: avTopStrat ? `Melhor ROI: ${avTopStrat.name} (${avTopStrat.simulatedRoiPct.toFixed(1)}%) · ${avSug.reason}` : avSug.reason
+								children: [aviatorAnalysis.ai.postPeakBuckets[1]?.activeJustHappened ? `PÓS-PICO >=10x ATIVO · IA Cautela ${aviatorAnalysis.ai.regime.cautionScore}/100 · ` : `IA: ${aviatorAnalysis.ai.regime.regime} (${aviatorAnalysis.ai.regime.cautionScore}/100) · `, avTopStrat ? `Melhor ROI: ${avTopStrat.name} (${avTopStrat.simulatedRoiPct.toFixed(1)}%)` : avSug.reason]
 							})
 						]
 					}),

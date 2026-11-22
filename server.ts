@@ -119,6 +119,84 @@ app.post('/api/analyze-screenshot', async (req, res) => {
   }
 });
 
+app.post('/api/analyze-aviator-ai', async (req, res) => {
+  if (!ai) {
+    res.status(503).json({
+      error: 'GEMINI_API_KEY não configurada no servidor.',
+    });
+    return;
+  }
+
+  const body = req.body as {
+    totalRounds?: unknown;
+    recentMultipliers?: unknown;
+    question?: unknown;
+    localSummary?: unknown;
+    postPeakSummary?: unknown;
+    regimeSummary?: unknown;
+    strategiesSummary?: unknown;
+  };
+
+  const totalRounds = typeof body.totalRounds === 'number' ? body.totalRounds : 0;
+  const recentMultipliers = Array.isArray(body.recentMultipliers)
+    ? body.recentMultipliers.filter((v): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 1).slice(-40)
+    : [];
+  const question =
+    typeof body.question === 'string' && body.question.trim().length > 0
+      ? body.question.trim().slice(0, 400)
+      : 'Analise se após multiplicadores altos estão a sair números baixos, como estão os picos e qual a postura mais segura para a banca.';
+  const localSummary = typeof body.localSummary === 'string' ? body.localSummary.slice(0, 1200) : '';
+  const postPeakSummary = typeof body.postPeakSummary === 'string' ? body.postPeakSummary.slice(0, 1500) : '';
+  const regimeSummary = typeof body.regimeSummary === 'string' ? body.regimeSummary.slice(0, 800) : '';
+  const strategiesSummary = typeof body.strategiesSummary === 'string' ? body.strategiesSummary.slice(0, 1200) : '';
+
+  if (totalRounds < 5 || recentMultipliers.length < 5) {
+    res.status(400).json({
+      error: 'Registe pelo menos 5 rodadas antes de solicitar análise da IA.',
+    });
+    return;
+  }
+
+  try {
+    const prompt = [
+      'Você é um analista quantitativo rigoroso de dados de Aviator em português.',
+      'REGRAS INVIOLÁVEIS:',
+      '1. Analise APENAS os números reais fornecidos abaixo. Nunca invente resultados.',
+      '2. Seja 100% honesto matematicamente: jogos Provably Fair / RNG têm rodadas independentes; mesmo após picos altos (>=10x, >=25x, >=50x), nunca garanta previsão exata nem lucro.',
+      '3. Nunca recomende Martingale (dobrar aposta após perda). Priorize gestão conservadora de banca e limites de parada.',
+      '4. Responda de forma objetiva, clara e prática (máx. 4 parágrafos curtos ou tópicos).',
+      '',
+      `TOTAL DE RODADAS NA BASE: ${totalRounds}`,
+      `ÚLTIMOS MULTIPLICADORES (cronológico até o mais recente): ${recentMultipliers.map((m) => `${m.toFixed(2)}x`).join(', ')}`,
+      `RESUMO LOCAL: ${localSummary}`,
+      `DADOS PÓS-PICO (APÓS >=5x, >=10x, >=25x): ${postPeakSummary}`,
+      `REGIME ATUAL: ${regimeSummary}`,
+      `DESEMPENHO ESTRATÉGIAS: ${strategiesSummary}`,
+      '',
+      `PERGUNTA DO UTILIZADOR: ${question}`,
+    ].join('\n');
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-4-hydrogen',
+      contents: prompt,
+    });
+
+    const answer = (response.text ?? '').trim();
+    if (!answer) {
+      res.status(502).json({ error: 'Resposta vazia do modelo Gemini.' });
+      return;
+    }
+
+    res.json({
+      answer,
+      model: 'gemini-4-hydrogen',
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro ao consultar Gemini AI.';
+    res.status(500).json({ error: message });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');

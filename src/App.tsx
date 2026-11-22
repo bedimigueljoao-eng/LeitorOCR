@@ -1617,8 +1617,11 @@ export default function App() {
             </div>
 
             <div className="text-[9px] text-slate-400 truncate">
+              {aviatorAnalysis.ai.postPeakBuckets[1]?.activeJustHappened
+                ? `PÓS-PICO >=10x ATIVO · IA Cautela ${aviatorAnalysis.ai.regime.cautionScore}/100 · `
+                : `IA: ${aviatorAnalysis.ai.regime.regime} (${aviatorAnalysis.ai.regime.cautionScore}/100) · `}
               {avTopStrat
-                ? `Melhor ROI: ${avTopStrat.name} (${avTopStrat.simulatedRoiPct.toFixed(1)}%) · ${avSug.reason}`
+                ? `Melhor ROI: ${avTopStrat.name} (${avTopStrat.simulatedRoiPct.toFixed(1)}%)`
                 : avSug.reason}
             </div>
           </div>

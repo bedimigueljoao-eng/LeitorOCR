@@ -1,3 +1,4 @@
+import { analyzeAviatorLocalAi } from './aviatorAiAnalyzer';
 import { evaluateBankrollLimits } from './aviatorBankrollManager';
 import { runAviatorLearningEngine } from './aviatorLearningEngine';
 import { analyzeAviatorPatterns } from './aviatorPatternEngine';
@@ -25,6 +26,7 @@ export * from './aviatorBankrollManager';
 export * from './aviatorAutoBetManager';
 export * from './aviatorCashOutManager';
 export * from './aviatorStatisticsEngine';
+export * from './aviatorAiAnalyzer';
 export * from './aviatorTests';
 
 export function analyzeAviatorEngine(params: {
@@ -49,6 +51,7 @@ export function analyzeAviatorEngine(params: {
   });
   const statistics = computeAviatorStatistics(rounds, catConfig);
   const bankrollStatus = evaluateBankrollLimits(bankrollCfg, bankrollState);
+  const ai = analyzeAviatorLocalAi(rounds);
 
   return {
     totalRounds: rounds.length,
@@ -58,6 +61,7 @@ export function analyzeAviatorEngine(params: {
     learning,
     statistics,
     bankrollStatus,
+    ai,
     disclaimer:
       'Sistema de análise estatística e simulação educacional. Não garante lucro nem prevê com certeza multiplicadores gerados aleatoriamente.',
   };

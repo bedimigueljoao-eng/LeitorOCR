@@ -299,6 +299,78 @@ export interface AviatorStatisticsReport {
   suggestionHitRatePct: number;
 }
 
+export type AviatorMarkovStateKey =
+  | 'under_1_50'
+  | '1_50_to_2_00'
+  | '2_00_to_5_00'
+  | '5_00_to_10_00'
+  | 'over_10_00';
+
+export interface AviatorPostPeakHorizonStats {
+  horizonRounds: 1 | 3 | 5;
+  sampleEvents: number;
+  evaluatedRounds: number;
+  under150Pct: number;
+  under150DeltaPct: number;
+  above200Pct: number;
+  above500Pct: number;
+  avgMultiplier: number;
+  zScoreUnder150: number;
+  statisticallySignificant: boolean;
+  verdictLabel: string;
+}
+
+export interface AviatorPostPeakBucket {
+  threshold: number;
+  label: string;
+  totalOccurrences: number;
+  lastSeenRoundsAgo: number | null;
+  activeJustHappened: boolean;
+  horizons: AviatorPostPeakHorizonStats[];
+}
+
+export interface AviatorMarkovTransitionRow {
+  fromState: AviatorMarkovStateKey;
+  fromLabel: string;
+  sampleCount: number;
+  probsPct: Record<AviatorMarkovStateKey, number>;
+  nextAvgMultiplier: number;
+}
+
+export interface AviatorPeakIntervalStats {
+  threshold: number;
+  label: string;
+  count: number;
+  minGap: number | null;
+  medianGap: number | null;
+  p90Gap: number | null;
+  maxGap: number | null;
+  currentGap: number;
+  clusterRatePct: number;
+}
+
+export interface AviatorRegimeAnalysis {
+  regime: 'INSUFICIENTE' | 'FRIO_CRISE' | 'NORMAL' | 'VOLATIL_PICOS';
+  regimeLabel: string;
+  cautionScore: number;
+  recent15LowPct: number;
+  recent15PeakCount: number;
+  volatilityIndex: number;
+  recommendedAction: string;
+}
+
+export interface AviatorLocalAiReport {
+  baselineUnder150Pct: number;
+  baselineAbove200Pct: number;
+  baselineAvgMultiplier: number;
+  postPeakBuckets: AviatorPostPeakBucket[];
+  markovRows: AviatorMarkovTransitionRow[];
+  currentMarkovState: AviatorMarkovStateKey | null;
+  peakIntervals: AviatorPeakIntervalStats[];
+  regime: AviatorRegimeAnalysis;
+  localNarrativeSummary: string;
+}
+
 export interface AviatorEngineAnalysis {
   totalRounds: number;
   lastRound: AviatorRoundRecord | null;
@@ -307,6 +379,7 @@ export interface AviatorEngineAnalysis {
   learning: AviatorLearningReport;
   statistics: AviatorStatisticsReport;
   bankrollStatus: AviatorBankrollLimitStatus;
+  ai: AviatorLocalAiReport;
   disclaimer: string;
 }
 

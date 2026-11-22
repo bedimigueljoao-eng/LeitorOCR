@@ -1,4 +1,8 @@
 import {
+  analyzeAviatorLocalAi,
+  answerAviatorQuestionLocally,
+} from './aviatorAiAnalyzer';
+import {
   confirmManualTicketAction,
   createInitialAutoBetState,
   evaluateAutoBetOpportunity,
@@ -317,6 +321,35 @@ export function runAllAviatorTests(): AviatorTestReport {
       coAlert.alertActiveNow && coClosed.reachedCount === 1 && !coClosed.alertActiveNow,
       '12. Cash Out Manager: Alerta em Tempo Real e Registo',
       `Alerta ativo em 1.58x=${coAlert.alertActiveNow}, atingidos=${coClosed.reachedCount}`
+    )
+  );
+
+  // 13. IA Local: Analisador Pós-Pico, Matriz de Markov e Detetor de Regimes
+  const aiReport = analyzeAviatorLocalAi(dataset);
+  const bucket10 = aiReport.postPeakBuckets.find((b) => b.threshold === 10);
+  const markovTotal = aiReport.markovRows.reduce((acc, r) => acc + r.sampleCount, 0);
+  cases.push(
+    assert(
+      aiReport.postPeakBuckets.length === 4 &&
+        (bucket10?.totalOccurrences ?? 0) === 2 &&
+        markovTotal === dataset.length - 1 &&
+        aiReport.regime.regime !== 'INSUFICIENTE',
+      '13. IA Pós-Pico, Matriz Markov & Detetor de Regimes',
+      `>=10x=${bucket10?.totalOccurrences ?? 0}x, Transições=${markovTotal}, Regime=${aiReport.regime.regimeLabel}`
+    )
+  );
+
+  // 14. Q&A Estatístico Local Offline Pós-Pico
+  const qaAnswer = answerAviatorQuestionLocally(
+    dataset,
+    aiReport,
+    'Quando sai número muito alto acima de 10x vem números baixos depois?'
+  );
+  cases.push(
+    assert(
+      qaAnswer.includes('Análise Pós-Pico') && qaAnswer.includes('independente'),
+      '14. Resposta Offline da IA sobre Pós-Pico',
+      `Diagnóstico gerado (${qaAnswer.length} chars) com aviso de independência RNG`
     )
   );
 
