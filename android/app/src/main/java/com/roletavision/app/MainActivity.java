@@ -35,6 +35,8 @@ import android.widget.TextView;
 
 import com.getcapacitor.BridgeActivity;
 
+import org.json.JSONArray;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -94,8 +96,9 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
+        isScanningFrame = false;
         handler.removeCallbacks(scanRunnable);
-        handler.postDelayed(scanRunnable, 1200L);
+        handler.postDelayed(scanRunnable, 1000L);
     }
 
     @Override
@@ -501,15 +504,99 @@ public class MainActivity extends BridgeActivity {
         browserWebView.loadUrl(url);
     }
 
+    private static final String DOM_STRIP_JS =
+            "(function(){" +
+            "try{" +
+            "var out=[];var hLimit=Math.max(120,window.innerHeight*0.34);" +
+            "function scanDoc(doc,ox,oy){" +
+            "try{var els=doc.querySelectorAll('*');" +
+            "for(var i=0;i<els.length;i++){var el=els[i];" +
+            "if(el.children&&el.children.length>0)continue;" +
+            "var t=(el.innerText||el.textContent||'').trim();" +
+            "if(!/^(0|[1-9]|[12][0-9]|3[0-6])$/.test(t))continue;" +
+            "var r=el.getBoundingClientRect();" +
+            "if(!r||r.width<8||r.height<8||r.width>68||r.height>68)continue;" +
+            "var y=oy+r.top+r.height/2;var x=ox+r.left;" +
+            "if(y<0||y>hLimit||x<0)continue;" +
+            "out.push({n:parseInt(t,10),x:x,y:y});}" +
+            "var frames=doc.querySelectorAll('iframe');" +
+            "for(var j=0;j<frames.length;j++){try{" +
+            "var fr=frames[j].getBoundingClientRect();" +
+            "if(frames[j].contentDocument)scanDoc(frames[j].contentDocument,ox+fr.left,oy+fr.top);" +
+            "}catch(e){}}" +
+            "}catch(e){}}" +
+            "scanDoc(document,0,0);" +
+            "if(out.length<4)return '[]';" +
+            "var best=[];" +
+            "for(var a=0;a<out.length;a++){var row=[];" +
+            "for(var b=0;b<out.length;b++){if(Math.abs(out[b].y-out[a].y)<=18)row.push(out[b]);}" +
+            "if(row.length>best.length)best=row;}" +
+            "if(best.length<4)return '[]';" +
+            "best.sort(function(p,q){return p.x-q.x;});" +
+            "var res=[];var lastX=-999;" +
+            "for(var k=0;k<best.length;k++){if(best[k].x-lastX>=6){res.push(best[k].n);lastX=best[k].x;}}" +
+            "return JSON.stringify(res);" +
+            "}catch(e){return '[]';}" +
+            "})()";
+
     private void captureAndAnalyzeBrowser(boolean showCalibrationFeedback) {
         int w = browserWebView.getWidth();
         int h = browserWebView.getHeight();
         if (w < 50 || h < 50) return;
 
         isScanningFrame = true;
-        final float prevOverlayAlpha = roiOverlay != null ? roiOverlay.getAlpha() : 1f;
-        if (roiOverlay != null && roiOverlay.getVisibility() == View.VISIBLE) {
-            roiOverlay.setAlpha(0f);
+        browserWebView.evaluateJavascript(DOM_STRIP_JS, value -> {
+            List<Integer> domNums = parseJsIntArray(value);
+            if (domNums.size() >= 4) {
+                isScanningFrame = false;
+                if (showCalibrationFeedback) {
+                    BrowserScannerPlugin.emitScanFeedback(domNums.size(), "dom");
+                    if (tvCalibStatus != null) {
+                        tvCalibStatus.setText("Lidos (dom): " + domNums.toString());
+                    }
+                }
+                reconcileDetectedStrip(domNums);
+                return;
+            }
+            capturePixelsWithCleanOverlay(showCalibrationFeedback);
+        });
+    }
+
+    private List<Integer> parseJsIntArray(String raw) {
+        List<Integer> list = new ArrayList<>();
+        if (raw == null || raw.isEmpty() || "null".equals(raw)) return list;
+        try {
+            String json = raw;
+            if (json.startsWith("\"") && json.endsWith("\"") && json.length() >= 2) {
+                json = json.substring(1, json.length() - 1).replace("\\\"", "\"");
+            }
+            JSONArray arr = new JSONArray(json);
+            for (int i = 0; i < arr.length(); i++) {
+                int v = arr.optInt(i, -1);
+                if (v >= 0 && v <= 36) list.add(v);
+            }
+        } catch (Exception ignored) {
+        }
+        return list;
+    }
+
+    private void capturePixelsWithCleanOverlay(boolean showCalibrationFeedback) {
+        final boolean wasOverlayVisible = roiOverlay != null && roiOverlay.getVisibility() == View.VISIBLE;
+        if (wasOverlayVisible) {
+            roiOverlay.setVisibility(View.INVISIBLE);
+            browserFrame.postDelayed(() -> performPixelCopyCapture(true, showCalibrationFeedback), 45L);
+        } else {
+            performPixelCopyCapture(false, showCalibrationFeedback);
+        }
+    }
+
+    private void performPixelCopyCapture(boolean restoreOverlay, boolean showCalibrationFeedback) {
+        int w = browserWebView.getWidth();
+        int h = browserWebView.getHeight();
+        if (w < 50 || h < 50) {
+            if (restoreOverlay && roiOverlay != null) roiOverlay.setVisibility(View.VISIBLE);
+            isScanningFrame = false;
+            return;
         }
 
         Bitmap bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
@@ -532,7 +619,7 @@ public class MainActivity extends BridgeActivity {
                 final Bitmap targetBitmap = bitmap;
                 try {
                     PixelCopy.request(getWindow(), srcRect, targetBitmap, copyResult -> {
-                        if (roiOverlay != null) roiOverlay.setAlpha(prevOverlayAlpha);
+                        if (restoreOverlay && roiOverlay != null) roiOverlay.setVisibility(View.VISIBLE);
                         if (copyResult == PixelCopy.SUCCESS) {
                             processCapturedBitmap(targetBitmap, showCalibrationFeedback);
                         } else {
@@ -541,13 +628,13 @@ public class MainActivity extends BridgeActivity {
                     }, handler);
                     return;
                 } catch (Exception e) {
-                    if (roiOverlay != null) roiOverlay.setAlpha(prevOverlayAlpha);
+                    if (restoreOverlay && roiOverlay != null) roiOverlay.setVisibility(View.VISIBLE);
                     fallbackCanvasCapture(targetBitmap, showCalibrationFeedback);
                     return;
                 }
             }
         }
-        if (roiOverlay != null) roiOverlay.setAlpha(prevOverlayAlpha);
+        if (restoreOverlay && roiOverlay != null) roiOverlay.setVisibility(View.VISIBLE);
         fallbackCanvasCapture(bitmap, showCalibrationFeedback);
     }
 
@@ -563,17 +650,17 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void processCapturedBitmap(Bitmap bitmap, boolean showCalibrationFeedback) {
-        scanner.scanHistoryStrip(bitmap, roiTopRatio, roiHeightRatio, (detectedNewestFirst, usedMode) -> {
+        scanner.scanHistoryStrip(bitmap, roiTopRatio, roiHeightRatio, (detectedNewestFirst, usedMode, debugInfo) -> {
             bitmap.recycle();
             isScanningFrame = false;
 
             if (showCalibrationFeedback) {
-                BrowserScannerPlugin.emitScanFeedback(detectedNewestFirst.size(), usedMode);
+                BrowserScannerPlugin.emitScanFeedback(detectedNewestFirst.size(), usedMode + " " + debugInfo);
             }
 
             if (showCalibrationFeedback && tvCalibStatus != null) {
                 if (detectedNewestFirst.isEmpty()) {
-                    tvCalibStatus.setText("Nenhum numero lido. Arraste a barra acima ate cobrir os numeros.");
+                    tvCalibStatus.setText("Nenhum lido (" + debugInfo + ")");
                 } else {
                     tvCalibStatus.setText("Lidos (" + usedMode + "): " + detectedNewestFirst.toString());
                 }
