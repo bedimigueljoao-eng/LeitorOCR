@@ -24,8 +24,8 @@ import { BrowserScanner, isNativeAndroidApp } from './plugins/browserScanner';
 
 type ActiveTab = 'analyzer' | 'scanner' | 'board' | 'android';
 
-const STORAGE_KEY_SESSION_SPINS = 'roletavision_session_spins_v2';
-const STORAGE_KEY_LEARNED_BACKUP = 'roletavision_learned_backup_v2';
+const STORAGE_KEY_SESSION_SPINS = 'roletavision_session_spins_v3';
+const STORAGE_KEY_LEARNED_BACKUP = 'roletavision_learned_backup_v3';
 const STORAGE_KEY_BANKROLL = 'roletavision_bankroll_v1';
 const SPLIT_PRESETS = [0.56, 0.45, 0.66] as const;
 
@@ -71,13 +71,9 @@ function reconcileScannerSpins(
 
   // Primeira leitura da mesa (ou troca de mesa): alimenta o contexto/aprendizagem
   // sem gerar % falsa de acerto na sessão atual (sessão continua virgem 0%)
-  const mergedBackup = [...incoming, ...prevBackup.filter((_, idx) => idx >= incoming.length)].slice(
-    0,
-    2000
-  );
   return {
     nextSession: prevSession,
-    nextBackup: prevBackup.length === 0 ? incoming.slice(0, 2000) : mergedBackup,
+    nextBackup: [...incoming, ...prevBackup].slice(0, 2000),
   };
 }
 
@@ -453,14 +449,14 @@ export default function App() {
       splitPresetIdx === 0 ? 'Tela 56%' : splitPresetIdx === 1 ? 'Tela 45%' : 'Tela 66%';
 
     return (
-      <div className="h-screen overflow-y-auto bg-[#0B0F17] text-slate-100 p-2.5 space-y-2">
+      <div className="h-screen overflow-y-auto bg-[#0B0F17] text-slate-100 p-2 space-y-1.5">
         {/* Cabeçalho compacto com controles + resumo virgem ou ao vivo */}
-        <div className="flex flex-wrap items-center justify-between gap-1.5 border-b border-slate-800 pb-2">
-          <div className="flex items-center gap-2 min-w-0">
+        <div className="flex flex-wrap items-center justify-between gap-1 border-b border-slate-800 pb-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
             {accuracy.lastRound ? (
               <>
                 <span
-                  className={`inline-flex h-6 min-w-[26px] px-1 items-center justify-center rounded border font-mono text-xs font-bold text-white tabular-nums ${
+                  className={`inline-flex h-5 min-w-[24px] px-1 items-center justify-center rounded border font-mono text-[11px] font-bold text-white tabular-nums ${
                     accuracy.lastRound.actualColor === 'green'
                       ? 'bg-emerald-700 border-emerald-500'
                       : accuracy.lastRound.actualColor === 'red'
@@ -470,7 +466,7 @@ export default function App() {
                 >
                   {accuracy.lastRound.actualNumber}
                 </span>
-                <div className="text-[11px] leading-tight">
+                <div className="text-[10px] leading-tight">
                   <div className="text-slate-200 font-medium">
                     Último: {accuracy.lastRound.hitsCount}/{accuracy.lastRound.totalMarkets} acertos
                   </div>
@@ -478,18 +474,18 @@ export default function App() {
                     Sessão: {accuracy.overallRatePct.toFixed(1)}% ({accuracy.totalHits}/{accuracy.totalAttempts})
                   </div>
                   {combinedSpins.length < 50 && (
-                    <div className="text-[10px] text-amber-300">
+                    <div className="text-[9px] text-amber-300">
                       A recolher dados... {combinedSpins.length}/50
                     </div>
                   )}
                 </div>
               </>
             ) : (
-              <div className="text-[11px] leading-tight">
+              <div className="text-[10px] leading-tight">
                 <div className="text-slate-200 font-medium">
                   Sessão Virgem: 0.0% (0/0)
                 </div>
-                <div className="text-[10px] text-amber-300">
+                <div className="text-[9px] text-amber-300">
                   {combinedSpins.length < 50
                     ? `A recolher dados... ${combinedSpins.length}/50`
                     : scanStatusHint ||
@@ -504,16 +500,16 @@ export default function App() {
               type="button"
               onClick={handleManualBrowserScan}
               title="Ler faixa agora"
-              className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-200"
+              className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-200"
             >
-              <RefreshCw className="h-3 w-3" />
+              <RefreshCw className="h-2.5 w-2.5" />
               <span>Ler</span>
             </button>
             <button
               type="button"
               onClick={handleResetMomentKeepBackup}
               title="Zerar estatísticas do momento mantendo aprendizagem"
-              className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-200"
+              className="rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-200"
             >
               Zerar 0%
             </button>
@@ -521,23 +517,23 @@ export default function App() {
               type="button"
               onClick={handleCycleSplitRatio}
               title="Ajustar tamanho do navegador"
-              className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-200"
+              className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-200"
             >
-              <ArrowUpDown className="h-3 w-3" />
+              <ArrowUpDown className="h-2.5 w-2.5" />
               <span>{splitLabel}</span>
             </button>
             <button
               type="button"
               onClick={handleToggleAndroidCalibration}
-              className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] font-medium text-slate-200"
+              className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-200"
             >
-              <Crosshair className="h-3 w-3" />
+              <Crosshair className="h-2.5 w-2.5" />
               <span>Mira</span>
             </button>
             <button
               type="button"
               onClick={handleOpenIntegratedBrowser}
-              className="rounded-md bg-amber-400 px-2 py-1 text-[10px] font-semibold text-slate-950"
+              className="rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950"
             >
               Painel
             </button>
@@ -547,7 +543,7 @@ export default function App() {
         {/* Faixa de histórico lida */}
         <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
           {combinedSpins.length === 0 ? (
-            <span className="text-[11px] text-amber-300">
+            <span className="text-[10px] text-amber-300">
               Nenhum número lido ainda — abra a mesa da roleta acima ou toque em Mira para alinhar a caixa verde.
             </span>
           ) : (
@@ -562,7 +558,7 @@ export default function App() {
               return (
                 <span
                   key={`${num}-${idx}`}
-                  className={`inline-flex h-6 min-w-[26px] px-1 items-center justify-center rounded border font-mono text-[11px] font-bold text-white tabular-nums shrink-0 ${bg} ${
+                  className={`inline-flex h-5 min-w-[22px] px-1 items-center justify-center rounded border font-mono text-[10px] font-bold text-white tabular-nums shrink-0 ${bg} ${
                     idx === 0 ? 'ring-1 ring-amber-400' : ''
                   }`}
                 >
@@ -574,7 +570,7 @@ export default function App() {
         </div>
 
         {/* Todas as opções de apostas visíveis por completo + OK/X + % de acerto */}
-        <div className="grid grid-cols-2 gap-1.5">
+        <div className="grid grid-cols-2 gap-1">
           {compactOptions.map((opt, idx) => {
             const lastEval = lastRoundMap.get(opt.marketKey);
             const rateStat = marketRateMap.get(opt.marketKey);
@@ -587,18 +583,18 @@ export default function App() {
             return (
               <div
                 key={opt.marketKey}
-                className={`rounded-lg border border-slate-800 bg-[#131924] p-2 ${
+                className={`rounded-md border border-slate-800 bg-[#131924] p-1.5 ${
                   isFullWidth ? 'col-span-2' : ''
                 }`}
               >
                 <div className="flex items-center justify-between gap-1">
-                  <span className="text-[10px] font-medium text-slate-400">
+                  <span className="text-[9px] font-medium text-slate-400 truncate">
                     {opt.shortTitle}
                   </span>
                   <div className="flex items-center gap-1 shrink-0">
                     {lastEval && (
                       <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                        className={`rounded px-1 py-0 text-[9px] font-bold ${
                           lastEval.hit
                             ? 'bg-emerald-500/20 text-emerald-400'
                             : 'bg-red-500/20 text-red-400'
@@ -608,7 +604,7 @@ export default function App() {
                       </span>
                     )}
                     <span
-                      className={`font-mono text-[10px] font-bold tabular-nums ${
+                      className={`font-mono text-[9px] font-bold tabular-nums ${
                         !hasAttempts
                           ? 'text-slate-500'
                           : aboveBase
@@ -621,12 +617,12 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className={`mt-1 text-xs font-bold leading-snug ${opt.accent}`}>
+                <div className={`mt-0.5 text-[11px] font-bold leading-tight ${opt.accent}`}>
                   {opt.suggestion}
                 </div>
 
                 {lastEval && rateStat && (
-                  <div className="mt-0.5 text-[9px] text-slate-400 leading-tight">
+                  <div className="mt-0.5 text-[9px] text-slate-400 leading-tight truncate">
                     Ant: {lastEval.predicted} · Saiu: {lastEval.actual} ({rateStat.hits}/{rateStat.attempts})
                   </div>
                 )}
@@ -635,19 +631,19 @@ export default function App() {
           })}
 
           {/* Números diretos sugeridos completos + Stake */}
-          <div className="col-span-2 rounded-lg border border-slate-800 bg-[#131924] p-2">
-            <div className="flex items-center justify-between gap-2 mb-1">
-              <span className="text-[10px] font-medium text-slate-400">
+          <div className="col-span-2 rounded-md border border-slate-800 bg-[#131924] p-1.5">
+            <div className="flex items-center justify-between gap-2 mb-0.5">
+              <span className="text-[9px] font-medium text-slate-400">
                 Números Diretos Sugeridos (Fichas)
               </span>
-              <span className="font-mono text-[10px] font-semibold text-emerald-400 tabular-nums">
+              <span className="font-mono text-[9px] font-semibold text-emerald-400 tabular-nums">
                 {analysis.suggestedChips.length > 0
                   ? `${analysis.totalRoundStakeAoa.toFixed(0)} AOA (${analysis.suggestedChips.length}×${analysis.stakePerUnitAoa})`
                   : '0 AOA'}
               </span>
             </div>
             {analysis.suggestedChips.length === 0 ? (
-              <div className="text-[11px] text-slate-500">
+              <div className="text-[10px] text-slate-500">
                 Aguardando leitura da faixa ou 1º giro para sugerir fichas.
               </div>
             ) : (
@@ -663,7 +659,7 @@ export default function App() {
                   return (
                     <span
                       key={chip}
-                      className={`inline-flex h-6 min-w-[26px] px-1.5 items-center justify-center rounded border font-mono text-[11px] font-bold text-white tabular-nums ${chipBg}`}
+                      className={`inline-flex h-5 min-w-[22px] px-1 items-center justify-center rounded border font-mono text-[10px] font-bold text-white tabular-nums ${chipBg}`}
                     >
                       {chip}
                     </span>
@@ -675,7 +671,7 @@ export default function App() {
         </div>
 
         {/* Log de Debug Visível por baixo (Tarefa 1 OCR 500ms) */}
-        <div className="rounded-lg border border-slate-800/80 bg-[#090D14] px-2.5 py-1.5 font-mono text-[10px] leading-relaxed text-slate-400 tabular-nums">
+        <div className="rounded-md border border-slate-800/80 bg-[#090D14] px-2 py-1 font-mono text-[9px] leading-snug text-slate-400 tabular-nums">
           <div>
             Última leitura: {scanDebug.lastReadTime} - Número:{' '}
             {scanDebug.lastReadNumber !== null ? scanDebug.lastReadNumber : '--'} - Tempo:{' '}

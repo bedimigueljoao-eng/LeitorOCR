@@ -30,10 +30,14 @@ public class ScreenScanner {
     private static class DetectedPill {
         final int number;
         final int leftX;
+        final int centerY;
+        final int boxHeight;
 
-        DetectedPill(int number, int leftX) {
+        DetectedPill(int number, int leftX, int centerY, int boxHeight) {
             this.number = number;
             this.leftX = leftX;
+            this.centerY = centerY;
+            this.boxHeight = boxHeight;
         }
     }
 
@@ -71,28 +75,39 @@ public class ScreenScanner {
             cropped.recycle();
         }
 
+        final int scaledH = scaled.getHeight();
         InputImage image = InputImage.fromBitmap(scaled, 0);
         recognizer.process(image)
                 .addOnSuccessListener(visionText -> {
-                    List<DetectedPill> detected = new ArrayList<>();
+                    List<DetectedPill> candidates = new ArrayList<>();
                     for (Text.TextBlock block : visionText.getTextBlocks()) {
                         for (Text.Line line : block.getLines()) {
                             for (Text.Element element : line.getElements()) {
                                 Rect box = element.getBoundingBox();
                                 if (box == null) continue;
+                                int bh = box.height();
+                                int bw = box.width();
+                                if (bh < 8 || bh > scaledH * 0.85f || bw > scaledH * 1.6f) {
+                                    continue;
+                                }
                                 PillColor sampledColor = samplePillColor(scaled, box);
                                 Integer parsed = parseRouletteToken(element.getText(), sampledColor);
                                 if (parsed != null) {
-                                    detected.add(new DetectedPill(parsed, box.left));
+                                    candidates.add(new DetectedPill(
+                                            parsed,
+                                            box.left,
+                                            (box.top + box.bottom) / 2,
+                                            bh
+                                    ));
                                 }
                             }
                         }
                     }
                     scaled.recycle();
 
-                    Collections.sort(detected, (a, b) -> Integer.compare(a.leftX, b.leftX));
+                    List<DetectedPill> row = extractMainHorizontalRow(candidates, scaledH);
                     List<Integer> ordered = new ArrayList<>();
-                    for (DetectedPill pill : detected) {
+                    for (DetectedPill pill : row) {
                         ordered.add(pill.number);
                     }
                     callback.onResult(ordered, true);
@@ -103,36 +118,71 @@ public class ScreenScanner {
                 });
     }
 
-    private Integer parseRouletteToken(String rawText, PillColor color) {
-        if (rawText == null) return null;
-        String normalized = rawText.trim()
-                .replace("O", "0")
-                .replace("o", "0")
-                .replace("I", "1")
-                .replace("l", "1");
+    private List<DetectedPill> extractMainHorizontalRow(List<DetectedPill> candidates, int scaledH) {
+        if (candidates.isEmpty()) return Collections.emptyList();
 
-        StringBuilder digits = new StringBuilder();
-        for (int i = 0; i < normalized.length(); i++) {
-            char c = normalized.charAt(i);
-            if (Character.isDigit(c)) {
-                digits.append(c);
+        int yTolerance = Math.max(12, (int) (scaledH * 0.24f));
+        List<DetectedPill> bestRow = Collections.emptyList();
+
+        for (DetectedPill anchor : candidates) {
+            List<DetectedPill> row = new ArrayList<>();
+            for (DetectedPill other : candidates) {
+                if (Math.abs(other.centerY - anchor.centerY) <= yTolerance) {
+                    row.add(other);
+                }
+            }
+            if (row.size() > bestRow.size()) {
+                bestRow = row;
             }
         }
 
-        if (digits.length() == 0) {
+        if (bestRow.isEmpty()) return Collections.emptyList();
+
+        List<DetectedPill> sorted = new ArrayList<>(bestRow);
+        Collections.sort(sorted, (a, b) -> Integer.compare(a.leftX, b.leftX));
+
+        List<DetectedPill> deduped = new ArrayList<>();
+        int lastX = -9999;
+        for (DetectedPill p : sorted) {
+            int minSpacing = Math.max(10, p.boxHeight / 2);
+            if (p.leftX - lastX >= minSpacing) {
+                deduped.add(p);
+                lastX = p.leftX;
+            }
+        }
+        return deduped;
+    }
+
+    private Integer parseRouletteToken(String rawText, PillColor color) {
+        if (rawText == null) return null;
+        String trimmed = rawText.trim();
+        if (trimmed.isEmpty() || trimmed.length() > 3) return null;
+
+        // Rejeita palavras/rótulos mistos (ex: "Depósito", "KWANZA", "2to1", "Odd")
+        String cleaned = trimmed;
+        if (cleaned.length() == 1 && (cleaned.equals("O") || cleaned.equals("o"))) {
             return color == PillColor.GREEN ? 0 : null;
+        }
+        if (cleaned.length() == 2) {
+            cleaned = cleaned.replace("O", "0").replace("o", "0");
+        }
+
+        for (int i = 0; i < cleaned.length(); i++) {
+            if (!Character.isDigit(cleaned.charAt(i))) {
+                return null;
+            }
         }
 
         int num;
         try {
-            num = Integer.parseInt(digits.toString());
+            num = Integer.parseInt(cleaned);
         } catch (NumberFormatException e) {
             return null;
         }
 
         if (num < 0 || num > 36) return null;
         if (num == 0 && color != PillColor.GREEN) return null;
-        if (num != 0 && color == PillColor.GREEN) return 0;
+        if (num != 0 && color == PillColor.GREEN) return null;
 
         boolean isRedExpected = RED_NUMBERS.contains(num);
         if (color == PillColor.RED && !isRedExpected) return null;
@@ -142,19 +192,58 @@ public class ScreenScanner {
     }
 
     private PillColor samplePillColor(Bitmap bitmap, Rect box) {
-        int leftX = Math.max(0, Math.min(bitmap.getWidth() - 1, box.left - 6));
-        int rightX = Math.max(0, Math.min(bitmap.getWidth() - 1, box.right + 6));
-        int midY = Math.max(0, Math.min(bitmap.getHeight() - 1, (box.top + box.bottom) / 2));
+        int w = bitmap.getWidth();
+        int h = bitmap.getHeight();
+        int midY = clamp((box.top + box.bottom) / 2, 0, h - 1);
+        int midX = clamp((box.left + box.right) / 2, 0, w - 1);
 
-        int p1 = bitmap.getPixel(leftX, midY);
-        int p2 = bitmap.getPixel(rightX, midY);
+        int[][] points = new int[][]{
+                {clamp(box.left - 5, 0, w - 1), midY},
+                {clamp(box.right + 5, 0, w - 1), midY},
+                {midX, clamp(box.top - 5, 0, h - 1)},
+                {midX, clamp(box.bottom + 5, 0, h - 1)},
+                {clamp(box.left - 2, 0, w - 1), midY},
+                {clamp(box.right + 2, 0, w - 1), midY}
+        };
 
-        int r = (Color.red(p1) + Color.red(p2)) / 2;
-        int g = (Color.green(p1) + Color.green(p2)) / 2;
-        int b = (Color.blue(p1) + Color.blue(p2)) / 2;
+        int sumR = 0;
+        int sumG = 0;
+        int sumB = 0;
+        int count = 0;
 
-        if (g > r + 24 && g > b + 18) return PillColor.GREEN;
-        if (r > g + 35 && r > b + 30) return PillColor.RED;
+        for (int[] pt : points) {
+            int px = bitmap.getPixel(pt[0], pt[1]);
+            int r = Color.red(px);
+            int g = Color.green(px);
+            int b = Color.blue(px);
+            // Ignora pixeis brancos da borda do ultimo numero ou do texto
+            if (r > 185 && g > 185 && b > 185) {
+                continue;
+            }
+            sumR += r;
+            sumG += g;
+            sumB += b;
+            count++;
+        }
+
+        if (count == 0) {
+            int fallback = bitmap.getPixel(clamp(box.left - 4, 0, w - 1), midY);
+            sumR = Color.red(fallback);
+            sumG = Color.green(fallback);
+            sumB = Color.blue(fallback);
+            count = 1;
+        }
+
+        int r = sumR / count;
+        int g = sumG / count;
+        int b = sumB / count;
+
+        if (g > r + 20 && g > b + 15) return PillColor.GREEN;
+        if (r > g + 30 && r > b + 25) return PillColor.RED;
         return PillColor.BLACK;
+    }
+
+    private int clamp(int v, int min, int max) {
+        return Math.max(min, Math.min(max, v));
     }
 }

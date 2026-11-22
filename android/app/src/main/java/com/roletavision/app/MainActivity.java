@@ -36,7 +36,6 @@ import android.widget.TextView;
 import com.getcapacitor.BridgeActivity;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public class MainActivity extends BridgeActivity {
@@ -69,7 +68,6 @@ public class MainActivity extends BridgeActivity {
 
     private float roiTopRatio = 0.04f;
     private float roiHeightRatio = 0.07f;
-    private List<Integer> lastObservedStrip = new ArrayList<>();
 
     private SharedPreferences prefs;
 
@@ -642,80 +640,145 @@ public class MainActivity extends BridgeActivity {
         });
     }
 
+    private final List<Integer> confirmedStrip = new ArrayList<>();
+    private List<Integer> pendingHeadSpins = null;
+    private List<Integer> pendingFullStrip = null;
+    private int pendingConfirmCount = 0;
+    private int unrelatedStripCount = 0;
+    private Integer pendingInitHead = null;
+    private int pendingInitCount = 0;
+
     private void reconcileDetectedStrip(List<Integer> newStrip) {
-        if (newStrip.equals(lastObservedStrip)) return;
+        if (newStrip == null || newStrip.size() < 4) return;
 
-        if (lastObservedStrip.isEmpty()) {
-            lastObservedStrip = new ArrayList<>(newStrip);
-            BrowserScannerPlugin.emitSpins(newStrip, true);
+        // Primeira leitura ao abrir mesa: exige 2 leituras concordantes no numero da cabeca
+        if (confirmedStrip.isEmpty()) {
+            if (newStrip.size() < 5) return;
+            Integer head = newStrip.get(0);
+            if (head.equals(pendingInitHead)) {
+                pendingInitCount++;
+            } else {
+                pendingInitHead = head;
+                pendingInitCount = 1;
+            }
+            if (pendingInitCount >= 2) {
+                confirmedStrip.clear();
+                confirmedStrip.addAll(newStrip);
+                pendingInitHead = null;
+                pendingInitCount = 0;
+                BrowserScannerPlugin.emitSpins(newStrip, true);
+            }
             return;
         }
 
-        int matchedShift = -1;
-        int maxShift = Math.min(5, newStrip.size() - 1);
-        for (int shift = 1; shift <= maxShift; shift++) {
-            int overlapLen = Math.min(newStrip.size() - shift, lastObservedStrip.size());
-            int checkLen = Math.min(4, overlapLen);
-            if (checkLen >= 2) {
-                int matches = 0;
-                for (int k = 0; k < checkLen; k++) {
-                    if (newStrip.get(shift + k).equals(lastObservedStrip.get(k))) {
-                        matches++;
-                    }
-                }
-                if ((checkLen == 2 && matches == 2)
-                        || (checkLen == 3 && matches >= 2)
-                        || (checkLen >= 4 && matches >= 3)) {
-                    matchedShift = shift;
-                    break;
-                }
-            }
-        }
-
-        if (matchedShift > 0) {
-            List<Integer> onlyNew = new ArrayList<>(newStrip.subList(0, matchedShift));
-            lastObservedStrip = new ArrayList<>(newStrip);
-            if (browserPanel != null) {
-                browserPanel.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
-            }
-            BrowserScannerPlugin.emitSpins(onlyNew, false);
+        if (newStrip.equals(confirmedStrip)) {
+            clearPendingCandidate();
             return;
         }
 
-        // Caso o primeiro numero tenha mudado e haja sobreposicao com a faixa anterior (mesmo com 1 pilula falhada no meio),
-        // emite o novo numero como giro ao vivo para garantir 5/5 leituras consecutivas.
-        if (!newStrip.get(0).equals(lastObservedStrip.get(0))) {
-            int sharedTail = 0;
-            int prevLimit = Math.min(6, lastObservedStrip.size());
-            int newLimit = Math.min(8, newStrip.size());
-            for (int i = 0; i < prevLimit; i++) {
-                Integer target = lastObservedStrip.get(i);
-                for (int j = 1; j < newLimit; j++) {
-                    if (target.equals(newStrip.get(j))) {
-                        sharedTail++;
-                        break;
-                    }
+        // Procura o melhor alinhamento entre -3 (pilulas da esquerda falharam no OCR) e +4 (novos giros)
+        int bestNegShift = 999;
+        int bestNegMatches = 0;
+        for (int shift = 0; shift >= -3; shift--) {
+            int offsetConf = -shift;
+            int maxCheck = Math.min(6, Math.min(newStrip.size(), confirmedStrip.size() - offsetConf));
+            if (maxCheck < 3) continue;
+            int matches = 0;
+            for (int i = 0; i < maxCheck; i++) {
+                if (newStrip.get(i).equals(confirmedStrip.get(i + offsetConf))) {
+                    matches++;
                 }
             }
-            if (sharedTail >= 2 || (newStrip.size() >= 2 && newStrip.get(1).equals(lastObservedStrip.get(0)))) {
-                lastObservedStrip = new ArrayList<>(newStrip);
+            boolean valid = (maxCheck == 3 && matches == 3)
+                    || (maxCheck >= 4 && matches >= Math.max(3, maxCheck - 1));
+            if (valid && (matches > bestNegMatches || (matches == bestNegMatches && shift > bestNegShift))) {
+                bestNegMatches = matches;
+                bestNegShift = shift;
+            }
+        }
+
+        // Se alinhou com shift <= 0, eh a MESMA faixa (apenas oscilacao de OCR) -> nunca emite giro duplicado!
+        if (bestNegShift != 999) {
+            clearPendingCandidate();
+            if (bestNegShift == 0 && newStrip.size() > confirmedStrip.size() && bestNegMatches >= 4) {
+                confirmedStrip.clear();
+                confirmedStrip.addAll(newStrip);
+            }
+            return;
+        }
+
+        // Testa shift positivo (+1..+4): realmente entrou numero(s) novo(s) na esquerda
+        int bestPosShift = -1;
+        int bestPosMatches = 0;
+        for (int shift = 1; shift <= 4; shift++) {
+            int maxCheck = Math.min(6, Math.min(newStrip.size() - shift, confirmedStrip.size()));
+            if (maxCheck < 3) continue;
+            int matches = 0;
+            for (int i = 0; i < maxCheck; i++) {
+                if (newStrip.get(i + shift).equals(confirmedStrip.get(i))) {
+                    matches++;
+                }
+            }
+            boolean valid = (maxCheck == 3 && matches == 3)
+                    || (maxCheck >= 4 && matches >= Math.max(3, maxCheck - 1));
+            if (valid && matches > bestPosMatches) {
+                bestPosMatches = matches;
+                bestPosShift = shift;
+            }
+        }
+
+        if (bestPosShift > 0) {
+            unrelatedStripCount = 0;
+            List<Integer> candidateNew = new ArrayList<>(newStrip.subList(0, bestPosShift));
+            if (candidateNew.equals(pendingHeadSpins)) {
+                pendingConfirmCount++;
+            } else {
+                pendingHeadSpins = candidateNew;
+                pendingFullStrip = new ArrayList<>(newStrip);
+                pendingConfirmCount = 1;
+            }
+
+            if (pendingConfirmCount >= 2) {
+                confirmedStrip.clear();
+                confirmedStrip.addAll(pendingFullStrip != null ? pendingFullStrip : newStrip);
+                clearPendingCandidate();
                 if (browserPanel != null) {
                     browserPanel.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 }
-                BrowserScannerPlugin.emitSpins(Collections.singletonList(newStrip.get(0)), false);
-                return;
+                BrowserScannerPlugin.emitSpins(candidateNew, false);
             }
-        } else {
-            // Mesmo numero mais recente na cabeca (apenas atualizou cauda da direita)
-            lastObservedStrip = new ArrayList<>(newStrip);
             return;
         }
 
-        // Mudanca completa de mesa/faixa: emite faixa completa
-        if (newStrip.size() >= 5) {
-            lastObservedStrip = new ArrayList<>(newStrip);
-            BrowserScannerPlugin.emitSpins(newStrip, true);
+        // Frame sem alinhamento claro: so troca de mesa se persistir 4 ciclos seguidos com mesmo inicio
+        pendingHeadSpins = null;
+        pendingFullStrip = null;
+        pendingConfirmCount = 0;
+        unrelatedStripCount++;
+        if (unrelatedStripCount >= 4 && newStrip.size() >= 5) {
+            Integer head = newStrip.get(0);
+            if (head.equals(pendingInitHead)) {
+                pendingInitCount++;
+            } else {
+                pendingInitHead = head;
+                pendingInitCount = 1;
+            }
+            if (pendingInitCount >= 2) {
+                confirmedStrip.clear();
+                confirmedStrip.addAll(newStrip);
+                unrelatedStripCount = 0;
+                pendingInitHead = null;
+                pendingInitCount = 0;
+                BrowserScannerPlugin.emitSpins(newStrip, true);
+            }
         }
+    }
+
+    private void clearPendingCandidate() {
+        pendingHeadSpins = null;
+        pendingFullStrip = null;
+        pendingConfirmCount = 0;
+        unrelatedStripCount = 0;
     }
 
     private Button createBarButton(String label, String textColorHex, String bgColorHex) {
