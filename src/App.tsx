@@ -21,6 +21,7 @@ import { CreedroomzBoard } from './components/CreedroomzBoard';
 import { ScreenshotScannerTab } from './components/ScreenshotScannerTab';
 import { AndroidBuilderTab } from './components/AndroidBuilderTab';
 import { BacBoDashboard } from './components/BacBoDashboard';
+import { AviatorDashboard, multiplierBadgeClass } from './components/AviatorDashboard';
 import { BrowserScanner, isNativeAndroidApp } from './plugins/browserScanner';
 import {
   analyzeBacBoEngine,
@@ -38,8 +39,50 @@ import {
   BacBoOutcome,
   BacBoRoundRecord,
 } from './modules/bacbo';
+import {
+  analyzeAviatorEngine,
+  AviatorAutoBetConfig,
+  AviatorAutoBetState,
+  AviatorBankrollConfig,
+  AviatorBankrollState,
+  AviatorCaptureStatus,
+  AviatorCashOutConfig,
+  AviatorCashOutState,
+  AviatorEngineAnalysis,
+  AviatorLearningSnapshot,
+  AviatorLiveState,
+  AviatorRoundRecord,
+  buildAviatorRoundRecord,
+  clearAllAviatorRounds,
+  confirmManualTicketAction,
+  createInitialAutoBetState,
+  createInitialBankrollState,
+  createInitialCashOutState,
+  evaluateAutoBetOpportunity,
+  evaluateLiveCashOutTarget,
+  LearningWindowKey,
+  loadAutoBetConfig,
+  loadAviatorRoundsFromIndexedDb,
+  loadAviatorRoundsSync,
+  loadBankrollConfig,
+  loadBankrollState,
+  loadCashOutConfig,
+  loadLearningSnapshots,
+  loadSelectedLearningWindow,
+  processLiveMultiplierTransition,
+  reconcileAviatorStrip,
+  recordCashOutOutcomeOnCrash,
+  saveAutoBetConfig,
+  saveAviatorRounds,
+  saveBankrollConfig,
+  saveBankrollState,
+  saveCashOutConfig,
+  saveLearningSnapshots,
+  saveSelectedLearningWindow,
+  settleActiveAutoBetOnCrash,
+} from './modules/aviator';
 
-type GameMode = 'roulette' | 'bacbo';
+type GameMode = 'roulette' | 'bacbo' | 'aviator';
 type ActiveTab = 'analyzer' | 'scanner' | 'board' | 'android';
 
 const STORAGE_KEY_SESSION_SPINS = 'roletavision_session_spins_v3';
@@ -250,6 +293,137 @@ export default function App() {
     return () => window.clearTimeout(timerId);
   }, [bacboRounds]);
 
+  // ============================================================================
+  // ESTADO & ENGINE DA ABA 3: AVIATOR INTELLIGENCE (100% independente)
+  // ============================================================================
+  const [aviatorRounds, setAviatorRounds] = useState<AviatorRoundRecord[]>(() =>
+    loadAviatorRoundsSync()
+  );
+  const aviatorRoundsRef = useRef<AviatorRoundRecord[]>(aviatorRounds);
+  aviatorRoundsRef.current = aviatorRounds;
+
+  const [aviatorBankrollCfg, setAviatorBankrollCfg] = useState<AviatorBankrollConfig>(() =>
+    loadBankrollConfig()
+  );
+  const aviatorBankrollCfgRef = useRef(aviatorBankrollCfg);
+  aviatorBankrollCfgRef.current = aviatorBankrollCfg;
+
+  const [aviatorBankrollState, setAviatorBankrollState] = useState<AviatorBankrollState>(() =>
+    loadBankrollState(loadBankrollConfig())
+  );
+  const aviatorBankrollStateRef = useRef(aviatorBankrollState);
+  aviatorBankrollStateRef.current = aviatorBankrollState;
+
+  const [aviatorAutoBetCfg, setAviatorAutoBetCfg] = useState<AviatorAutoBetConfig>(() =>
+    loadAutoBetConfig()
+  );
+  const aviatorAutoBetCfgRef = useRef(aviatorAutoBetCfg);
+  aviatorAutoBetCfgRef.current = aviatorAutoBetCfg;
+
+  const [aviatorAutoBetState, setAviatorAutoBetState] = useState<AviatorAutoBetState>(() =>
+    createInitialAutoBetState()
+  );
+  const aviatorAutoBetStateRef = useRef(aviatorAutoBetState);
+  aviatorAutoBetStateRef.current = aviatorAutoBetState;
+
+  const [aviatorCashOutCfg, setAviatorCashOutCfg] = useState<AviatorCashOutConfig>(() =>
+    loadCashOutConfig()
+  );
+  const aviatorCashOutCfgRef = useRef(aviatorCashOutCfg);
+  aviatorCashOutCfgRef.current = aviatorCashOutCfg;
+
+  const [aviatorCashOutState, setAviatorCashOutState] = useState<AviatorCashOutState>(() =>
+    createInitialCashOutState()
+  );
+  const aviatorCashOutStateRef = useRef(aviatorCashOutState);
+  aviatorCashOutStateRef.current = aviatorCashOutState;
+
+  const [aviatorLearningWindow, setAviatorLearningWindow] = useState<LearningWindowKey>(() =>
+    loadSelectedLearningWindow()
+  );
+  const [aviatorSnapshots, setAviatorSnapshots] = useState<AviatorLearningSnapshot[]>(() =>
+    loadLearningSnapshots()
+  );
+
+  const [aviatorLiveState, setAviatorLiveState] = useState<AviatorLiveState>({
+    phase: 'WAITING',
+    currentMultiplier: null,
+    lastCrashMultiplier: null,
+    isCrashedColor: false,
+    roundStartedAt: null,
+    lastUpdatedAt: null,
+    ocrConfidence: 0,
+    captureMode: 'integrated_browser',
+    historyVisibleCount: 0,
+  });
+  const aviatorLiveStateRef = useRef(aviatorLiveState);
+  aviatorLiveStateRef.current = aviatorLiveState;
+
+  const [aviatorCaptureStatus, setAviatorCaptureStatus] = useState<AviatorCaptureStatus>({
+    mediaProjectionActive: false,
+    integratedBrowserOpen: false,
+    captureIntervalMs: 550,
+    lowPowerMode: false,
+    permissionState: 'idle',
+    lastError: null,
+  });
+
+  const [aviatorScanDebug, setAviatorScanDebug] = useState<{
+    lastReadTime: string;
+    lastMultiplierLabel: string;
+    lastReadMs: number | null;
+    consecutiveFailures: number;
+  }>({
+    lastReadTime: '--:--:--',
+    lastMultiplierLabel: '--',
+    lastReadMs: null,
+    consecutiveFailures: 0,
+  });
+
+  const [aviatorAnalysis, setAviatorAnalysis] = useState<AviatorEngineAnalysis>(() =>
+    analyzeAviatorEngine({
+      rounds: loadAviatorRoundsSync(),
+      bankrollCfg: loadBankrollConfig(),
+      bankrollState: loadBankrollState(loadBankrollConfig()),
+      selectedWindow: loadSelectedLearningWindow(),
+      savedSnapshots: loadLearningSnapshots(),
+    })
+  );
+  const aviatorAnalysisRef = useRef<AviatorEngineAnalysis>(aviatorAnalysis);
+  aviatorAnalysisRef.current = aviatorAnalysis;
+
+  useEffect(() => {
+    let active = true;
+    void loadAviatorRoundsFromIndexedDb().then((dbRounds) => {
+      if (!active || dbRounds.length === 0) return;
+      setAviatorRounds((prev) => (dbRounds.length > prev.length ? dbRounds : prev));
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      const next = analyzeAviatorEngine({
+        rounds: aviatorRounds,
+        bankrollCfg: aviatorBankrollCfg,
+        bankrollState: aviatorBankrollState,
+        selectedWindow: aviatorLearningWindow,
+        savedSnapshots: aviatorSnapshots,
+      });
+      aviatorAnalysisRef.current = next;
+      setAviatorAnalysis(next);
+    }, 0);
+    return () => window.clearTimeout(timerId);
+  }, [
+    aviatorRounds,
+    aviatorBankrollCfg,
+    aviatorBankrollState,
+    aviatorLearningWindow,
+    aviatorSnapshots,
+  ]);
+
   // Tarefa 1 - LEITURA: apenas lê números a cada 500ms e guarda na lista sem calcular percentuais
   useEffect(() => {
     if (!isAndroidApk) return;
@@ -310,6 +484,119 @@ export default function App() {
         });
       });
 
+      const aviatorSub = await BrowserScanner.addListener('aviatorDetected', (event) => {
+        if (!mounted) return;
+        const now = Date.now();
+        const nowStr = new Date(now).toLocaleTimeString('pt-PT', { hour12: false });
+        const incomingStrip = Array.isArray(event.historyNewestFirst)
+          ? event.historyNewestFirst.filter((v) => typeof v === 'number' && v >= 1.0)
+          : [];
+        const liveVal =
+          typeof event.liveMultiplier === 'number' && event.liveMultiplier >= 1.0
+            ? event.liveMultiplier
+            : null;
+        const prevRounds = aviatorRoundsRef.current;
+        const lastRec = prevRounds.length > 0 ? prevRounds[prevRounds.length - 1] : null;
+
+        const transition = processLiveMultiplierTransition({
+          prevState: aviatorLiveStateRef.current,
+          liveMultiplier: liveVal,
+          isCrashedColor: Boolean(event.isCrashedColor),
+          ocrConfidence: event.ocrConfidence ?? 0.85,
+          historyVisibleCount: incomingStrip.length,
+          captureMode: event.source === 'media_projection' ? 'media_projection' : 'integrated_browser',
+          now,
+          lastRecordedMultiplier: lastRec ? lastRec.multiplier : null,
+          lastRecordedTimestamp: lastRec ? lastRec.timestamp : null,
+        });
+
+        aviatorLiveStateRef.current = transition.nextState;
+        setAviatorLiveState(transition.nextState);
+
+        // Avalia alvo de Cash Out ao vivo quando o avião está a voar
+        const nextCoLive = evaluateLiveCashOutTarget(
+          aviatorCashOutCfgRef.current,
+          aviatorCashOutStateRef.current,
+          transition.nextState
+        );
+        if (nextCoLive !== aviatorCashOutStateRef.current) {
+          aviatorCashOutStateRef.current = nextCoLive;
+          setAviatorCashOutState(nextCoLive);
+        }
+
+        // Regista crash confirmado pelo canvas OU reconcilia faixa histórica superior
+        let newlyCreated: AviatorRoundRecord[] = [];
+        if (transition.confirmedCrashMultiplier !== null) {
+          const built = buildAviatorRoundRecord({
+            multiplier: transition.confirmedCrashMultiplier,
+            existingRounds: prevRounds,
+            source: 'ocr_live',
+            ocrConfidence: event.ocrConfidence ?? 0.9,
+            predictionBefore: aviatorAnalysisRef.current.strategies.activeSnapshot,
+            timestamp: now,
+          });
+          if (built.valid && built.record) {
+            newlyCreated = [built.record];
+          }
+        } else if (incomingStrip.length > 0) {
+          newlyCreated = reconcileAviatorStrip({
+            incomingNewestFirst: incomingStrip,
+            isFullStrip: Boolean(event.isFullStrip),
+            existingRounds: prevRounds,
+            source: 'ocr_strip',
+            ocrConfidence: event.ocrConfidence ?? 0.85,
+            activePrediction: aviatorAnalysisRef.current.strategies.activeSnapshot,
+          });
+        }
+
+        if (newlyCreated.length > 0) {
+          const updated = [...prevRounds, ...newlyCreated];
+          aviatorRoundsRef.current = updated;
+          setAviatorRounds(updated);
+          void saveAviatorRounds(updated);
+
+          const crashMult = newlyCreated[newlyCreated.length - 1].multiplier;
+          const settled = settleActiveAutoBetOnCrash({
+            autoState: aviatorAutoBetStateRef.current,
+            bankrollState: aviatorBankrollStateRef.current,
+            crashMultiplier: crashMult,
+          });
+          aviatorAutoBetStateRef.current = settled.nextAutoState;
+          aviatorBankrollStateRef.current = settled.nextBankrollState;
+          setAviatorAutoBetState(settled.nextAutoState);
+          setAviatorBankrollState(settled.nextBankrollState);
+          saveBankrollState(settled.nextBankrollState);
+
+          const coClosed = recordCashOutOutcomeOnCrash(
+            aviatorCashOutCfgRef.current,
+            aviatorCashOutStateRef.current,
+            crashMult,
+            aviatorAutoBetCfgRef.current.mode === 'simulation'
+          );
+          aviatorCashOutStateRef.current = coClosed;
+          setAviatorCashOutState(coClosed);
+
+          setAviatorScanDebug((prev) => ({
+            ...prev,
+            lastReadTime: nowStr,
+            lastMultiplierLabel: `${crashMult.toFixed(2)}x`,
+            consecutiveFailures: 0,
+          }));
+          setScanStatusHint(`Aviator lido: ${crashMult.toFixed(2)}x`);
+        }
+      });
+
+      const aviatorCapSub = await BrowserScanner.addListener('aviatorCaptureStatus', (event) => {
+        if (!mounted) return;
+        setAviatorCaptureStatus((prev) => ({
+          ...prev,
+          mediaProjectionActive: Boolean(event.mediaProjectionActive),
+          captureIntervalMs: event.captureIntervalMs || prev.captureIntervalMs,
+          permissionState: event.permissionState || prev.permissionState,
+          lastError: event.error ? event.error : null,
+        }));
+      });
+
       const telemetrySub = await BrowserScanner.addListener('scanTelemetry', (event) => {
         if (!mounted) return;
         const nowStr = new Date().toLocaleTimeString('pt-PT', { hour12: false });
@@ -320,6 +607,19 @@ export default function App() {
             lastReadMs: event.elapsedMs,
             consecutiveFailures: event.ocrOk ? 0 : event.consecutiveFailures,
             ocrActive: Boolean(event.ocrOk),
+          }));
+          return;
+        }
+        if (gameModeRef.current === 'aviator') {
+          setAviatorScanDebug((prev) => ({
+            ...prev,
+            lastReadTime: event.ocrOk ? nowStr : prev.lastReadTime,
+            lastMultiplierLabel:
+              event.ocrOk && event.lastNumber >= 100
+                ? `${(event.lastNumber / 100).toFixed(2)}x`
+                : prev.lastMultiplierLabel,
+            lastReadMs: event.elapsedMs,
+            consecutiveFailures: event.ocrOk ? 0 : event.consecutiveFailures,
           }));
           return;
         }
@@ -346,6 +646,10 @@ export default function App() {
         (event) => {
           if (mounted) {
             setNativeBrowserOpen(Boolean(event.visible));
+            setAviatorCaptureStatus((prev) => ({
+              ...prev,
+              integratedBrowserOpen: Boolean(event.visible),
+            }));
           }
         }
       );
@@ -360,6 +664,8 @@ export default function App() {
           setScanStatusHint(
             gameModeRef.current === 'bacbo'
               ? 'Nenhum resultado Bac Bo detetado. Alinhe a Mira sobre os 3 blocos (JOGADOR | EMPATE | BANCA).'
+              : gameModeRef.current === 'aviator'
+              ? 'Nenhum multiplicador Aviator detetado. Alinhe a Mira sobre a faixa superior e o voo.'
               : 'Nenhum número detetado. Abra a roleta e toque em Mira se precisar alinhar.'
           );
         }
@@ -368,6 +674,8 @@ export default function App() {
       return () => {
         void spinSub.remove();
         void bacboSub.remove();
+        void aviatorSub.remove();
+        void aviatorCapSub.remove();
         void telemetrySub.remove();
         void visSub.remove();
         void feedbackSub.remove();
@@ -559,6 +867,193 @@ export default function App() {
     });
   };
 
+  // Handlers exclusivos da Aba 3: AVIATOR INTELLIGENCE
+  const handleAddAviatorMultiplier = (
+    multiplier: number,
+    source: AviatorRoundRecord['source']
+  ): { valid: boolean; reason?: string } => {
+    const res = buildAviatorRoundRecord({
+      multiplier,
+      existingRounds: aviatorRounds,
+      source,
+      predictionBefore: aviatorAnalysisRef.current.strategies.activeSnapshot,
+    });
+    if (!res.valid || !res.record) {
+      return { valid: false, reason: res.reason };
+    }
+    const updated = [...aviatorRounds, res.record];
+    setAviatorRounds(updated);
+    void saveAviatorRounds(updated);
+
+    const settled = settleActiveAutoBetOnCrash({
+      autoState: aviatorAutoBetState,
+      bankrollState: aviatorBankrollState,
+      crashMultiplier: res.record.multiplier,
+    });
+    setAviatorAutoBetState(settled.nextAutoState);
+    setAviatorBankrollState(settled.nextBankrollState);
+    saveBankrollState(settled.nextBankrollState);
+
+    const coClosed = recordCashOutOutcomeOnCrash(
+      aviatorCashOutCfg,
+      aviatorCashOutState,
+      res.record.multiplier,
+      aviatorAutoBetCfg.mode === 'simulation'
+    );
+    setAviatorCashOutState(coClosed);
+
+    const nowStr = new Date().toLocaleTimeString('pt-PT', { hour12: false });
+    setAviatorScanDebug((prev) => ({
+      ...prev,
+      lastReadTime: nowStr,
+      lastMultiplierLabel: `${res.record!.multiplier.toFixed(2)}x`,
+      lastReadMs: 0,
+      consecutiveFailures: 0,
+    }));
+
+    // Avalia próxima entrada em Modo Simulação / Preparação Manual após atualização
+    const nextEval = evaluateAutoBetOpportunity({
+      autoCfg: aviatorAutoBetCfg,
+      autoState: settled.nextAutoState,
+      bankrollCfg: aviatorBankrollCfg,
+      bankrollState: settled.nextBankrollState,
+      strategyReport: aviatorAnalysisRef.current.strategies,
+      nextRoundNumber: updated.length + 1,
+    });
+    setAviatorAutoBetState(nextEval.nextAutoState);
+
+    return { valid: true };
+  };
+
+  const handleBulkAddAviator = (multipliersNewestFirst: number[]): number => {
+    const created = reconcileAviatorStrip({
+      incomingNewestFirst: multipliersNewestFirst,
+      isFullStrip: false,
+      existingRounds: aviatorRounds,
+      source: 'import',
+      ocrConfidence: 1,
+    });
+    if (created.length === 0) return 0;
+    const updated = [...aviatorRounds, ...created];
+    setAviatorRounds(updated);
+    void saveAviatorRounds(updated);
+    return created.length;
+  };
+
+  const handleImportAviatorRounds = (restored: AviatorRoundRecord[]) => {
+    setAviatorRounds(restored);
+    void saveAviatorRounds(restored);
+  };
+
+  const handleResetAllAviator = () => {
+    setAviatorRounds([]);
+    void clearAllAviatorRounds();
+    const freshBank = createInitialBankrollState(aviatorBankrollCfg);
+    setAviatorBankrollState(freshBank);
+    saveBankrollState(freshBank);
+    setAviatorAutoBetState(createInitialAutoBetState());
+    setAviatorCashOutState(createInitialCashOutState());
+    setAviatorScanDebug({
+      lastReadTime: '--:--:--',
+      lastMultiplierLabel: '--',
+      lastReadMs: null,
+      consecutiveFailures: 0,
+    });
+  };
+
+  const handleUpdateAviatorBankrollCfg = (cfg: AviatorBankrollConfig) => {
+    setAviatorBankrollCfg(cfg);
+    saveBankrollConfig(cfg);
+  };
+
+  const handleResetAviatorBankrollSession = () => {
+    const fresh = createInitialBankrollState(aviatorBankrollCfg);
+    setAviatorBankrollState(fresh);
+    saveBankrollState(fresh);
+    setAviatorAutoBetState(createInitialAutoBetState());
+    setAviatorCashOutState(createInitialCashOutState());
+  };
+
+  const handleToggleAviatorBankrollPause = () => {
+    setAviatorBankrollState((prev) => {
+      const next = { ...prev, pausedUntilNextSession: !prev.pausedUntilNextSession };
+      saveBankrollState(next);
+      return next;
+    });
+  };
+
+  const handleUpdateAviatorAutoBetCfg = (cfg: AviatorAutoBetConfig) => {
+    setAviatorAutoBetCfg(cfg);
+    saveAutoBetConfig(cfg);
+    if (cfg.enabled && cfg.mode !== 'off') {
+      const nextEval = evaluateAutoBetOpportunity({
+        autoCfg: cfg,
+        autoState: aviatorAutoBetState,
+        bankrollCfg: aviatorBankrollCfg,
+        bankrollState: aviatorBankrollState,
+        strategyReport: aviatorAnalysis.strategies,
+        nextRoundNumber: aviatorRounds.length + 1,
+      });
+      setAviatorAutoBetState(nextEval.nextAutoState);
+    }
+  };
+
+  const handleConfirmAviatorManualTicket = (confirm: boolean) => {
+    setAviatorAutoBetState((prev) => confirmManualTicketAction(prev, confirm));
+  };
+
+  const handleUpdateAviatorCashOutCfg = (cfg: AviatorCashOutConfig) => {
+    setAviatorCashOutCfg(cfg);
+    saveCashOutConfig(cfg);
+  };
+
+  const handleSelectAviatorLearningWindow = (w: LearningWindowKey) => {
+    setAviatorLearningWindow(w);
+    saveSelectedLearningWindow(w);
+  };
+
+  const handleSaveAviatorSnapshot = () => {
+    const win =
+      aviatorAnalysis.learning.windows.find((w) => w.windowKey === aviatorLearningWindow) ??
+      aviatorAnalysis.learning.windows[0];
+    const snap: AviatorLearningSnapshot = {
+      id: `snap-${Date.now()}`,
+      timestamp: Date.now(),
+      sampleSize: aviatorRounds.length,
+      bestStrategyName: win.bestStrategyName,
+      validationHitRatePct: win.validationHitRatePct,
+      validationRoiPct: win.validationRoiPct,
+    };
+    const next = [...aviatorSnapshots, snap].slice(-30);
+    setAviatorSnapshots(next);
+    saveLearningSnapshots(next);
+  };
+
+  const handleStartAviatorMediaProjection = async () => {
+    if (!isAndroidApk) {
+      setAviatorCaptureStatus((prev) => ({
+        ...prev,
+        lastError: 'Captura externa MediaProjection disponível apenas no APK Android instalado.',
+      }));
+      return;
+    }
+    await BrowserScanner.startMediaProjection({
+      intervalMs: aviatorCaptureStatus.captureIntervalMs,
+    });
+  };
+
+  const handleStopAviatorMediaProjection = async () => {
+    if (!isAndroidApk) return;
+    await BrowserScanner.stopMediaProjection();
+  };
+
+  const handleChangeAviatorInterval = async (ms: number) => {
+    setAviatorCaptureStatus((prev) => ({ ...prev, captureIntervalMs: ms }));
+    if (isAndroidApk) {
+      await BrowserScanner.setCaptureIntervalMs({ intervalMs: ms });
+    }
+  };
+
   const { fieldSuggestions, accuracy } = analysis;
 
   const lastRoundMap = useMemo(() => {
@@ -643,6 +1138,13 @@ export default function App() {
                 className="rounded border border-blue-500/60 bg-blue-600/20 px-2 py-0.5 text-[10px] font-bold text-blue-300"
               >
                 BAC BO
+              </button>
+              <button
+                type="button"
+                onClick={() => setGameMode('aviator')}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-slate-400"
+              >
+                AVIATOR
               </button>
               {bbLastRound && (
                 <span
@@ -946,6 +1448,190 @@ export default function App() {
       );
     }
 
+    if (gameMode === 'aviator') {
+      const avLastRound =
+        aviatorRounds.length > 0 ? aviatorRounds[aviatorRounds.length - 1] : null;
+      const avSug = aviatorAnalysis.strategies.activeSnapshot;
+      const avTopStrat = aviatorAnalysis.strategies.rankingByRoi[0];
+
+      return (
+        <div className="h-screen overflow-y-auto bg-[#0B0F17] text-slate-100 p-2 space-y-1.5">
+          {/* Cabeçalho compacto Split-Screen com seletor [ROLETA] [BAC BO] [AVIATOR] */}
+          <div className="flex flex-wrap items-center justify-between gap-1 border-b border-slate-800 pb-1.5">
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={() => setGameMode('roulette')}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-slate-400"
+              >
+                ROLETA
+              </button>
+              <button
+                type="button"
+                onClick={() => setGameMode('bacbo')}
+                className="rounded border border-slate-700 bg-slate-900 px-2 py-0.5 text-[10px] font-bold text-slate-400"
+              >
+                BAC BO
+              </button>
+              <button
+                type="button"
+                onClick={() => setGameMode('aviator')}
+                className="rounded border border-red-500/70 bg-red-600/20 px-2 py-0.5 text-[10px] font-bold text-red-300"
+              >
+                AVIATOR
+              </button>
+              {avLastRound && (
+                <span
+                  className={`inline-flex h-5 px-1.5 items-center justify-center rounded border font-mono text-[10px] font-bold tabular-nums ${multiplierBadgeClass(
+                    avLastRound.multiplier
+                  )}`}
+                >
+                  {avLastRound.multiplier.toFixed(2)}x
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1 shrink-0">
+              <button
+                type="button"
+                onClick={handleManualBrowserScan}
+                className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-200"
+              >
+                <RefreshCw className="h-2.5 w-2.5" />
+                <span>Ler</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleResetAllAviator}
+                className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-200"
+              >
+                <RotateCcw className="h-2.5 w-2.5" />
+                <span>Zerar 0%</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleCycleSplitRatio}
+                className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-200"
+              >
+                <ArrowUpDown className="h-2.5 w-2.5" />
+                <span>{splitLabel}</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleToggleAndroidCalibration}
+                className="inline-flex items-center gap-1 rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-200"
+              >
+                <Crosshair className="h-2.5 w-2.5" />
+                <span>Mira</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenIntegratedBrowser}
+                className="rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-semibold text-slate-950"
+              >
+                Painel
+              </button>
+            </div>
+          </div>
+
+          {aviatorCashOutState.alertActiveNow && aviatorCashOutState.alertMessage && (
+            <div className="rounded border border-amber-400 bg-amber-500/20 px-2 py-1 text-[10px] font-bold text-amber-200">
+              {aviatorCashOutState.alertMessage}
+            </div>
+          )}
+
+          {/* Faixa Recente Aviator */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
+            {aviatorRounds.length === 0 ? (
+              <span className="text-[10px] text-amber-300">
+                Aguardando leitura da faixa + multiplicador Aviator (use Mira se precisar ajustar).
+              </span>
+            ) : (
+              aviatorRounds
+                .slice(-12)
+                .reverse()
+                .map((r, idx) => (
+                  <span
+                    key={r.id}
+                    className={`inline-flex h-5 px-1.5 items-center justify-center rounded border font-mono text-[10px] font-bold tabular-nums shrink-0 ${multiplierBadgeClass(
+                      r.multiplier
+                    )} ${idx === 0 ? 'ring-1 ring-amber-400' : ''}`}
+                  >
+                    {r.multiplier.toFixed(2)}x
+                  </span>
+                ))
+            )}
+          </div>
+
+          {/* Cartão Principal Ao Vivo Aviator */}
+          <div className="rounded-md border border-slate-800 bg-[#131924] p-2 space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[9px] uppercase tracking-wider text-slate-400">
+                  {avSug.strategyName} · Score {avSug.confidencePct.toFixed(0)}%
+                </div>
+                <div
+                  className={`text-sm font-bold ${
+                    avSug.shouldEnter ? 'text-emerald-400' : 'text-slate-200'
+                  }`}
+                >
+                  {avSug.shouldEnter && avSug.targetMultiplier
+                    ? `ALVO: ${avSug.targetMultiplier.toFixed(2)}x`
+                    : 'AGUARDAR ENTRADA'}
+                </div>
+              </div>
+              <div className="text-right font-mono text-[10px] tabular-nums">
+                <div className="text-amber-300 font-bold">
+                  Ao vivo:{' '}
+                  {aviatorLiveState.currentMultiplier !== null
+                    ? `${aviatorLiveState.currentMultiplier.toFixed(2)}x`
+                    : '--'}{' '}
+                  ({aviatorLiveState.phase === 'FLYING' ? 'VOAR' : aviatorLiveState.phase === 'CRASHED' ? 'CRASH' : 'ESP.'})
+                </div>
+                <div className="text-emerald-400">
+                  Acerto: {aviatorAnalysis.statistics.suggestionHitRatePct.toFixed(1)}% (
+                  {aviatorAnalysis.statistics.suggestionHits}/{aviatorAnalysis.statistics.evaluatedSuggestions})
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1 font-mono text-[10px] tabular-nums">
+              <div className="rounded border border-slate-800 bg-[#0B0F17] px-1.5 py-1">
+                <div className="text-[9px] text-slate-400">Média 20</div>
+                <div className="font-bold text-sky-300">
+                  {aviatorAnalysis.statistics.recent20AvgMultiplier.toFixed(2)}x
+                </div>
+              </div>
+              <div className="rounded border border-slate-800 bg-[#0B0F17] px-1.5 py-1">
+                <div className="text-[9px] text-slate-400">Seq &lt;1.5x</div>
+                <div className="font-bold text-amber-300">
+                  {aviatorAnalysis.patterns.currentLowStreak}x
+                </div>
+              </div>
+              <div className="rounded border border-slate-800 bg-[#0B0F17] px-1.5 py-1">
+                <div className="text-[9px] text-slate-400">Banca</div>
+                <div className="font-bold text-emerald-300">
+                  {aviatorBankrollState.currentBalanceAoa.toFixed(0)}
+                </div>
+              </div>
+            </div>
+
+            <div className="text-[9px] text-slate-400 truncate">
+              {avTopStrat
+                ? `Melhor ROI: ${avTopStrat.name} (${avTopStrat.simulatedRoiPct.toFixed(1)}%) · ${avSug.reason}`
+                : avSug.reason}
+            </div>
+          </div>
+
+          <div className="rounded-md border border-slate-800/80 bg-[#090D14] px-2 py-1 font-mono text-[9px] leading-snug text-slate-400 tabular-nums">
+            Última leitura: {aviatorScanDebug.lastReadTime} · {aviatorScanDebug.lastMultiplierLabel} ·{' '}
+            {aviatorScanDebug.lastReadMs !== null ? `${aviatorScanDebug.lastReadMs}ms` : '--'} ·{' '}
+            Rodadas: {aviatorRounds.length}
+          </div>
+        </div>
+      );
+    }
+
     const hasTableData = combinedSpins.length > 0;
     const compactOptions = [
       {
@@ -1024,6 +1710,13 @@ export default function App() {
               className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[9px] font-bold text-slate-400 shrink-0"
             >
               BAC BO
+            </button>
+            <button
+              type="button"
+              onClick={() => setGameMode('aviator')}
+              className="rounded border border-slate-700 bg-slate-900 px-1.5 py-0.5 text-[9px] font-bold text-slate-400 shrink-0"
+            >
+              AVIATOR
             </button>
             {accuracy.lastRound ? (
               <>
@@ -1277,7 +1970,7 @@ export default function App() {
               RoletaVision
             </a>
 
-            {/* Duas Abas Principais no Topo: [ ROLETA ] [ BAC BO ] */}
+            {/* Três Abas Principais no Topo: [ ROLETA ] [ BAC BO ] [ AVIATOR ] */}
             <div
               role="tablist"
               aria-label="Selecionar jogo principal"
@@ -1309,6 +2002,19 @@ export default function App() {
               >
                 BAC BO
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={gameMode === 'aviator'}
+                onClick={() => setGameMode('aviator')}
+                className={`rounded-md px-3 py-1.5 text-xs font-bold tracking-wide transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  gameMode === 'aviator'
+                    ? 'bg-red-600 text-white'
+                    : 'text-slate-400 hover:text-slate-100'
+                }`}
+              >
+                AVIATOR
+              </button>
             </div>
           </div>
 
@@ -1334,11 +2040,17 @@ export default function App() {
                 </button>
               ))}
             </nav>
-          ) : (
+          ) : gameMode === 'bacbo' ? (
             <div className="hidden lg:flex items-center gap-3 text-xs text-slate-400 font-mono tabular-nums">
               <span className="text-blue-400 font-semibold">BAC BO INTELLIGENCE ENGINE</span>
               <span aria-hidden="true">·</span>
               <span>{bacboRounds.length} rodadas guardadas</span>
+            </div>
+          ) : (
+            <div className="hidden lg:flex items-center gap-3 text-xs text-slate-400 font-mono tabular-nums">
+              <span className="text-red-400 font-semibold">AVIATOR INTELLIGENCE</span>
+              <span aria-hidden="true">·</span>
+              <span>{aviatorRounds.length} rodadas guardadas</span>
             </div>
           )}
 
@@ -1405,6 +2117,8 @@ export default function App() {
                 {isAndroidApk
                   ? gameMode === 'bacbo'
                     ? 'Abra o Bac Bo na Kwanzabet em tela dividida para o OCR ler Player, Banker, Tie e a grelha em tempo real.'
+                    : gameMode === 'aviator'
+                    ? 'Abra o Aviator na Kwanzabet em tela dividida (ou inicie a Captura de Ecrã para ler no Chrome externo) para monitorizar em tempo real.'
                     : 'Abra a Kwanzabet dentro do app em tela dividida para ler os resultados em tempo real.'
                   : 'No APK Android, o botão abaixo abre a Kwanzabet na parte superior enquanto as sugestões ficam fixas embaixo.'}
               </p>
@@ -1441,6 +2155,37 @@ export default function App() {
             onAddRound={handleAddBacBoRound}
             onImportRounds={handleImportBacBoRounds}
             onResetAll={handleResetAllBacBo}
+          />
+        ) : gameMode === 'aviator' ? (
+          <AviatorDashboard
+            rounds={aviatorRounds}
+            analysis={aviatorAnalysis}
+            liveState={aviatorLiveState}
+            captureStatus={aviatorCaptureStatus}
+            bankrollCfg={aviatorBankrollCfg}
+            bankrollState={aviatorBankrollState}
+            autoBetCfg={aviatorAutoBetCfg}
+            autoBetState={aviatorAutoBetState}
+            cashOutCfg={aviatorCashOutCfg}
+            cashOutState={aviatorCashOutState}
+            selectedWindow={aviatorLearningWindow}
+            isAndroidApk={isAndroidApk}
+            scanDebug={aviatorScanDebug}
+            onAddMultiplier={handleAddAviatorMultiplier}
+            onBulkAddMultipliers={handleBulkAddAviator}
+            onImportRounds={handleImportAviatorRounds}
+            onResetAll={handleResetAllAviator}
+            onUpdateBankrollCfg={handleUpdateAviatorBankrollCfg}
+            onResetBankrollSession={handleResetAviatorBankrollSession}
+            onToggleBankrollPause={handleToggleAviatorBankrollPause}
+            onUpdateAutoBetCfg={handleUpdateAviatorAutoBetCfg}
+            onConfirmManualTicket={handleConfirmAviatorManualTicket}
+            onUpdateCashOutCfg={handleUpdateAviatorCashOutCfg}
+            onSelectLearningWindow={handleSelectAviatorLearningWindow}
+            onSaveLearningSnapshot={handleSaveAviatorSnapshot}
+            onStartMediaProjection={handleStartAviatorMediaProjection}
+            onStopMediaProjection={handleStopAviatorMediaProjection}
+            onChangeCaptureInterval={handleChangeAviatorInterval}
           />
         ) : (
           <>

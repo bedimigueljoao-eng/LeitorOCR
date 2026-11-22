@@ -1,12 +1,18 @@
 package com.roletavision.app;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
+import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -33,11 +39,16 @@ import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import androidx.core.content.ContextCompat;
+
 import com.getcapacitor.BridgeActivity;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends BridgeActivity {
 
@@ -73,8 +84,11 @@ public class MainActivity extends BridgeActivity {
     private float roiTopRatio = 0.04f;
     private float roiHeightRatio = 0.07f;
     private String activeGameMode = "roulette";
+    private int aviatorCaptureIntervalMs = 550;
 
     private SharedPreferences prefs;
+    private ActivityResultLauncher<Intent> mediaProjectionLauncher;
+    private ActivityResultLauncher<String> notificationPermissionLauncher;
 
     private final Runnable scanRunnable = new Runnable() {
         @Override
@@ -86,13 +100,49 @@ public class MainActivity extends BridgeActivity {
             if (browserVisible && autoScanEnabled && !isScanningFrame) {
                 captureAndAnalyzeBrowser(false);
             }
-            handler.postDelayed(this, 500L);
+            long delay = "aviator".equals(activeGameMode) ? Math.max(350L, aviatorCaptureIntervalMs) : 500L;
+            handler.postDelayed(this, delay);
         }
     };
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(BrowserScannerPlugin.class);
+
+        notificationPermissionLauncher = registerForActivityResult(
+                new ActivityResultContracts.RequestPermission(),
+                granted -> launchSystemScreenCapturePrompt()
+        );
+
+        mediaProjectionLauncher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
+                        Intent svcIntent = new Intent(this, AviatorCaptureService.class);
+                        svcIntent.setAction(AviatorCaptureService.ACTION_START);
+                        svcIntent.putExtra(AviatorCaptureService.EXTRA_RESULT_CODE, result.getResultCode());
+                        svcIntent.putExtra(AviatorCaptureService.EXTRA_RESULT_DATA, result.getData());
+                        svcIntent.putExtra(AviatorCaptureService.EXTRA_INTERVAL_MS, (long) aviatorCaptureIntervalMs);
+                        svcIntent.putExtra(
+                                AviatorCaptureService.EXTRA_ROI_TOP,
+                                prefs != null ? prefs.getFloat("aviator_roi_top", 0.14f) : 0.14f
+                        );
+                        svcIntent.putExtra(
+                                AviatorCaptureService.EXTRA_ROI_HEIGHT,
+                                prefs != null ? prefs.getFloat("aviator_roi_height", 0.34f) : 0.34f
+                        );
+                        ContextCompat.startForegroundService(this, svcIntent);
+                    } else {
+                        BrowserScannerPlugin.emitAviatorCaptureStatus(
+                                false,
+                                aviatorCaptureIntervalMs,
+                                "denied",
+                                "Captura de ecrã recusada pelo utilizador."
+                        );
+                    }
+                }
+        );
+
         super.onCreate(savedInstanceState);
 
         prefs = getSharedPreferences("roletavision_browser", MODE_PRIVATE);
@@ -333,6 +383,18 @@ public class MainActivity extends BridgeActivity {
                         .putFloat("bacbo_blocks_v2_top", roiTopRatio)
                         .putFloat("bacbo_blocks_v2_height", roiHeightRatio)
                         .apply();
+            } else if ("aviator".equals(activeGameMode)) {
+                prefs.edit()
+                        .putFloat("aviator_roi_top", roiTopRatio)
+                        .putFloat("aviator_roi_height", roiHeightRatio)
+                        .apply();
+                if (AviatorCaptureService.isServiceRunning()) {
+                    Intent updIntent = new Intent(this, AviatorCaptureService.class);
+                    updIntent.setAction(AviatorCaptureService.ACTION_UPDATE_ROI);
+                    updIntent.putExtra(AviatorCaptureService.EXTRA_ROI_TOP, roiTopRatio);
+                    updIntent.putExtra(AviatorCaptureService.EXTRA_ROI_HEIGHT, roiHeightRatio);
+                    startService(updIntent);
+                }
             } else {
                 prefs.edit()
                         .putFloat("roi_top", roiTopRatio)
@@ -485,7 +547,14 @@ public class MainActivity extends BridgeActivity {
     }
 
     public void setActiveGameMode(String mode) {
-        String nextMode = "bacbo".equals(mode) ? "bacbo" : "roulette";
+        String nextMode;
+        if ("bacbo".equals(mode)) {
+            nextMode = "bacbo";
+        } else if ("aviator".equals(mode)) {
+            nextMode = "aviator";
+        } else {
+            nextMode = "roulette";
+        }
         this.activeGameMode = nextMode;
         this.isScanningFrame = false;
 
@@ -504,6 +573,20 @@ public class MainActivity extends BridgeActivity {
                 if (tvCalibTitle != null) {
                     tvCalibTitle.setText("Alinhar caixa verde sobre os 3 blocos (JOGADOR | EMPATE | BANCA)");
                 }
+            } else if ("aviator".equals(nextMode)) {
+                roiTopRatio = prefs.getFloat("aviator_roi_top", 0.14f);
+                roiHeightRatio = prefs.getFloat("aviator_roi_height", 0.34f);
+                if (seekRoiTop != null) {
+                    seekRoiTop.setMax(65);
+                    seekRoiTop.setProgress((int) (roiTopRatio * 100));
+                }
+                if (seekRoiHeight != null) {
+                    seekRoiHeight.setMax(55);
+                    seekRoiHeight.setProgress((int) (roiHeightRatio * 100));
+                }
+                if (tvCalibTitle != null) {
+                    tvCalibTitle.setText("Alinhar caixa verde sobre a faixa + multiplicador do Aviator");
+                }
             } else {
                 roiTopRatio = prefs.getFloat("roi_top", 0.04f);
                 roiHeightRatio = prefs.getFloat("roi_height", 0.07f);
@@ -520,6 +603,54 @@ public class MainActivity extends BridgeActivity {
                 }
             }
             updateRoiOverlayPosition();
+        }
+    }
+
+    public void requestAviatorScreenCapturePermission(int intervalMs) {
+        aviatorCaptureIntervalMs = Math.max(350, Math.min(2000, intervalMs));
+        BrowserScannerPlugin.emitAviatorCaptureStatus(false, aviatorCaptureIntervalMs, "pending", "");
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS);
+                return;
+            }
+        }
+        launchSystemScreenCapturePrompt();
+    }
+
+    private void launchSystemScreenCapturePrompt() {
+        MediaProjectionManager manager =
+                (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
+        if (manager == null || mediaProjectionLauncher == null) {
+            BrowserScannerPlugin.emitAviatorCaptureStatus(
+                    false,
+                    aviatorCaptureIntervalMs,
+                    "denied",
+                    "MediaProjection indisponível neste dispositivo."
+            );
+            return;
+        }
+        mediaProjectionLauncher.launch(manager.createScreenCaptureIntent());
+    }
+
+    public void stopAviatorScreenCaptureService() {
+        Intent stopIntent = new Intent(this, AviatorCaptureService.class);
+        stopIntent.setAction(AviatorCaptureService.ACTION_STOP);
+        startService(stopIntent);
+        BrowserScannerPlugin.emitAviatorCaptureStatus(false, aviatorCaptureIntervalMs, "idle", "");
+    }
+
+    public void updateAviatorCaptureInterval(int intervalMs) {
+        aviatorCaptureIntervalMs = Math.max(350, Math.min(2000, intervalMs));
+        if (AviatorCaptureService.isServiceRunning()) {
+            Intent svcIntent = new Intent(this, AviatorCaptureService.class);
+            svcIntent.setAction(AviatorCaptureService.ACTION_SET_INTERVAL);
+            svcIntent.putExtra(AviatorCaptureService.EXTRA_INTERVAL_MS, (long) aviatorCaptureIntervalMs);
+            startService(svcIntent);
+        } else {
+            BrowserScannerPlugin.emitAviatorCaptureStatus(false, aviatorCaptureIntervalMs, "idle", "");
         }
     }
 
@@ -651,6 +782,10 @@ public class MainActivity extends BridgeActivity {
     ) {
         if ("bacbo".equals(activeGameMode)) {
             processBacBoBitmap(bitmap, showCalibrationFeedback, scanStartMs);
+            return;
+        }
+        if ("aviator".equals(activeGameMode)) {
+            processAviatorBitmap(bitmap, showCalibrationFeedback, scanStartMs);
             return;
         }
         scanner.scanHistoryStrip(bitmap, roiTopRatio, roiHeightRatio, (detectedNewestFirst, ocrOk) -> {
@@ -1128,6 +1263,74 @@ public class MainActivity extends BridgeActivity {
                 BrowserScannerPlugin.emitBacBo(newCells, true);
             }
         }
+    }
+
+    // ==================== AVIATOR INTEGRATED BROWSER SCAN ====================
+
+    private void processAviatorBitmap(
+            Bitmap bitmap,
+            boolean showCalibrationFeedback,
+            long scanStartMs
+    ) {
+        scanner.scanAviatorFrame(bitmap, roiTopRatio, roiHeightRatio, (liveMult, isCrashedColor, historyNewestFirst, confidence, ocrOk) -> {
+            bitmap.recycle();
+            isScanningFrame = false;
+
+            long elapsedMs = Math.max(1L, System.currentTimeMillis() - scanStartMs);
+            totalReadTicks++;
+
+            boolean hasSignal = ocrOk && (liveMult >= 1.0 || (historyNewestFirst != null && !historyNewestFirst.isEmpty()));
+            if (hasSignal) {
+                consecutiveFailures = 0;
+            } else {
+                consecutiveFailures++;
+            }
+
+            int telemetryVal = liveMult >= 1.0
+                    ? (int) Math.round(liveMult * 100)
+                    : (historyNewestFirst != null && !historyNewestFirst.isEmpty()
+                    ? (int) Math.round(historyNewestFirst.get(0) * 100)
+                    : -1);
+            int stripSize = historyNewestFirst != null ? historyNewestFirst.size() : 0;
+
+            BrowserScannerPlugin.emitScanTelemetry(
+                    telemetryVal,
+                    elapsedMs,
+                    hasSignal,
+                    consecutiveFailures,
+                    stripSize,
+                    totalReadTicks
+            );
+
+            if (showCalibrationFeedback) {
+                BrowserScannerPlugin.emitScanFeedback(
+                        liveMult >= 1.0 ? stripSize + 1 : stripSize,
+                        "aviator-ocr"
+                );
+            }
+
+            if (showCalibrationFeedback && tvCalibStatus != null) {
+                if (!hasSignal) {
+                    tvCalibStatus.setText("Aviator: Ajuste a Mira sobre a faixa superior e o multiplicador.");
+                } else {
+                    String liveStr = liveMult >= 1.0
+                            ? String.format(Locale.US, "%.2fx (%s)", liveMult, isCrashedColor ? "CRASH" : "VOANDO")
+                            : "--";
+                    tvCalibStatus.setText("Aviator OK · Atual: " + liveStr + " · Faixa: " + stripSize + " itens");
+                }
+            }
+
+            if (hasSignal) {
+                BrowserScannerPlugin.emitAviator(
+                        liveMult,
+                        isCrashedColor,
+                        historyNewestFirst,
+                        stripSize >= 3,
+                        confidence,
+                        "integrated_browser"
+                );
+            }
+        });
     }
 
     private Button createBarButton(String label, String textColorHex, String bgColorHex) {

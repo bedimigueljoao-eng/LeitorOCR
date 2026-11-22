@@ -90,6 +90,46 @@ public class BrowserScannerPlugin extends Plugin {
         instance.notifyListeners("bacboDetected", payload);
     }
 
+    public static void emitAviator(
+            double liveMultiplier,
+            boolean isCrashedColor,
+            List<Double> historyNewestFirst,
+            boolean isFullStrip,
+            float ocrConfidence,
+            String source
+    ) {
+        if (instance == null) return;
+        JSArray arr = new JSArray();
+        if (historyNewestFirst != null) {
+            for (Double mult : historyNewestFirst) {
+                arr.put(mult);
+            }
+        }
+        JSObject payload = new JSObject();
+        payload.put("liveMultiplier", liveMultiplier);
+        payload.put("isCrashedColor", isCrashedColor);
+        payload.put("historyNewestFirst", arr);
+        payload.put("isFullStrip", isFullStrip);
+        payload.put("ocrConfidence", ocrConfidence);
+        payload.put("source", source != null ? source : "integrated_browser");
+        instance.notifyListeners("aviatorDetected", payload);
+    }
+
+    public static void emitAviatorCaptureStatus(
+            boolean mediaProjectionActive,
+            long captureIntervalMs,
+            String permissionState,
+            String error
+    ) {
+        if (instance == null) return;
+        JSObject payload = new JSObject();
+        payload.put("mediaProjectionActive", mediaProjectionActive);
+        payload.put("captureIntervalMs", captureIntervalMs);
+        payload.put("permissionState", permissionState != null ? permissionState : "idle");
+        payload.put("error", error != null ? error : "");
+        instance.notifyListeners("aviatorCaptureStatus", payload);
+    }
+
     @PluginMethod
     public void openBrowser(PluginCall call) {
         String url = call.getString("url", "");
@@ -183,5 +223,54 @@ public class BrowserScannerPlugin extends Plugin {
         } else {
             call.reject("MainActivity unavailable");
         }
+    }
+
+    @PluginMethod
+    public void startMediaProjection(PluginCall call) {
+        int interval = call.getInt("intervalMs", 550);
+        if (getActivity() instanceof MainActivity) {
+            MainActivity activity = (MainActivity) getActivity();
+            activity.runOnUiThread(() -> {
+                activity.requestAviatorScreenCapturePermission(interval);
+                call.resolve();
+            });
+        } else {
+            call.reject("MainActivity unavailable");
+        }
+    }
+
+    @PluginMethod
+    public void stopMediaProjection(PluginCall call) {
+        if (getActivity() instanceof MainActivity) {
+            MainActivity activity = (MainActivity) getActivity();
+            activity.runOnUiThread(() -> {
+                activity.stopAviatorScreenCaptureService();
+                call.resolve();
+            });
+        } else {
+            call.reject("MainActivity unavailable");
+        }
+    }
+
+    @PluginMethod
+    public void setCaptureIntervalMs(PluginCall call) {
+        int interval = call.getInt("intervalMs", 550);
+        if (getActivity() instanceof MainActivity) {
+            MainActivity activity = (MainActivity) getActivity();
+            activity.runOnUiThread(() -> {
+                activity.updateAviatorCaptureInterval(interval);
+                call.resolve();
+            });
+        } else {
+            call.reject("MainActivity unavailable");
+        }
+    }
+
+    @PluginMethod
+    public void getCaptureStatus(PluginCall call) {
+        JSObject res = new JSObject();
+        res.put("mediaProjectionActive", AviatorCaptureService.isServiceRunning());
+        res.put("captureIntervalMs", AviatorCaptureService.getCurrentIntervalMs());
+        call.resolve(res);
     }
 }

@@ -674,4 +674,266 @@ public class ScreenScanner {
         if (votesT >= votesB && votesT >= votesP) return "T";
         return "B";
     }
+
+    // ==================== AVIATOR OCR ====================
+
+    private static class AviatorTokenCandidate {
+        final double multiplier;
+        final int leftX;
+        final int centerY;
+        final int boxHeight;
+        final Rect box;
+
+        AviatorTokenCandidate(double multiplier, int leftX, int centerY, int boxHeight, Rect box) {
+            this.multiplier = multiplier;
+            this.leftX = leftX;
+            this.centerY = centerY;
+            this.boxHeight = boxHeight;
+            this.box = box;
+        }
+    }
+
+    public interface AviatorFrameCallback {
+        void onResult(
+                double liveMultiplier,
+                boolean isCrashedColor,
+                List<Double> historyNewestFirst,
+                float confidence,
+                boolean ocrOk
+        );
+    }
+
+    public void scanAviatorFrame(
+            Bitmap fullBitmap,
+            float roiTopRatio,
+            float roiHeightRatio,
+            AviatorFrameCallback callback
+    ) {
+        if (fullBitmap == null) {
+            callback.onResult(-1.0, false, Collections.emptyList(), 0f, false);
+            return;
+        }
+        int width = fullBitmap.getWidth();
+        int height = fullBitmap.getHeight();
+        if (width < 40 || height < 40) {
+            callback.onResult(-1.0, false, Collections.emptyList(), 0f, false);
+            return;
+        }
+
+        int topY = Math.max(0, Math.min(height - 24, (int) (height * roiTopRatio)));
+        int cropH = Math.max(30, Math.min(height - topY, (int) (height * roiHeightRatio)));
+
+        Bitmap cropped = Bitmap.createBitmap(fullBitmap, 0, topY, width, cropH);
+        int scaleFactor = cropH < 320 ? 2 : 1;
+        Bitmap scaled = scaleFactor > 1
+                ? Bitmap.createScaledBitmap(cropped, cropped.getWidth() * scaleFactor, cropped.getHeight() * scaleFactor, true)
+                : cropped;
+        if (scaled != cropped) {
+            cropped.recycle();
+        }
+
+        final int sh = scaled.getHeight();
+        InputImage image = InputImage.fromBitmap(scaled, 0);
+        recognizer.process(image)
+                .addOnSuccessListener(visionText -> {
+                    List<AviatorTokenCandidate> candidates = new ArrayList<>();
+                    boolean hasCrashKeyword = false;
+
+                    for (Text.TextBlock block : visionText.getTextBlocks()) {
+                        for (Text.Line line : block.getLines()) {
+                            String lineRaw = line.getText();
+                            if (lineRaw != null) {
+                                String lineUpper = lineRaw.trim().toUpperCase();
+                                if (lineUpper.contains("VOOU") || lineUpper.contains("FLEW")) {
+                                    hasCrashKeyword = true;
+                                }
+                            }
+
+                            // Tenta analisar cada elemento individualmente (ex: "1.38x", "48.92x")
+                            boolean parsedFromElements = false;
+                            for (Text.Element element : line.getElements()) {
+                                Rect box = element.getBoundingBox();
+                                if (box == null) continue;
+                                Double mult = parseAviatorMultiplier(element.getText());
+                                if (mult != null) {
+                                    int bh = box.height();
+                                    if (bh >= 8 && bh <= sh * 0.85f) {
+                                        candidates.add(new AviatorTokenCandidate(
+                                                mult,
+                                                box.left,
+                                                (box.top + box.bottom) / 2,
+                                                bh,
+                                                box
+                                        ));
+                                        parsedFromElements = true;
+                                    }
+                                }
+                            }
+
+                            // Fallback caso o OCR separe "1.39" e "x" na mesma linha grande do multiplicador central
+                            if (!parsedFromElements && lineRaw != null && line.getBoundingBox() != null) {
+                                Double lineMult = parseAviatorMultiplier(lineRaw);
+                                Rect lbox = line.getBoundingBox();
+                                int lbh = lbox.height();
+                                if (lineMult != null && lbh >= Math.max(20, (int) (sh * 0.14f)) && lbh <= sh * 0.85f) {
+                                    candidates.add(new AviatorTokenCandidate(
+                                            lineMult,
+                                            lbox.left,
+                                            (lbox.top + lbox.bottom) / 2,
+                                            lbh,
+                                            lbox
+                                    ));
+                                }
+                            }
+                        }
+                    }
+
+                    // Separa o multiplicador grande ao vivo (voando/crashado) da faixa superior de pílulas pequenas
+                    AviatorTokenCandidate liveCandidate = null;
+                    int liveMinH = Math.max(22, (int) (sh * 0.16f));
+                    for (AviatorTokenCandidate c : candidates) {
+                        if (c.boxHeight >= liveMinH) {
+                            if (liveCandidate == null || c.boxHeight > liveCandidate.boxHeight) {
+                                liveCandidate = c;
+                            }
+                        }
+                    }
+
+                    boolean isCrashedColor = false;
+                    double liveMult = -1.0;
+                    if (liveCandidate != null) {
+                        liveMult = liveCandidate.multiplier;
+                        isCrashedColor = hasCrashKeyword || isAviatorRedMultiplier(scaled, liveCandidate.box);
+                    }
+
+                    List<AviatorTokenCandidate> stripPool = new ArrayList<>();
+                    int stripMaxH = liveCandidate != null
+                            ? Math.max(16, (int) (liveCandidate.boxHeight * 0.60f))
+                            : (int) (sh * 0.30f);
+                    for (AviatorTokenCandidate c : candidates) {
+                        if (c != liveCandidate && c.boxHeight <= stripMaxH) {
+                            stripPool.add(c);
+                        }
+                    }
+
+                    List<AviatorTokenCandidate> stripRow = extractAviatorHorizontalRow(stripPool, sh);
+                    List<Double> historyNewestFirst = new ArrayList<>(stripRow.size());
+                    for (AviatorTokenCandidate item : stripRow) {
+                        historyNewestFirst.add(item.multiplier);
+                    }
+
+                    scaled.recycle();
+
+                    boolean hasLive = liveMult >= 1.0;
+                    boolean hasStrip = !historyNewestFirst.isEmpty();
+                    float confidence = 0f;
+                    if (hasLive && hasStrip) confidence = 0.95f;
+                    else if (hasLive || historyNewestFirst.size() >= 3) confidence = 0.85f;
+                    else if (hasStrip) confidence = 0.70f;
+
+                    callback.onResult(
+                            liveMult,
+                            isCrashedColor,
+                            historyNewestFirst,
+                            confidence,
+                            hasLive || hasStrip
+                    );
+                })
+                .addOnFailureListener(e -> {
+                    scaled.recycle();
+                    callback.onResult(-1.0, false, Collections.emptyList(), 0f, false);
+                });
+    }
+
+    private Double parseAviatorMultiplier(String rawText) {
+        if (rawText == null) return null;
+        String cleaned = rawText.trim().replace(",", ".").replaceAll("\\s+", "");
+        if (cleaned.length() < 2 || cleaned.length() > 10) return null;
+        char last = cleaned.charAt(cleaned.length() - 1);
+        if (last != 'x' && last != 'X' && last != '×') return null;
+        String numPart = cleaned.substring(0, cleaned.length() - 1);
+        if (numPart.isEmpty()) return null;
+
+        int dots = 0;
+        for (int i = 0; i < numPart.length(); i++) {
+            char ch = numPart.charAt(i);
+            if (ch == '.') {
+                dots++;
+                if (dots > 1) return null;
+            } else if (!Character.isDigit(ch)) {
+                return null;
+            }
+        }
+        try {
+            double val = Double.parseDouble(numPart);
+            if (val < 1.0 || val > 100000.0) return null;
+            return Math.round(val * 100.0) / 100.0;
+        } catch (NumberFormatException ignored) {
+            return null;
+        }
+    }
+
+    private boolean isAviatorRedMultiplier(Bitmap bitmap, Rect box) {
+        int w = bitmap.getWidth();
+        int h = bitmap.getHeight();
+        int x0 = clamp(box.left, 0, w - 1);
+        int x1 = clamp(box.right, 0, w - 1);
+        int y0 = clamp(box.top, 0, h - 1);
+        int y1 = clamp(box.bottom, 0, h - 1);
+        int stepX = Math.max(1, (x1 - x0) / 18);
+        int stepY = Math.max(1, (y1 - y0) / 12);
+
+        int redTextPx = 0;
+        int whiteTextPx = 0;
+        for (int y = y0; y <= y1; y += stepY) {
+            for (int x = x0; x <= x1; x += stepX) {
+                int px = bitmap.getPixel(x, y);
+                int r = Color.red(px);
+                int g = Color.green(px);
+                int b = Color.blue(px);
+                if (r > 155 && r > g + 45 && r > b + 45) {
+                    redTextPx++;
+                } else if (r > 195 && g > 195 && b > 195) {
+                    whiteTextPx++;
+                }
+            }
+        }
+        return redTextPx >= 4 && redTextPx >= whiteTextPx * 0.75f;
+    }
+
+    private List<AviatorTokenCandidate> extractAviatorHorizontalRow(
+            List<AviatorTokenCandidate> candidates,
+            int scaledH
+    ) {
+        if (candidates.isEmpty()) return Collections.emptyList();
+        int yTolerance = Math.max(14, (int) (scaledH * 0.14f));
+        List<AviatorTokenCandidate> bestRow = Collections.emptyList();
+
+        for (AviatorTokenCandidate anchor : candidates) {
+            List<AviatorTokenCandidate> row = new ArrayList<>();
+            for (AviatorTokenCandidate other : candidates) {
+                if (Math.abs(other.centerY - anchor.centerY) <= yTolerance) {
+                    row.add(other);
+                }
+            }
+            if (row.size() > bestRow.size()) {
+                bestRow = row;
+            }
+        }
+
+        if (bestRow.isEmpty()) return Collections.emptyList();
+        List<AviatorTokenCandidate> sorted = new ArrayList<>(bestRow);
+        Collections.sort(sorted, (a, b) -> Integer.compare(a.leftX, b.leftX));
+
+        List<AviatorTokenCandidate> deduped = new ArrayList<>();
+        int lastX = -9999;
+        for (AviatorTokenCandidate item : sorted) {
+            int minSpacing = Math.max(12, item.boxHeight);
+            if (item.leftX - lastX >= minSpacing) {
+                deduped.add(item);
+                lastX = item.leftX;
+            }
+        }
+        return deduped;
+    }
 }

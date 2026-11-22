@@ -35,6 +35,22 @@ export interface BacBoDetectedEvent {
   isFullPlate: boolean;
 }
 
+export interface AviatorDetectedEvent {
+  liveMultiplier: number; // -1 if unavailable
+  isCrashedColor: boolean;
+  historyNewestFirst: number[];
+  isFullStrip: boolean;
+  ocrConfidence: number;
+  source: 'integrated_browser' | 'media_projection';
+}
+
+export interface AviatorCaptureStatusEvent {
+  mediaProjectionActive: boolean;
+  captureIntervalMs: number;
+  permissionState: 'idle' | 'pending' | 'granted' | 'denied';
+  error?: string;
+}
+
 export interface BrowserScannerPlugin {
   openBrowser(options?: { url?: string }): Promise<void>;
   closeBrowser(): Promise<void>;
@@ -42,7 +58,11 @@ export interface BrowserScannerPlugin {
   toggleCalibration(): Promise<void>;
   setAutoScan(options: { enabled: boolean }): Promise<void>;
   scanNow(): Promise<void>;
-  setGameMode(options: { mode: 'roulette' | 'bacbo' }): Promise<void>;
+  setGameMode(options: { mode: 'roulette' | 'bacbo' | 'aviator' }): Promise<void>;
+  startMediaProjection(options?: { intervalMs?: number }): Promise<void>;
+  stopMediaProjection(): Promise<void>;
+  setCaptureIntervalMs(options: { intervalMs: number }): Promise<void>;
+  getCaptureStatus(): Promise<{ mediaProjectionActive: boolean; captureIntervalMs: number }>;
   addListener(
     eventName: 'spinsDetected',
     listenerFunc: (event: SpinsDetectedEvent) => void
@@ -50,6 +70,14 @@ export interface BrowserScannerPlugin {
   addListener(
     eventName: 'bacboDetected',
     listenerFunc: (event: BacBoDetectedEvent) => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'aviatorDetected',
+    listenerFunc: (event: AviatorDetectedEvent) => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'aviatorCaptureStatus',
+    listenerFunc: (event: AviatorCaptureStatusEvent) => void
   ): Promise<PluginListenerHandle>;
   addListener(
     eventName: 'browserVisibilityChanged',
