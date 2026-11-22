@@ -898,9 +898,9 @@ public class MainActivity extends BridgeActivity {
             if (showCalibrationFeedback && tvCalibStatus != null) {
                 if (hasScore) {
                     String winner = pTotal > bTotal ? "JOGADOR" : (bTotal > pTotal ? "BANCA" : "EMPATE");
-                    tvCalibStatus.setText("3 Blocos: JOGADOR " + pTotal + " x " + bTotal + " BANCA (" + winner + ")");
+                    tvCalibStatus.setText("4 Dados OK: JOGADOR " + pTotal + " x " + bTotal + " BANCA (" + winner + ")");
                 } else if (blocksVisible) {
-                    tvCalibStatus.setText("3 Blocos visiveis! Aguardando dados pararem...");
+                    tvCalibStatus.setText("3 Blocos visiveis! Aguardando os 4 dados pararem...");
                 } else if (stripSize >= 6) {
                     tvCalibStatus.setText("Grelha Bac Bo: " + stripSize + " resultados lidos.");
                 } else {
@@ -928,7 +928,7 @@ public class MainActivity extends BridgeActivity {
                 if (sameResult || withinMinCycle) {
                     return;
                 }
-                // Passaram >= 12s e ambos os placares mudaram diretamente -> desbloqueia
+                // Passaram >= 12s e os 2 placares com 4 dados mudaram diretamente -> desbloqueia
                 blockRoundLocked = false;
             }
 
@@ -940,7 +940,7 @@ public class MainActivity extends BridgeActivity {
                 pendingBlockStableCount = 1;
             }
 
-            // 3 leituras idênticas (1.5s) garantem que os 4 dados já pararam totalmente
+            // 3 leituras idênticas (1.5s) com os 4 dados visíveis garantem resultado final fechado
             if (pendingBlockStableCount >= 3) {
                 String outcome = pTotal > bTotal ? "P" : (bTotal > pTotal ? "B" : "T");
                 int winTotal = Math.max(pTotal, bTotal);
@@ -965,12 +965,13 @@ public class MainActivity extends BridgeActivity {
             return;
         }
 
-        // Cartões ficaram vazios (dados a girar / nova rodada)
+        // Cartões ficaram sem os 4 dados (dados a girar / antes do lançamento)
         pendingBlockP = -1;
         pendingBlockB = -1;
         pendingBlockStableCount = 0;
         emptyBlockFrames++;
-        if (emptyBlockFrames >= 2) {
+        // Só desbloqueia após >= 2s contínuos sem os 4 dados E >= 6s desde a última leitura (impede reemissão por oscilação na janela de 9s)
+        if (blockRoundLocked && emptyBlockFrames >= 4 && (nowMs - lastLiveBacBoEmitMs) >= 6000L) {
             blockRoundLocked = false;
         }
     }

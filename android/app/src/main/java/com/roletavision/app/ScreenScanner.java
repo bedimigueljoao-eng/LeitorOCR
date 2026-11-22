@@ -351,16 +351,23 @@ public class ScreenScanner {
                                 String colorOutcome = sampleBacBoOutcomeColor(scaled, box);
 
                                 // 1. Deteção nos 3 Blocos (JOGADOR à esquerda | BANCA à direita)
-                                // Ignora zona central (0.37..0.63 = círculo dourado EMPATE) e texto pequeno inferior (y >= 0.78)
-                                if (bh >= Math.max(16, (int) (sh * 0.10f)) && cy < sh * 0.78f) {
+                                // Exige:
+                                // - número na zona superior do cartão (cy < 0.72 * sh, fora do "1:1" e rótulos)
+                                // - tamanho grande do total (bh >= max(16, 0.10 * sh))
+                                // - OS 2 DADOS DO LADO já parados com pintas brancas visíveis (totalizando 4 dados na mesa)
+                                if (bh >= Math.max(16, (int) (sh * 0.10f)) && cy < sh * 0.72f) {
                                     if (cx < sw * 0.37f && "P".equals(colorOutcome) && bh > bestPH) {
-                                        bestP = num;
-                                        bestPH = bh;
-                                        blocksVisible = true;
+                                        if (hasTwoDiceWithPips(scaled, box, true)) {
+                                            bestP = num;
+                                            bestPH = bh;
+                                            blocksVisible = true;
+                                        }
                                     } else if (cx > sw * 0.63f && "B".equals(colorOutcome) && bh > bestBH) {
-                                        bestB = num;
-                                        bestBH = bh;
-                                        blocksVisible = true;
+                                        if (hasTwoDiceWithPips(scaled, box, false)) {
+                                            bestB = num;
+                                            bestBH = bh;
+                                            blocksVisible = true;
+                                        }
                                     }
                                 }
 
@@ -379,9 +386,9 @@ public class ScreenScanner {
                     }
                     scaled.recycle();
 
-                    // Só aceita Bead Plate se não for o círculo central EMPATE (exige bolas Azuis/Vermelhas reais)
+                    // Só aceita Bead Plate se os 3 blocos não estiverem visíveis (exige bolas Azuis/Vermelhas reais)
                     List<BacBoCell> orderedPlate = Collections.emptyList();
-                    if (bestP < 2 && bestB < 2 && plateCandidates.size() >= 6 && pbPlateCount >= 2) {
+                    if (!blocksVisible && bestP < 2 && bestB < 2 && plateCandidates.size() >= 6 && pbPlateCount >= 2) {
                         orderedPlate = orderBacBoCells(plateCandidates);
                     }
 
@@ -392,6 +399,80 @@ public class ScreenScanner {
                     scaled.recycle();
                     callback.onResult(-1, -1, false, Collections.emptyList(), false);
                 });
+    }
+
+    /**
+     * Verifica se existem os 2 ícones de dados (superior e inferior) com pintas brancas visíveis
+     * imediatamente ao lado do número total (à esquerda para Player, à direita para Banker).
+     * Evita ler antes de lançar os dados ou quando apenas 1 dos 2 dados parou.
+     */
+    private boolean hasTwoDiceWithPips(Bitmap bitmap, Rect totalBox, boolean isPlayer) {
+        int imgW = bitmap.getWidth();
+        int imgH = bitmap.getHeight();
+        int h = totalBox.height();
+        if (h < 14 || imgW < 40 || imgH < 40) return false;
+
+        int cy = (totalBox.top + totalBox.bottom) / 2;
+        int x0;
+        int x1;
+        if (isPlayer) {
+            x0 = clamp(totalBox.left - (int) (h * 1.48f), 0, imgW - 1);
+            x1 = clamp(totalBox.left - (int) (h * 0.14f), 0, imgW - 1);
+        } else {
+            x0 = clamp(totalBox.right + (int) (h * 0.14f), 0, imgW - 1);
+            x1 = clamp(totalBox.right + (int) (h * 1.48f), 0, imgW - 1);
+        }
+        if (x1 - x0 < 8) return false;
+
+        int topY0 = clamp(cy - (int) (h * 0.90f), 0, imgH - 1);
+        int topY1 = clamp(cy - (int) (h * 0.10f), 0, imgH - 1);
+        int botY0 = clamp(cy + (int) (h * 0.10f), 0, imgH - 1);
+        int botY1 = clamp(cy + (int) (h * 0.90f), 0, imgH - 1);
+
+        int step = Math.max(1, h / 24);
+        boolean topReady = dieRegionHasPips(bitmap, x0, topY0, x1, topY1, step, isPlayer);
+        boolean botReady = dieRegionHasPips(bitmap, x0, botY0, x1, botY1, step, isPlayer);
+        return topReady && botReady;
+    }
+
+    private boolean dieRegionHasPips(
+            Bitmap bitmap,
+            int x0,
+            int y0,
+            int x1,
+            int y1,
+            int step,
+            boolean isPlayer
+    ) {
+        if (x1 - x0 < 6 || y1 - y0 < 6) return false;
+        int total = 0;
+        int whitePips = 0;
+        int cardBg = 0;
+
+        for (int y = y0; y <= y1; y += step) {
+            for (int x = x0; x <= x1; x += step) {
+                total++;
+                int px = bitmap.getPixel(x, y);
+                int r = Color.red(px);
+                int g = Color.green(px);
+                int b = Color.blue(px);
+                int maxC = Math.max(r, Math.max(g, b));
+                int minC = Math.min(r, Math.min(g, b));
+
+                if (r >= 185 && g >= 185 && b >= 185 && (maxC - minC) < 55) {
+                    whitePips++;
+                } else if (isPlayer && b > r + 18 && b > 65) {
+                    cardBg++;
+                } else if (!isPlayer && r > b + 18 && r > 65) {
+                    cardBg++;
+                }
+            }
+        }
+
+        if (total < 12) return false;
+        float whitePct = (whitePips * 100f) / total;
+        float bgPct = (cardBg * 100f) / total;
+        return whitePips >= 4 && whitePct >= 1.5f && whitePct <= 60.0f && bgPct >= 15.0f;
     }
 
     private List<BacBoCell> orderBacBoCells(List<BacBoCell> rawCandidates) {
