@@ -526,21 +526,21 @@ export function computeMasterBet(params: {
 
   const baseUnitAoa = Math.max(1, Number(((bankroll.currentBalanceAoa * bankroll.unitPct) / 100).toFixed(2)));
 
-  if (signals.length === 0 || signals[0].sampleSize < 10) {
+  if (signals.length === 0 || signals[0].sampleSize < 4) {
     const n = signals[0]?.sampleSize ?? 0;
     return {
       game,
       action: 'AGUARDAR',
       market: game === 'bacbo' ? 'Player / Banker' : game === 'aviator' ? 'Cash Out 1.50x' : 'Vermelho / Preto',
-      direction: 'Recolher pelo menos 10 resultados antes de apostar',
-      score: Math.min(35, n * 3),
+      direction: 'Recolher pelo menos 4 resultados antes de apostar',
+      score: Math.min(35, n * 8),
       confidenceTier: 'Baixa',
       houseEdgePct: game === 'bacbo' ? 1.21 : game === 'aviator' ? 3.0 : 2.7,
       sampleSize: n,
       ocrConfidencePct,
       suggestedStakeAoa: 0,
       bankrollBlockedReason: blockReason,
-      rationale: `Amostra insuficiente (n=${n}/10). Aguarde mais capturas para avaliar desvios reais.`,
+      rationale: `Amostra insuficiente (n=${n}/4). Aguarde mais capturas para avaliar desvios reais.`,
       disclaimer: DISCLAIMER_TEXT,
     };
   }

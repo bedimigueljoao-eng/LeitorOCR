@@ -56,6 +56,10 @@ export interface AccuracySummary {
   byMarket: MarketAccuracy[];
   lastRound: RoundEvaluation | null;
   recentRounds: RoundEvaluation[];
+  tableHistoryRounds: number;
+  tableHistoryHits: number;
+  tableHistoryAttempts: number;
+  tableHistoryRatePct: number;
 }
 
 export interface RouletteAnalysis {
@@ -388,6 +392,39 @@ export function evaluateAccuracy(
     { market: 'Setor da Roda', hits: 0, attempts: 0, ratePct: 0, expectedRandomPct: 32.4 },
   ];
 
+  // Backtest imediato sobre o histórico já lido da mesa (até últimas 30 rodadas)
+  let tableHistoryRounds = 0;
+  let tableHistoryHits = 0;
+  let tableHistoryAttempts = 0;
+  if (learnedPriorSpinsNewestFirst.length >= 4) {
+    const tableChrono = [...learnedPriorSpinsNewestFirst.slice(0, 30)].reverse();
+    for (let i = 1; i < tableChrono.length; i++) {
+      const priorNewestFirst = tableChrono.slice(0, i).reverse();
+      const { suggestions, topSector } = computeFieldSuggestions(priorNewestFirst, profile);
+      const actual = tableChrono[i];
+      const actualColor = getRouletteColor(actual);
+      const hitsArr = [
+        (suggestions.color === 'Vermelho' && actualColor === 'red') ||
+          (suggestions.color === 'Preto' && actualColor === 'black'),
+        actual !== 0 &&
+          ((suggestions.parity === 'Par' && actual % 2 === 0) ||
+            (suggestions.parity === 'Ímpar' && actual % 2 === 1)),
+        actual !== 0 &&
+          ((suggestions.half.startsWith('1–18') && actual <= 18) ||
+            (suggestions.half.startsWith('19–36') && actual >= 19)),
+        getDozenOf(actual) === suggestions.dozenIndex,
+        getColumnOf(actual) === suggestions.columnIndex,
+        suggestions.neighbors.includes(actual),
+        topSector.numbers.includes(actual),
+      ];
+      tableHistoryRounds++;
+      tableHistoryAttempts += hitsArr.length;
+      tableHistoryHits += hitsArr.filter(Boolean).length;
+    }
+  }
+  const tableHistoryRatePct =
+    tableHistoryAttempts > 0 ? (tableHistoryHits / tableHistoryAttempts) * 100 : 0;
+
   if (sessionSpinsNewestFirst.length === 0) {
     return {
       evaluatedRounds: 0,
@@ -401,6 +438,10 @@ export function evaluateAccuracy(
       byMarket: emptyMarkets,
       lastRound: null,
       recentRounds: [],
+      tableHistoryRounds,
+      tableHistoryHits,
+      tableHistoryAttempts,
+      tableHistoryRatePct,
     };
   }
 
@@ -550,6 +591,10 @@ export function evaluateAccuracy(
       byMarket: emptyMarkets,
       lastRound: null,
       recentRounds: [],
+      tableHistoryRounds,
+      tableHistoryHits,
+      tableHistoryAttempts,
+      tableHistoryRatePct,
     };
   }
 
@@ -578,6 +623,10 @@ export function evaluateAccuracy(
     })),
     lastRound: newestRounds[0] ?? null,
     recentRounds: newestRounds.slice(0, 8),
+    tableHistoryRounds,
+    tableHistoryHits,
+    tableHistoryAttempts,
+    tableHistoryRatePct,
   };
 }
 

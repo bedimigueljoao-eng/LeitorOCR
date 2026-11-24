@@ -59,10 +59,10 @@ public class GameCaptureService extends Service {
     private static final String CHANNEL_ID = "game_capture_channel";
     private static final int NOTIFICATION_ID = 3042;
     private static final long MIN_INTERVAL_MS = 350L;
-    private static final long DEFAULT_INTERVAL_MS = 550L;
+    private static final long DEFAULT_INTERVAL_MS = 400L;
     private static final long MAX_INTERVAL_MS = 2000L;
-    private static final long FORCE_HEARTBEAT_SCAN_MS = 3500L;
-    private static final long NOTIFICATION_UPDATE_MIN_MS = 1200L;
+    private static final long FORCE_HEARTBEAT_SCAN_MS = 1500L;
+    private static final long NOTIFICATION_UPDATE_MIN_MS = 1000L;
 
     private static volatile boolean running = false;
     private static volatile long captureIntervalMs = DEFAULT_INTERVAL_MS;

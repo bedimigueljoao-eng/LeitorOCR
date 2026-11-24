@@ -980,7 +980,7 @@ export const StrategiesKnowledgeTab: React.FC<StrategiesKnowledgeTabProps> = ({
                   {(
                     [
                       { id: 'auto', label: 'Automático' },
-                      { id: 'blocks', label: 'Modo Blocos' },
+                      { id: 'blocks', label: 'Jogador vs Banca' },
                       { id: 'bead_plate', label: 'Modo Bead Plate' },
                     ] as const
                   ).map((m) => (

@@ -377,7 +377,7 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
                 {(
                   [
                     { id: 'auto', label: 'OCR Auto' },
-                    { id: 'blocks', label: 'Modo Blocos' },
+                    { id: 'blocks', label: 'Jogador vs Banca' },
                     { id: 'bead_plate', label: 'Bead Plate' },
                   ] as const
                 ).map((m) => (

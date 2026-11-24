@@ -95,23 +95,26 @@ public class ScreenScanner {
 
     public static class RoiFrameSignature {
         public final long dHash;
+        public final long leftEdgeHash;
         public final int meanLuma;
 
-        public RoiFrameSignature(long dHash, int meanLuma) {
+        public RoiFrameSignature(long dHash, long leftEdgeHash, int meanLuma) {
             this.dHash = dHash;
+            this.leftEdgeHash = leftEdgeHash;
             this.meanLuma = meanLuma;
         }
     }
 
     /**
-     * Calcula dHash 64-bit e luminância média dentro da ROI em < 1 ms para descartar frames iguais.
+     * Calcula dHash 64-bit global + dHash 64-bit da borda esquerda (35% iniciais) e luminância média
+     * em < 1 ms para detetar imediatamente novos números de roleta ou alterações sem travar frames parados.
      */
     public static RoiFrameSignature computeRoiSignature(Bitmap bitmap, RoiConfigStore.RoiRect roi) {
-        if (bitmap == null || bitmap.isRecycled()) return new RoiFrameSignature(0L, 0);
+        if (bitmap == null || bitmap.isRecycled()) return new RoiFrameSignature(0L, 0L, 0);
         int w = bitmap.getWidth();
         int h = bitmap.getHeight();
         if (w < MIN_IMAGE_DIMENSION_PX || h < MIN_IMAGE_DIMENSION_PX) {
-            return new RoiFrameSignature(0L, 0);
+            return new RoiFrameSignature(0L, 0L, 0);
         }
 
         int x0 = clamp((int) (w * roi.leftRatio), 0, w - 2);
@@ -119,21 +122,23 @@ public class ScreenScanner {
         int rw = clamp((int) (w * roi.widthRatio), 16, w - x0);
         int rh = clamp((int) (h * roi.heightRatio), 16, h - y0);
 
-        int[][] grid = new int[DHASH_ROWS][DHASH_COLS];
-        long sumLuma = 0L;
-        int samples = DHASH_ROWS * DHASH_COLS;
+        long hash = computeGridDHash(bitmap, x0, y0, rw, rh, w, h);
+        int leftW = Math.max(16, Math.round(rw * 0.35f));
+        long leftHash = computeGridDHash(bitmap, x0, y0, leftW, rh, w, h);
+        int meanLuma = computeMeanLuma(bitmap, x0, y0, rw, rh, w, h);
+        return new RoiFrameSignature(hash, leftHash, meanLuma);
+    }
 
+    private static long computeGridDHash(Bitmap bitmap, int x0, int y0, int rw, int rh, int imgW, int imgH) {
+        int[][] grid = new int[DHASH_ROWS][DHASH_COLS];
         for (int r = 0; r < DHASH_ROWS; r++) {
-            int py = clamp(y0 + ((r * 2 + 1) * rh) / (DHASH_ROWS * 2), 0, h - 1);
+            int py = clamp(y0 + ((r * 2 + 1) * rh) / (DHASH_ROWS * 2), 0, imgH - 1);
             for (int c = 0; c < DHASH_COLS; c++) {
-                int px = clamp(x0 + ((c * 2 + 1) * rw) / (DHASH_COLS * 2), 0, w - 1);
+                int px = clamp(x0 + ((c * 2 + 1) * rw) / (DHASH_COLS * 2), 0, imgW - 1);
                 int pixel = bitmap.getPixel(px, py);
-                int luma = (77 * Color.red(pixel) + 150 * Color.green(pixel) + 29 * Color.blue(pixel)) >> 8;
-                grid[r][c] = luma;
-                sumLuma += luma;
+                grid[r][c] = (77 * Color.red(pixel) + 150 * Color.green(pixel) + 29 * Color.blue(pixel)) >> 8;
             }
         }
-
         long hash = 0L;
         int bit = 0;
         for (int r = 0; r < DHASH_ROWS; r++) {
@@ -144,14 +149,30 @@ public class ScreenScanner {
                 bit++;
             }
         }
-        return new RoiFrameSignature(hash, (int) (sumLuma / Math.max(1, samples)));
+        return hash;
+    }
+
+    private static int computeMeanLuma(Bitmap bitmap, int x0, int y0, int rw, int rh, int imgW, int imgH) {
+        long sumLuma = 0L;
+        int samples = 0;
+        for (int r = 0; r < 4; r++) {
+            int py = clamp(y0 + ((r * 2 + 1) * rh) / 8, 0, imgH - 1);
+            for (int c = 0; c < 8; c++) {
+                int px = clamp(x0 + ((c * 2 + 1) * rw) / 16, 0, imgW - 1);
+                int pixel = bitmap.getPixel(px, py);
+                sumLuma += (77 * Color.red(pixel) + 150 * Color.green(pixel) + 29 * Color.blue(pixel)) >> 8;
+                samples++;
+            }
+        }
+        return (int) (sumLuma / Math.max(1, samples));
     }
 
     public static boolean hasSignificantRoiChange(RoiFrameSignature prev, RoiFrameSignature curr) {
         if (prev == null || curr == null) return true;
         int hamming = Long.bitCount(prev.dHash ^ curr.dHash);
+        int leftHamming = Long.bitCount(prev.leftEdgeHash ^ curr.leftEdgeHash);
         int lumaDiff = Math.abs(prev.meanLuma - curr.meanLuma);
-        return hamming >= 3 || lumaDiff >= 5;
+        return hamming >= 2 || leftHamming >= 2 || lumaDiff >= 3;
     }
 
     private static class PreparedCrop {
@@ -403,7 +424,8 @@ public class ScreenScanner {
 
         final RoiConfigStore.HsvColorProfile profile =
                 hsvProfile != null ? hsvProfile : RoiConfigStore.HsvColorProfile.defaultForSite("kwanzabet");
-        final PreparedCrop prep = preprocessCropForOcr(fullBitmap, roi, true);
+        // Roleta: usa grayscale CLAHE sem binarização agressiva para preservar números brancos em fundos vermelho/verde/preto
+        final PreparedCrop prep = preprocessCropForOcr(fullBitmap, roi, false);
         final int sw = prep.ocrBitmap.getWidth();
         final int sh = prep.ocrBitmap.getHeight();
 
@@ -421,12 +443,13 @@ public class ScreenScanner {
                                 if (box == null) continue;
                                 int bh = box.height();
                                 int bw = box.width();
-                                if (bh < 8 || bh > sh * MAX_ROULETTE_BOX_HEIGHT_RATIO || bw > sh * MAX_ROULETTE_BOX_WIDTH_RATIO) {
+                                if (bh < 7 || bh > sh * MAX_ROULETTE_BOX_HEIGHT_RATIO || bw > sh * MAX_ROULETTE_BOX_WIDTH_RATIO) {
                                     continue;
                                 }
                                 float[] avgHsv = new float[3];
                                 PillColor sampledColor = samplePillColorHsv(prep.colorBitmap, box, profile, avgHsv);
                                 Integer parsed = parseRouletteToken(element.getText(), sampledColor);
+                                String colorTag = sampledColor != null ? sampledColor.name() : "AUTO";
                                 if (parsed != null) {
                                     float conf = estimateElementConfidence(element, sampledColor != null);
                                     candidates.add(new DetectedPill(
@@ -437,11 +460,13 @@ public class ScreenScanner {
                                             conf
                                     ));
                                     if (collectDebug) {
-                                        debugBoxes.add(new OcrDebugBox(box, sw, sh, String.valueOf(parsed), sampledColor.name(), true, "ok"));
-                                        hsvSamples.add(new RoiConfigStore.HsvSample(sampledColor.name(), avgHsv[0], avgHsv[1], avgHsv[2]));
+                                        debugBoxes.add(new OcrDebugBox(box, sw, sh, String.valueOf(parsed), colorTag, true, "ok"));
+                                        if (sampledColor != null) {
+                                            hsvSamples.add(new RoiConfigStore.HsvSample(colorTag, avgHsv[0], avgHsv[1], avgHsv[2]));
+                                        }
                                     }
                                 } else if (collectDebug) {
-                                    debugBoxes.add(new OcrDebugBox(box, sw, sh, element.getText(), sampledColor.name(), false, "cross-check"));
+                                    debugBoxes.add(new OcrDebugBox(box, sw, sh, element.getText(), colorTag, false, "cross-check"));
                                 }
                             }
                         }
@@ -532,6 +557,10 @@ public class ScreenScanner {
         }
 
         if (num < 0 || num > 36) return null;
+        if (color == null) {
+            // Se a borda/brilho mascarou a amostra de fundo, aceita 1..36 e mantém rigor apenas no 0
+            return num >= 1 ? num : null;
+        }
         if (num == 0 && color != PillColor.GREEN) return null;
         if (num != 0 && color == PillColor.GREEN) return null;
 
@@ -552,17 +581,17 @@ public class ScreenScanner {
         int h = bitmap.getHeight();
         int midY = clamp((box.top + box.bottom) / 2, 0, h - 1);
         int midX = clamp((box.left + box.right) / 2, 0, w - 1);
-        int padX = Math.max(3, box.width() / 4);
-        int padY = Math.max(3, box.height() / 4);
+        int padX = Math.max(2, box.width() / 5);
+        int padY = Math.max(2, box.height() / 5);
 
         int[][] points = new int[][]{
                 {clamp(box.left - padX, 0, w - 1), midY},
                 {clamp(box.right + padX, 0, w - 1), midY},
                 {midX, clamp(box.top - padY, 0, h - 1)},
                 {midX, clamp(box.bottom + padY, 0, h - 1)},
-                {clamp(box.left - 2, 0, w - 1), midY},
-                {clamp(box.right + 2, 0, w - 1), midY},
                 {clamp(box.left - 2, 0, w - 1), clamp(box.top - 2, 0, h - 1)},
+                {clamp(box.right + 2, 0, w - 1), clamp(box.top - 2, 0, h - 1)},
+                {clamp(box.left - 2, 0, w - 1), clamp(box.bottom + 2, 0, h - 1)},
                 {clamp(box.right + 2, 0, w - 1), clamp(box.bottom + 2, 0, h - 1)}
         };
 
@@ -580,7 +609,7 @@ public class ScreenScanner {
             float sat = hsv[1];
             float val = hsv[2];
 
-            // Ignora borda branca de destaque ou texto branco
+            // Ignora texto branco e borda brilhante/dourada
             if (sat < 0.14f && val > 0.72f) continue;
 
             sumH += hue;
@@ -605,9 +634,10 @@ public class ScreenScanner {
             outAvgHsv[2] = sumV / validCount;
         }
 
-        if (votesGreen > votesRed && votesGreen >= votesBlack && votesGreen > 0) return PillColor.GREEN;
-        if (votesRed > votesGreen && votesRed >= votesBlack && votesRed > 0) return PillColor.RED;
-        return PillColor.BLACK;
+        if (votesGreen > votesRed && votesGreen >= votesBlack && votesGreen >= 2) return PillColor.GREEN;
+        if (votesRed > votesGreen && votesRed >= votesBlack && votesRed >= 2) return PillColor.RED;
+        if (votesBlack > votesRed && votesBlack > votesGreen && votesBlack >= 2) return PillColor.BLACK;
+        return null;
     }
 
     // ==================== BAC BO OCR (MODOS EXPLÍCITOS + FALLBACK COR) ====================
@@ -705,12 +735,12 @@ public class ScreenScanner {
         recognizer.process(image)
                 .addOnSuccessListener(visionText -> {
                     int bestP = -1;
-                    int bestPH = 0;
-                    boolean pHasDice = false;
+                    int bestPScore = -1;
+                    boolean pColorMatched = false;
 
                     int bestB = -1;
-                    int bestBH = 0;
-                    boolean bHasDice = false;
+                    int bestBScore = -1;
+                    boolean bColorMatched = false;
 
                     boolean blocksVisible = false;
                     List<BacBoCell> plateCandidates = new ArrayList<>();
@@ -740,33 +770,34 @@ public class ScreenScanner {
                                 String outcomeColor = sampleBacBoOutcomeColorHsv(prep.colorBitmap, box, profile);
                                 Integer num = parseBacBoNumberOnly(upper);
 
-                                // 1. Modo Blocos (ou Auto)
+                                // 1. Modo Direto Jogador (esq) vs Banca (dir): compara diretamente quem obteve o maior número (2..12)
+                                // sem depender de "3 blocos" nem exigir offsets rígidos de pips
                                 if (!RoiConfigStore.BACBO_MODE_BEAD_PLATE.equals(mode)
                                         && num != null
-                                        && bh >= Math.max(12, (int) (sh * BACBO_BLOCK_MIN_HEIGHT_RATIO))
-                                        && cy < sh * BACBO_BLOCK_MAX_Y) {
+                                        && bh >= Math.max(10, (int) (sh * 0.06f))
+                                        && cy < sh * 0.90f) {
                                     String cardSide = sampleBlockCardSideHsv(prep.colorBitmap, box, profile);
-                                    if (cx < sw * BACBO_BLOCK_LEFT_MAX_X && ("P".equals(cardSide) || "P".equals(outcomeColor))) {
-                                        blocksVisible = true;
-                                        boolean diceReady = hasTwoDiceWithPips(prep.colorBitmap, box, true);
-                                        if (bh > bestPH && (diceReady || RoiConfigStore.BACBO_MODE_BLOCKS.equals(mode))) {
+                                    if (cx < sw * BACBO_BLOCK_LEFT_MAX_X && !"B".equals(cardSide)) {
+                                        boolean isBlue = "P".equals(cardSide) || "P".equals(outcomeColor);
+                                        int score = bh + (isBlue ? 25 : 0);
+                                        if (score > bestPScore) {
                                             bestP = num;
-                                            bestPH = bh;
-                                            pHasDice = diceReady;
+                                            bestPScore = score;
+                                            pColorMatched = isBlue;
                                         }
                                         if (collectDebug) {
-                                            debugBoxes.add(new OcrDebugBox(box, sw, sh, "P:" + num, "P", true, diceReady ? "dice-ok" : "forced-block"));
+                                            debugBoxes.add(new OcrDebugBox(box, sw, sh, "P:" + num, isBlue ? "P" : "LEFT", true, "player-total"));
                                         }
-                                    } else if (cx > sw * BACBO_BLOCK_RIGHT_MIN_X && ("B".equals(cardSide) || "B".equals(outcomeColor))) {
-                                        blocksVisible = true;
-                                        boolean diceReady = hasTwoDiceWithPips(prep.colorBitmap, box, false);
-                                        if (bh > bestBH && (diceReady || RoiConfigStore.BACBO_MODE_BLOCKS.equals(mode))) {
+                                    } else if (cx > sw * BACBO_BLOCK_RIGHT_MIN_X && !"P".equals(cardSide)) {
+                                        boolean isRed = "B".equals(cardSide) || "B".equals(outcomeColor);
+                                        int score = bh + (isRed ? 25 : 0);
+                                        if (score > bestBScore) {
                                             bestB = num;
-                                            bestBH = bh;
-                                            bHasDice = diceReady;
+                                            bestBScore = score;
+                                            bColorMatched = isRed;
                                         }
                                         if (collectDebug) {
-                                            debugBoxes.add(new OcrDebugBox(box, sw, sh, "B:" + num, "B", true, diceReady ? "dice-ok" : "forced-block"));
+                                            debugBoxes.add(new OcrDebugBox(box, sw, sh, "B:" + num, isRed ? "B" : "RIGHT", true, "banker-total"));
                                         }
                                     }
                                 }
@@ -792,17 +823,24 @@ public class ScreenScanner {
                         }
                     }
 
+                    boolean bothScoresReady = bestP >= 2 && bestB >= 2;
+                    if (bothScoresReady) {
+                        blocksVisible = true;
+                    }
+
                     List<BacBoCell> orderedPlate = Collections.emptyList();
                     String resolvedMode = mode;
                     float confidence = 0f;
 
                     boolean preferBlocks = RoiConfigStore.BACBO_MODE_BLOCKS.equals(mode)
-                            || (RoiConfigStore.BACBO_MODE_AUTO.equals(mode) && (blocksVisible || (bestP >= 2 && bestB >= 2)));
+                            || (RoiConfigStore.BACBO_MODE_AUTO.equals(mode) && (bothScoresReady || blocksVisible || plateCandidates.size() < 4));
 
                     if (preferBlocks) {
                         resolvedMode = RoiConfigStore.BACBO_MODE_BLOCKS;
-                        if (bestP >= 2 && bestB >= 2) {
-                            confidence = (pHasDice && bHasDice) ? 0.94f : 0.78f;
+                        if (bothScoresReady) {
+                            confidence = (pColorMatched && bColorMatched) ? 0.94f : 0.84f;
+                        } else if (bestP >= 2 || bestB >= 2) {
+                            confidence = 0.55f;
                         } else if (blocksVisible) {
                             confidence = 0.45f;
                         }
@@ -812,7 +850,6 @@ public class ScreenScanner {
                             orderedPlate = orderBacBoCells(plateCandidates);
                             confidence = Math.min(0.92f, 0.62f + orderedPlate.size() * 0.015f);
                         } else {
-                            // Fallback por cor dominante da célula quando OCR de dígito falha no Bead Plate
                             List<BacBoCell> colorCells = scanBacBoColorGridFallback(prep.colorBitmap, profile, debugBoxes, collectDebug);
                             if (colorCells.size() >= 4) {
                                 orderedPlate = orderBacBoCells(colorCells);
@@ -823,7 +860,7 @@ public class ScreenScanner {
 
                     prep.recycle();
 
-                    boolean ocrOk = (bestP >= 2 && bestB >= 2) || blocksVisible || !orderedPlate.isEmpty();
+                    boolean ocrOk = bothScoresReady || blocksVisible || !orderedPlate.isEmpty();
                     callback.onResult(bestP, bestB, blocksVisible, orderedPlate, confidence, resolvedMode, debugBoxes, ocrOk);
                 })
                 .addOnFailureListener(e -> {

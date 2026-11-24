@@ -80,7 +80,7 @@ export function runMasterBetTests(): { passed: number; failed: number } {
       },
     },
     {
-      name: '2. Master Bet waits on insufficient sample size (<10) with disclaimer',
+      name: '2. Master Bet waits on insufficient sample size (<4) with disclaimer',
       fn: () => {
         const signals = evaluateStrategySignals({
           game: 'roulette',

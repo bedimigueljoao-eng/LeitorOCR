@@ -32,6 +32,8 @@ import {
 } from './plugins/browserScanner';
 import {
   BankrollPolicyConfig,
+  computeMasterBet,
+  evaluateStrategySignals,
   SessionBetEntry,
   UnifiedGameKey,
 } from './modules/strategy/masterBetEngine';
@@ -716,7 +718,7 @@ export default function App() {
         } else {
           setScanStatusHint(
             gameModeRef.current === 'bacbo'
-              ? 'Nenhum resultado Bac Bo detetado. Alinhe a Mira sobre os 3 blocos (JOGADOR | EMPATE | BANCA).'
+              ? 'Nenhum resultado Bac Bo detetado. Alinhe a Mira sobre os números de Jogador e Banca.'
               : gameModeRef.current === 'aviator'
               ? 'Nenhum multiplicador Aviator detetado. Alinhe a Mira sobre a faixa superior e o voo.'
               : 'Nenhum número detetado. Abra a roleta e toque em Mira se precisar alinhar.'
@@ -1203,6 +1205,141 @@ export default function App() {
     return map;
   }, [accuracy.byMarket]);
 
+  const activeUnifiedGame: UnifiedGameKey =
+    gameMode === 'bacbo' ? 'bacbo' : gameMode === 'aviator' ? 'aviator' : 'roulette';
+
+  const activeMasterBet = useMemo(() => {
+    const ocrConfidencePct =
+      activeUnifiedGame === 'aviator' && aviatorLiveState.ocrConfidence > 0
+        ? aviatorLiveState.ocrConfidence * 100
+        : 90;
+    const signals = evaluateStrategySignals({
+      game: activeUnifiedGame,
+      rouletteNewestFirst: combinedSpins,
+      bacboRounds,
+      aviatorRounds,
+      ocrConfidencePct,
+    });
+    return computeMasterBet({
+      game: activeUnifiedGame,
+      signals,
+      bankroll: bankrollPolicy,
+      ocrConfidencePct,
+    });
+  }, [
+    activeUnifiedGame,
+    combinedSpins,
+    bacboRounds,
+    aviatorRounds,
+    bankrollPolicy,
+    aviatorLiveState.ocrConfidence,
+  ]);
+
+  const renderMasterBetCard = (compact: boolean) => {
+    const isBet = activeMasterBet.action === 'APOSTAR';
+    if (compact) {
+      return (
+        <div
+          className={`rounded-md border p-2 ${
+            isBet
+              ? 'border-emerald-500/50 bg-emerald-950/25'
+              : 'border-amber-500/35 bg-[#131924]'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span className="rounded bg-amber-400/20 border border-amber-400/40 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-300 shrink-0">
+                Aposta Mestra
+              </span>
+              <span
+                className={`text-[11px] font-bold truncate ${
+                  isBet ? 'text-emerald-300' : 'text-amber-200'
+                }`}
+              >
+                {activeMasterBet.action}: {activeMasterBet.direction}
+              </span>
+            </div>
+            <span className="font-mono text-[10px] font-bold text-slate-100 tabular-nums shrink-0">
+              {activeMasterBet.score}/100 · {activeMasterBet.confidenceTier}
+            </span>
+          </div>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-[9px] font-mono tabular-nums text-slate-300">
+            <span className="truncate">
+              Mercado: {activeMasterBet.market} · Edge {activeMasterBet.houseEdgePct.toFixed(1)}%
+            </span>
+            <span className={isBet ? 'text-emerald-300 font-bold' : 'text-slate-400'}>
+              Stake: {activeMasterBet.suggestedStakeAoa.toFixed(0)} AOA
+            </span>
+          </div>
+          <div className="mt-0.5 text-[9px] text-slate-400 truncate">
+            {activeMasterBet.bankrollBlockedReason || activeMasterBet.rationale}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <section
+        className={`rounded-xl border p-4 ${
+          isBet
+            ? 'border-emerald-500/45 bg-emerald-950/15'
+            : 'border-amber-500/30 bg-[#131924]'
+        }`}
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="space-y-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded bg-amber-400/20 border border-amber-400/40 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+                Aposta Mestra
+              </span>
+              <span
+                className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                  isBet
+                    ? 'bg-emerald-500 text-slate-950'
+                    : 'bg-slate-800 text-amber-300 border border-amber-500/30'
+                }`}
+              >
+                {activeMasterBet.action}
+              </span>
+              <span className="text-xs font-mono text-slate-400 tabular-nums">
+                Score {activeMasterBet.score}/100 ({activeMasterBet.confidenceTier}) · Amostra n=
+                {activeMasterBet.sampleSize}
+              </span>
+            </div>
+            <div
+              className={`text-sm sm:text-base font-bold ${
+                isBet ? 'text-emerald-300' : 'text-slate-100'
+              }`}
+            >
+              {activeMasterBet.market} — {activeMasterBet.direction}
+            </div>
+            <p className="text-xs text-slate-400">
+              {activeMasterBet.bankrollBlockedReason || activeMasterBet.rationale}
+            </p>
+          </div>
+
+          <div className="flex sm:flex-col items-center sm:items-end justify-between gap-2 shrink-0">
+            <div className="text-right font-mono tabular-nums">
+              <div className="text-[10px] uppercase text-slate-400">
+                Stake Sugerida (Edge {activeMasterBet.houseEdgePct.toFixed(1)}%)
+              </div>
+              <div className="text-sm font-bold text-emerald-300">
+                {activeMasterBet.suggestedStakeAoa.toFixed(2)} AOA
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setGameMode('strategies')}
+              className="rounded-lg border border-slate-700 bg-[#0B0F17] px-2.5 py-1 text-[11px] font-medium text-slate-200 hover:bg-slate-800 transition-colors cursor-pointer whitespace-nowrap"
+            >
+              Configurar Banca &amp; Estratégias
+            </button>
+          </div>
+        </div>
+      </section>
+    );
+  };
+
   // Modo integrado quando o navegador Kwanzabet está aberto em cima no APK
   if (nativeBrowserOpen) {
     const splitLabel =
@@ -1330,6 +1467,9 @@ export default function App() {
             </div>
           </div>
 
+          {/* Aposta Mestra Compacta (Bac Bo) */}
+          {renderMasterBetCard(true)}
+
           {/* Painel ao Vivo Bac Bo */}
           <div className="rounded-md border border-slate-800 bg-[#131924] p-2 space-y-1.5">
             <div className="flex items-center justify-between gap-2">
@@ -1455,7 +1595,7 @@ export default function App() {
 
             {bacboRounds.length === 0 ? (
               <div className="rounded border border-dashed border-slate-800 px-2 py-2 text-[10px] text-amber-300 text-center">
-                Aguardando leitura dos 3 blocos (JOGADOR | EMPATE | BANCA) ou toque +P / +T / +B.
+                Aguardando dados de Jogador vs Banca (quem teve maior número nos dados) ou toque +P / +T / +B.
               </div>
             ) : (
               <div className="overflow-x-auto pb-0.5">
@@ -1564,7 +1704,7 @@ export default function App() {
             {bacboScanDebug.lastReadMs !== null ? `${bacboScanDebug.lastReadMs}ms` : '--'} ·{' '}
             Rodadas: {bacboRounds.length} ·{' '}
             <span className={bacboScanDebug.ocrActive ? 'text-emerald-400' : 'text-amber-300'}>
-              {bacboScanDebug.ocrActive ? '3 Blocos detetados' : 'A procurar 3 blocos'}
+              {bacboScanDebug.ocrActive ? 'Jogador vs Banca ativo' : 'A comparar Jogador vs Banca'}
             </span>
           </div>
         </div>
@@ -1685,6 +1825,9 @@ export default function App() {
                 ))
             )}
           </div>
+
+          {/* Aposta Mestra Compacta (Aviator) */}
+          {renderMasterBetCard(true)}
 
           {/* Cartão Principal Ao Vivo Aviator */}
           <div className="rounded-md border border-slate-800 bg-[#131924] p-2 space-y-1.5">
@@ -1864,23 +2007,19 @@ export default function App() {
                   <div className="font-mono text-[10px] text-emerald-400 tabular-nums">
                     Sessão: {accuracy.overallRatePct.toFixed(1)}% ({accuracy.totalHits}/{accuracy.totalAttempts})
                   </div>
-                  {combinedSpins.length < 50 && (
-                    <div className="text-[9px] text-amber-300">
-                      A recolher dados... {combinedSpins.length}/50
-                    </div>
-                  )}
                 </div>
               </>
             ) : (
               <div className="text-[10px] leading-tight">
-                <div className="text-slate-200 font-medium">
-                  Sessão Virgem: 0.0% (0/0)
+                <div className="font-mono text-[10px] font-semibold text-emerald-400 tabular-nums">
+                  {accuracy.tableHistoryRounds >= 2
+                    ? `Mesa: ${accuracy.tableHistoryRatePct.toFixed(1)}% (${accuracy.tableHistoryHits}/${accuracy.tableHistoryAttempts})`
+                    : 'Sessão: 0.0% (0/0)'}
                 </div>
                 <div className="text-[9px] text-amber-300">
-                  {combinedSpins.length < 50
-                    ? `A recolher dados... ${combinedSpins.length}/50`
-                    : scanStatusHint ||
-                      `Mesa lida (${combinedSpins.length} giros). Aguardando 1ª jogada.`}
+                  {combinedSpins.length > 0
+                    ? `${combinedSpins.length} giros na mesa · Aguardando próximo giro`
+                    : scanStatusHint || 'Abra a roleta e toque em Mira se precisar alinhar.'}
                 </div>
               </div>
             )}
@@ -1959,6 +2098,9 @@ export default function App() {
             })
           )}
         </div>
+
+        {/* Aposta Mestra Compacta (Roleta) */}
+        {renderMasterBetCard(true)}
 
         {/* Todas as opções de apostas visíveis por completo + OK/X + % de acerto */}
         <div className="grid grid-cols-2 gap-1">
@@ -2307,6 +2449,9 @@ export default function App() {
           </div>
         </section>
 
+        {(gameMode === 'roulette' || gameMode === 'bacbo' || gameMode === 'aviator') &&
+          renderMasterBetCard(false)}
+
         {gameMode === 'bacbo' ? (
           <BacBoDashboard
             rounds={bacboRounds}
@@ -2410,7 +2555,11 @@ export default function App() {
                 </span>
                 <span aria-hidden="true">·</span>
                 <span className="font-mono tabular-nums text-amber-300">
-                  Acerto Sessão: {accuracy.overallRatePct.toFixed(1)}% ({accuracy.totalHits}/{accuracy.totalAttempts})
+                  {accuracy.evaluatedRounds > 0
+                    ? `Acerto Sessão: ${accuracy.overallRatePct.toFixed(1)}% (${accuracy.totalHits}/${accuracy.totalAttempts})`
+                    : accuracy.tableHistoryRounds >= 2
+                    ? `Acerto Mesa: ${accuracy.tableHistoryRatePct.toFixed(1)}% (${accuracy.tableHistoryHits}/${accuracy.tableHistoryAttempts})`
+                    : 'Acerto Sessão: 0.0% (0/0)'}
                 </span>
               </div>
               <h1 className="font-display text-xl sm:text-2xl font-semibold text-slate-100">
@@ -2507,9 +2656,9 @@ export default function App() {
                   </h2>
                   <p className="text-xs text-slate-400 mt-0.5">
                     {combinedSpins.length === 0
-                      ? 'A recolher dados... 0/50 · Abra o navegador ou registre um giro para iniciar.'
-                      : combinedSpins.length < 50
-                      ? `A recolher dados... ${combinedSpins.length}/50 · Sugestões ativas abaixo enquanto recolhe mais giros.`
+                      ? 'Abra o navegador ou registre um giro para iniciar as sugestões e a Aposta Mestra.'
+                      : accuracy.evaluatedRounds === 0 && accuracy.tableHistoryRounds >= 2
+                      ? `Mesa calibrada (${combinedSpins.length} giros · Acerto Mesa ${accuracy.tableHistoryRatePct.toFixed(1)}%). Sugestões ativas abaixo.`
                       : 'Escolha um ou mais campos abaixo conforme a leitura atual e acompanhe OK / X + % de cada opção.'}
                   </p>
                 </div>

@@ -14,10 +14,13 @@ import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
 import android.media.projection.MediaProjectionManager;
+import android.net.Uri;
+import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.os.SystemClock;
 import android.text.InputType;
 import android.util.TypedValue;
@@ -29,7 +32,10 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.webkit.CookieManager;
 import android.webkit.PermissionRequest;
+import android.webkit.RenderProcessGoneDetail;
+import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -38,6 +44,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
@@ -55,12 +62,15 @@ import java.util.Locale;
 public class MainActivity extends BridgeActivity {
 
     private static final String DEFAULT_URL = "https://www.kwanzabet.ao";
-    private static final long SPLIT_HEARTBEAT_SCAN_MS = 3500L;
+    private static final long SPLIT_HEARTBEAT_SCAN_MS = 1100L;
 
     private LinearLayout browserPanel;
     private LinearLayout urlBar;
     private FrameLayout browserFrame;
     private WebView browserWebView;
+    private ProgressBar browserProgressBar;
+    private LinearLayout browserErrorBar;
+    private TextView tvBrowserError;
     private EditText etUrl;
     private View roiOverlay;
     private DebugBoxesView debugBoxesView;
@@ -97,7 +107,7 @@ public class MainActivity extends BridgeActivity {
     private String activeSiteKey = "kwanzabet";
     private String bacBoScanMode = RoiConfigStore.BACBO_MODE_AUTO;
     private boolean debugOverlayEnabled = false;
-    private int captureIntervalMs = 550;
+    private int captureIntervalMs = 350;
 
     private ScreenScanner.RoiFrameSignature lastSplitRoiSig = null;
     private long lastSplitFullScanMs = 0L;
@@ -110,15 +120,13 @@ public class MainActivity extends BridgeActivity {
     private final Runnable scanRunnable = new Runnable() {
         @Override
         public void run() {
-            if (isScanningFrame && (System.currentTimeMillis() - activeScanStartMs) > 2000L) {
+            if (isScanningFrame && (System.currentTimeMillis() - activeScanStartMs) > 1500L) {
                 isScanningFrame = false;
             }
             if (browserVisible && autoScanEnabled && !isScanningFrame) {
                 captureAndAnalyzeBrowser(false);
             }
-            long delay = RoiConfigStore.GAME_AVIATOR.equals(activeGameMode)
-                    ? Math.max(350L, captureIntervalMs)
-                    : 500L;
+            long delay = Math.max(350L, captureIntervalMs);
             handler.postDelayed(this, delay);
         }
     };
@@ -333,6 +341,9 @@ public class MainActivity extends BridgeActivity {
         Button btnCalib = createBarButton("Mira", "#F1F5F9", "#1E293B");
         btnCalib.setOnClickListener(v -> toggleCalibrationOverlay());
 
+        Button btnExternal = createBarButton("Chrome", "#93C5FD", "#1E293B");
+        btnExternal.setOnClickListener(v -> openUrlInExternalBrowser(etUrl.getText().toString()));
+
         Button btnClose = createBarButton("X", "#FCA5A5", "#3F1D24");
         btnClose.setOnClickListener(v -> closeIntegratedBrowser());
 
@@ -342,10 +353,12 @@ public class MainActivity extends BridgeActivity {
         urlBar.addView(btnGo);
         urlBar.addView(btnScanToggle);
         urlBar.addView(btnCalib);
+        urlBar.addView(btnExternal);
         urlBar.addView(btnClose);
 
-        // Area do WebView + Mira verde de calibracao
+        // Area do WebView + Barra de progresso + Aviso de erro + Mira verde
         browserFrame = new FrameLayout(this);
+        browserFrame.setBackgroundColor(Color.parseColor("#0B0F17"));
         browserFrame.setLayoutParams(new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 0,
@@ -355,11 +368,50 @@ public class MainActivity extends BridgeActivity {
         browserWebView = new WebView(this);
         browserWebView.setFocusable(true);
         browserWebView.setFocusableInTouchMode(true);
+        browserWebView.setBackgroundColor(Color.parseColor("#0B0F17"));
+        browserWebView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         browserWebView.setLayoutParams(new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
         configureBrowserWebView(browserWebView);
+
+        browserProgressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        browserProgressBar.setMax(100);
+        browserProgressBar.setVisibility(View.GONE);
+        browserProgressBar.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                dp(3),
+                Gravity.TOP
+        ));
+
+        browserErrorBar = new LinearLayout(this);
+        browserErrorBar.setOrientation(LinearLayout.HORIZONTAL);
+        browserErrorBar.setGravity(Gravity.CENTER_VERTICAL);
+        browserErrorBar.setBackgroundColor(Color.parseColor("#EE1E293B"));
+        browserErrorBar.setPadding(dp(10), dp(6), dp(10), dp(6));
+        browserErrorBar.setVisibility(View.GONE);
+        browserErrorBar.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP
+        ));
+
+        tvBrowserError = new TextView(this);
+        tvBrowserError.setTextColor(Color.parseColor("#FDE68A"));
+        tvBrowserError.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        tvBrowserError.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        Button btnRetryLoad = createBarButton("Recarregar", "#0B0F17", "#FBBF24");
+        btnRetryLoad.setOnClickListener(v -> {
+            browserErrorBar.setVisibility(View.GONE);
+            navigateBrowser(etUrl.getText().toString());
+        });
+        Button btnOpenExtErr = createBarButton("Abrir Chrome", "#F1F5F9", "#0F172A");
+        btnOpenExtErr.setOnClickListener(v -> openUrlInExternalBrowser(etUrl.getText().toString()));
+        browserErrorBar.addView(tvBrowserError);
+        browserErrorBar.addView(btnRetryLoad);
+        browserErrorBar.addView(btnOpenExtErr);
 
         roiOverlay = new View(this);
         GradientDrawable roiDrawable = new GradientDrawable();
@@ -386,6 +438,8 @@ public class MainActivity extends BridgeActivity {
         browserFrame.addView(browserWebView);
         browserFrame.addView(roiOverlay);
         browserFrame.addView(debugBoxesView);
+        browserFrame.addView(browserProgressBar);
+        browserFrame.addView(browserErrorBar);
         browserFrame.addView(calibrationBar);
 
         browserPanel.addView(urlBar);
@@ -516,34 +570,68 @@ public class MainActivity extends BridgeActivity {
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+        settings.setLoadsImagesAutomatically(true);
+        settings.setBlockNetworkImage(false);
+        settings.setBlockNetworkLoads(false);
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setJavaScriptCanOpenWindowsAutomatically(true);
-        settings.setSupportMultipleWindows(false);
+        settings.setSupportMultipleWindows(true);
         settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setUseWideViewPort(true);
         settings.setLoadWithOverviewMode(true);
-        settings.setBuiltInZoomControls(false);
+        settings.setSupportZoom(true);
+        settings.setBuiltInZoomControls(true);
         settings.setDisplayZoomControls(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
-        settings.setUserAgentString(
-                "Mozilla/5.0 (Linux; Android 13; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-        );
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+
+        // Remove flag '; wv' mantendo exatamente a versão real do Chromium do aparelho (evita bloqueio Cloudflare/branco)
+        String defaultUa = settings.getUserAgentString();
+        if (defaultUa != null && !defaultUa.isEmpty()) {
+            String cleanUa = defaultUa
+                    .replace("; wv)", ")")
+                    .replace("Version/4.0 ", "");
+            settings.setUserAgentString(cleanUa);
+        }
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                if (request != null && request.isForMainFrame() && request.getUrl() != null) {
+                if (request != null && request.getUrl() != null) {
                     String u = request.getUrl().toString();
                     if (u.startsWith("http://") || u.startsWith("https://")) {
-                        etUrl.setText(u);
-                        prefs.edit().putString("last_url", u).apply();
+                        if (request.isForMainFrame()) {
+                            etUrl.setText(u);
+                            prefs.edit().putString("last_url", u).apply();
+                        }
+                        return false;
                     }
+                    // Evita ecrã branco ERR_UNKNOWN_URL_SCHEME para intent:// ou schemes externos
+                    return true;
                 }
                 return false;
             }
 
             @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                if (browserErrorBar != null) {
+                    browserErrorBar.setVisibility(View.GONE);
+                }
+                if (browserProgressBar != null) {
+                    browserProgressBar.setVisibility(View.VISIBLE);
+                    browserProgressBar.setProgress(15);
+                }
+            }
+
+            @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                if (browserProgressBar != null) {
+                    browserProgressBar.setVisibility(View.GONE);
+                }
+                CookieManager.getInstance().flush();
                 if (url != null && !url.isEmpty() && (url.startsWith("http://") || url.startsWith("https://"))) {
                     etUrl.setText(url);
                 }
@@ -551,11 +639,79 @@ public class MainActivity extends BridgeActivity {
                     if (browserVisible && autoScanEnabled && !isScanningFrame) {
                         captureAndAnalyzeBrowser(false);
                     }
-                }, 900L);
+                }, 500L);
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                if (request != null && request.isForMainFrame()) {
+                    if (browserProgressBar != null) browserProgressBar.setVisibility(View.GONE);
+                    if (browserErrorBar != null && tvBrowserError != null) {
+                        CharSequence desc = Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && error != null
+                                ? error.getDescription()
+                                : "Falha ao carregar o site.";
+                        tvBrowserError.setText("Erro na página: " + desc + " (pode abrir no Chrome + Captura)");
+                        browserErrorBar.setVisibility(View.VISIBLE);
+                    }
+                }
+            }
+
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                handler.cancel();
+                if (browserErrorBar != null && tvBrowserError != null) {
+                    tvBrowserError.setText("Certificado SSL recusado pelo site. Use 'Abrir Chrome' + Captura.");
+                    browserErrorBar.setVisibility(View.VISIBLE);
+                }
+            }
+
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                if (browserErrorBar != null && tvBrowserError != null) {
+                    tvBrowserError.setText("Memória gráfica do navegador reiniciada. Toque em Recarregar.");
+                    browserErrorBar.setVisibility(View.VISIBLE);
+                }
+                return true;
             }
         });
 
         webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onProgressChanged(WebView view, int newProgress) {
+                super.onProgressChanged(view, newProgress);
+                if (browserProgressBar != null) {
+                    browserProgressBar.setProgress(newProgress);
+                    browserProgressBar.setVisibility(newProgress >= 95 ? View.GONE : View.VISIBLE);
+                }
+            }
+
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+                // Redireciona popups/novos separadores (ex: abrir mesa/jogo) para o mesmo WebView sem ecrã branco
+                if (resultMsg != null && resultMsg.obj instanceof WebView.WebViewTransport) {
+                    WebView tempWebView = new WebView(MainActivity.this);
+                    tempWebView.setWebViewClient(new WebViewClient() {
+                        @Override
+                        public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest req) {
+                            if (req != null && req.getUrl() != null) {
+                                String target = req.getUrl().toString();
+                                if (target.startsWith("http://") || target.startsWith("https://")) {
+                                    navigateBrowser(target);
+                                }
+                            }
+                            v.destroy();
+                            return true;
+                        }
+                    });
+                    WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+                    transport.setWebView(tempWebView);
+                    resultMsg.sendToTarget();
+                    return true;
+                }
+                return false;
+            }
+
             @Override
             public void onPermissionRequest(PermissionRequest request) {
                 if (request != null) {
@@ -563,6 +719,19 @@ public class MainActivity extends BridgeActivity {
                 }
             }
         });
+    }
+
+    private void openUrlInExternalBrowser(String raw) {
+        String url = raw != null ? raw.trim() : DEFAULT_URL;
+        if (url.isEmpty()) url = DEFAULT_URL;
+        if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            url = "https://" + url;
+        }
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            startActivity(intent);
+        } catch (Exception ignored) {
+        }
     }
 
     public void openIntegratedBrowser(String requestedUrl) {
@@ -664,7 +833,7 @@ public class MainActivity extends BridgeActivity {
         }
         if (tvCalibTitle != null) {
             if (RoiConfigStore.GAME_BACBO.equals(activeGameMode)) {
-                tvCalibTitle.setText("Alinhar caixa verde sobre os 3 blocos ou Bead Plate do Bac Bo");
+                tvCalibTitle.setText("Alinhar caixa verde sobre Jogador (esq.) e Banca (dir.) ou Grelha");
             } else if (RoiConfigStore.GAME_AVIATOR.equals(activeGameMode)) {
                 tvCalibTitle.setText("Alinhar caixa verde sobre a faixa + multiplicador do Aviator");
             } else {
@@ -1028,11 +1197,10 @@ public class MainActivity extends BridgeActivity {
     private int pendingInitCount = 0;
 
     private void reconcileDetectedStrip(List<Integer> newStrip, float avgConfidence) {
-        if (newStrip == null || newStrip.size() < 4) return;
+        if (newStrip == null || newStrip.size() < 3) return;
 
-        // Primeira leitura ao abrir mesa: exige 2 leituras concordantes no numero da cabeca
+        // Primeira leitura ao abrir mesa: confirmação instantânea se faixa >=4 com boa confiança, ou 2 leituras
         if (confirmedStrip.isEmpty()) {
-            if (newStrip.size() < 5) return;
             Integer head = newStrip.get(0);
             if (head.equals(pendingInitHead)) {
                 pendingInitCount++;
@@ -1040,7 +1208,8 @@ public class MainActivity extends BridgeActivity {
                 pendingInitHead = head;
                 pendingInitCount = 1;
             }
-            if (pendingInitCount >= 2) {
+            boolean strongSingleRead = newStrip.size() >= 4 && avgConfidence >= 0.78f;
+            if (strongSingleRead || pendingInitCount >= 2) {
                 confirmedStrip.clear();
                 confirmedStrip.addAll(newStrip);
                 pendingInitHead = null;
@@ -1120,7 +1289,9 @@ public class MainActivity extends BridgeActivity {
                 pendingConfirmCount = 1;
             }
 
-            if (pendingConfirmCount >= 2) {
+            // Se 3+ números anteriores deslocaram de forma coerente com boa confiança, regista de imediato (< 0.4s)
+            boolean fastVerified = bestPosMatches >= 3 && avgConfidence >= 0.74f;
+            if (fastVerified || pendingConfirmCount >= 2) {
                 confirmedStrip.clear();
                 confirmedStrip.addAll(pendingFullStrip != null ? pendingFullStrip : newStrip);
                 clearPendingCandidate();
@@ -1240,13 +1411,13 @@ public class MainActivity extends BridgeActivity {
             if (showCalibrationFeedback && tvCalibStatus != null) {
                 if (hasScore) {
                     String winner = pTotal > bTotal ? "JOGADOR" : (bTotal > pTotal ? "BANCA" : "EMPATE");
-                    tvCalibStatus.setText("Bac Bo (" + formatBacBoModeLabel(resolvedMode) + "): JOGADOR " + pTotal + " x " + bTotal + " BANCA (" + winner + ")");
+                    tvCalibStatus.setText("Bac Bo: Jogador " + pTotal + " x " + bTotal + " Banca -> Maior: " + winner);
                 } else if (blocksVisible) {
-                    tvCalibStatus.setText("3 Blocos visiveis! Aguardando totais...");
+                    tvCalibStatus.setText("Bac Bo visível! Aguardar ambos os dados lançados...");
                 } else if (stripSize >= 4) {
-                    tvCalibStatus.setText("Bead Plate (" + formatBacBoModeLabel(resolvedMode) + "): " + stripSize + " celulas lidas.");
+                    tvCalibStatus.setText("Bead Plate (" + formatBacBoModeLabel(resolvedMode) + "): " + stripSize + " células lidas.");
                 } else {
-                    tvCalibStatus.setText("Bac Bo: Ajuste a Mira ou altere Modo (Blocos/Grelha).");
+                    tvCalibStatus.setText("Bac Bo: Alinhe a Mira sobre os números de Jogador e Banca.");
                 }
             }
 
@@ -1266,7 +1437,7 @@ public class MainActivity extends BridgeActivity {
 
             if (blockRoundLocked) {
                 boolean sameResult = (pTotal == lockedPlayerTotal && bTotal == lockedBankerTotal);
-                boolean withinMinCycle = (nowMs - lastLiveBacBoEmitMs) < 12000L;
+                boolean withinMinCycle = (nowMs - lastLiveBacBoEmitMs) < 3500L;
                 if (sameResult || withinMinCycle) {
                     return;
                 }
@@ -1281,9 +1452,8 @@ public class MainActivity extends BridgeActivity {
                 pendingBlockStableCount = 1;
             }
 
-            // 2 leituras estáveis em modo forçado Blocos (ou 3 em Auto) garantem leitura rápida sem travar
-            int requiredStable = RoiConfigStore.BACBO_MODE_BLOCKS.equals(bacBoScanMode) ? 2 : 3;
-            if (pendingBlockStableCount >= requiredStable) {
+            // 2 leituras estáveis dos 2 totais confirmam que ambos os dados já pararam de rolar
+            if (pendingBlockStableCount >= 2) {
                 String outcome = pTotal > bTotal ? "P" : (bTotal > pTotal ? "B" : "T");
                 int winTotal = Math.max(pTotal, bTotal);
 
@@ -1310,13 +1480,12 @@ public class MainActivity extends BridgeActivity {
             return;
         }
 
-        // Cartões ficaram sem os 4 dados (dados a girar / antes do lançamento)
+        // Dados voltaram a rolar / mesa a preparar próxima ronda
         pendingBlockP = -1;
         pendingBlockB = -1;
         pendingBlockStableCount = 0;
         emptyBlockFrames++;
-        // Só desbloqueia após >= 2s contínuos sem os 4 dados E >= 6s desde a última leitura (impede reemissão por oscilação na janela de 9s)
-        if (blockRoundLocked && emptyBlockFrames >= 4 && (nowMs - lastLiveBacBoEmitMs) >= 6000L) {
+        if (blockRoundLocked && emptyBlockFrames >= 3 && (nowMs - lastLiveBacBoEmitMs) >= 3000L) {
             blockRoundLocked = false;
         }
     }
