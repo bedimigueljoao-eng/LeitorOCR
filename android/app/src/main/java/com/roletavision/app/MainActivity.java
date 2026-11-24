@@ -10,6 +10,7 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
 import android.media.projection.MediaProjectionManager;
@@ -17,6 +18,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.text.InputType;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -53,6 +55,7 @@ import java.util.Locale;
 public class MainActivity extends BridgeActivity {
 
     private static final String DEFAULT_URL = "https://www.kwanzabet.ao";
+    private static final long SPLIT_HEARTBEAT_SCAN_MS = 3500L;
 
     private LinearLayout browserPanel;
     private LinearLayout urlBar;
@@ -60,18 +63,23 @@ public class MainActivity extends BridgeActivity {
     private WebView browserWebView;
     private EditText etUrl;
     private View roiOverlay;
+    private DebugBoxesView debugBoxesView;
     private LinearLayout calibrationBar;
     private TextView tvCalibTitle;
     private TextView tvCalibStatus;
     private SeekBar seekRoiTop;
     private SeekBar seekRoiHeight;
     private Button btnScanToggle;
+    private Button btnBacBoMode;
+    private Button btnDebugToggle;
 
     private View capacitorWebView;
     private float browserSplitWeight = 0.56f;
 
     private final ScreenScanner scanner = new ScreenScanner();
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private RoiConfigStore configStore;
+    private GameHistoryDb historyDb;
 
     private boolean browserVisible = false;
     private boolean autoScanEnabled = true;
@@ -81,10 +89,19 @@ public class MainActivity extends BridgeActivity {
     private int consecutiveFailures = 0;
     private int totalReadTicks = 0;
 
+    private float roiLeftRatio = 0.0f;
     private float roiTopRatio = 0.04f;
-    private float roiHeightRatio = 0.07f;
-    private String activeGameMode = "roulette";
-    private int aviatorCaptureIntervalMs = 550;
+    private float roiWidthRatio = 1.0f;
+    private float roiHeightRatio = 0.08f;
+    private String activeGameMode = RoiConfigStore.GAME_ROULETTE;
+    private String activeSiteKey = "kwanzabet";
+    private String bacBoScanMode = RoiConfigStore.BACBO_MODE_AUTO;
+    private boolean debugOverlayEnabled = false;
+    private int captureIntervalMs = 550;
+
+    private ScreenScanner.RoiFrameSignature lastSplitRoiSig = null;
+    private long lastSplitFullScanMs = 0L;
+    private Double lastSplitAviatorCrashSaved = null;
 
     private SharedPreferences prefs;
     private ActivityResultLauncher<Intent> mediaProjectionLauncher;
@@ -93,17 +110,68 @@ public class MainActivity extends BridgeActivity {
     private final Runnable scanRunnable = new Runnable() {
         @Override
         public void run() {
-            // Watchdog: nunca deixa uma falha antiga travar a próxima leitura de 500ms
             if (isScanningFrame && (System.currentTimeMillis() - activeScanStartMs) > 2000L) {
                 isScanningFrame = false;
             }
             if (browserVisible && autoScanEnabled && !isScanningFrame) {
                 captureAndAnalyzeBrowser(false);
             }
-            long delay = "aviator".equals(activeGameMode) ? Math.max(350L, aviatorCaptureIntervalMs) : 500L;
+            long delay = RoiConfigStore.GAME_AVIATOR.equals(activeGameMode)
+                    ? Math.max(350L, captureIntervalMs)
+                    : 500L;
             handler.postDelayed(this, delay);
         }
     };
+
+    private static class DebugBoxesView extends View {
+        private final Paint boxPaint = new Paint();
+        private final Paint textPaint = new Paint();
+        private final Paint bgPaint = new Paint();
+        private List<ScreenScanner.OcrDebugBox> boxes = Collections.emptyList();
+        private float roiL = 0f, roiT = 0f, roiW = 1f, roiH = 1f;
+
+        DebugBoxesView(Context ctx) {
+            super(ctx);
+            boxPaint.setStyle(Paint.Style.STROKE);
+            boxPaint.setStrokeWidth(3f);
+            textPaint.setColor(Color.WHITE);
+            textPaint.setTextSize(26f);
+            textPaint.setFakeBoldText(true);
+            bgPaint.setColor(Color.parseColor("#CC0B0F17"));
+        }
+
+        void updateBoxes(RoiConfigStore.RoiRect roi, List<ScreenScanner.OcrDebugBox> next) {
+            this.roiL = roi.leftRatio;
+            this.roiT = roi.topRatio;
+            this.roiW = roi.widthRatio;
+            this.roiH = roi.heightRatio;
+            this.boxes = next != null ? next : Collections.emptyList();
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            if (boxes.isEmpty()) return;
+            int w = getWidth();
+            int h = getHeight();
+            float baseL = w * roiL;
+            float baseT = h * roiT;
+            float spanW = w * roiW;
+            float spanH = h * roiH;
+            for (ScreenScanner.OcrDebugBox b : boxes) {
+                float left = baseL + b.leftRatio * spanW;
+                float top = baseT + b.topRatio * spanH;
+                float right = baseL + b.rightRatio * spanW;
+                float bottom = baseT + b.bottomRatio * spanH;
+                boxPaint.setColor(b.accepted ? Color.parseColor("#10B981") : Color.parseColor("#F59E0B"));
+                canvas.drawRect(left, top, right, bottom, boxPaint);
+                String label = b.text + (b.colorLabel.isEmpty() ? "" : " [" + b.colorLabel + "]");
+                canvas.drawRect(left, Math.max(0f, top - 28f), left + Math.max(70f, label.length() * 14f), top, bgPaint);
+                canvas.drawText(label, left + 4f, Math.max(22f, top - 6f), textPaint);
+            }
+        }
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -118,24 +186,20 @@ public class MainActivity extends BridgeActivity {
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
                     if (result.getResultCode() == Activity.RESULT_OK && result.getData() != null) {
-                        Intent svcIntent = new Intent(this, AviatorCaptureService.class);
-                        svcIntent.setAction(AviatorCaptureService.ACTION_START);
-                        svcIntent.putExtra(AviatorCaptureService.EXTRA_RESULT_CODE, result.getResultCode());
-                        svcIntent.putExtra(AviatorCaptureService.EXTRA_RESULT_DATA, result.getData());
-                        svcIntent.putExtra(AviatorCaptureService.EXTRA_INTERVAL_MS, (long) aviatorCaptureIntervalMs);
-                        svcIntent.putExtra(
-                                AviatorCaptureService.EXTRA_ROI_TOP,
-                                prefs != null ? prefs.getFloat("aviator_roi_top", 0.14f) : 0.14f
-                        );
-                        svcIntent.putExtra(
-                                AviatorCaptureService.EXTRA_ROI_HEIGHT,
-                                prefs != null ? prefs.getFloat("aviator_roi_height", 0.34f) : 0.34f
-                        );
+                        Intent svcIntent = new Intent(this, GameCaptureService.class);
+                        svcIntent.setAction(GameCaptureService.ACTION_START);
+                        svcIntent.putExtra(GameCaptureService.EXTRA_RESULT_CODE, result.getResultCode());
+                        svcIntent.putExtra(GameCaptureService.EXTRA_RESULT_DATA, result.getData());
+                        svcIntent.putExtra(GameCaptureService.EXTRA_INTERVAL_MS, (long) captureIntervalMs);
+                        svcIntent.putExtra(GameCaptureService.EXTRA_GAME_MODE, activeGameMode);
+                        svcIntent.putExtra(GameCaptureService.EXTRA_SITE_KEY, activeSiteKey);
                         ContextCompat.startForegroundService(this, svcIntent);
                     } else {
-                        BrowserScannerPlugin.emitAviatorCaptureStatus(
+                        BrowserScannerPlugin.emitCaptureStatus(
                                 false,
-                                aviatorCaptureIntervalMs,
+                                captureIntervalMs,
+                                activeGameMode,
+                                activeSiteKey,
                                 "denied",
                                 "Captura de ecrã recusada pelo utilizador."
                         );
@@ -145,11 +209,25 @@ public class MainActivity extends BridgeActivity {
 
         super.onCreate(savedInstanceState);
 
-        prefs = getSharedPreferences("roletavision_browser", MODE_PRIVATE);
-        roiTopRatio = prefs.getFloat("roi_top", 0.04f);
-        roiHeightRatio = prefs.getFloat("roi_height", 0.07f);
+        configStore = new RoiConfigStore(this);
+        historyDb = GameHistoryDb.getInstance(this);
+        prefs = getSharedPreferences(RoiConfigStore.PREFS_NAME, MODE_PRIVATE);
+
+        activeSiteKey = configStore.getActiveSite();
+        bacBoScanMode = configStore.getBacBoScanMode();
+        debugOverlayEnabled = configStore.isDebugOverlayEnabled();
+        loadRoiForCurrentMode();
 
         setupIntegratedBrowserSplitLayout();
+    }
+
+    private void loadRoiForCurrentMode() {
+        if (configStore == null) return;
+        RoiConfigStore.RoiRect rect = configStore.getRoiRect(activeGameMode, activeSiteKey);
+        roiLeftRatio = rect.leftRatio;
+        roiTopRatio = rect.topRatio;
+        roiWidthRatio = rect.widthRatio;
+        roiHeightRatio = rect.heightRatio;
     }
 
     @Override
@@ -298,8 +376,16 @@ public class MainActivity extends BridgeActivity {
         calibrationBar = buildCalibrationBar();
         calibrationBar.setVisibility(View.GONE);
 
+        debugBoxesView = new DebugBoxesView(this);
+        debugBoxesView.setVisibility(debugOverlayEnabled ? View.VISIBLE : View.GONE);
+        debugBoxesView.setLayoutParams(new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
         browserFrame.addView(browserWebView);
         browserFrame.addView(roiOverlay);
+        browserFrame.addView(debugBoxesView);
         browserFrame.addView(calibrationBar);
 
         browserPanel.addView(urlBar);
@@ -334,12 +420,13 @@ public class MainActivity extends BridgeActivity {
         tvCalibTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
 
         seekRoiTop = new SeekBar(this);
-        seekRoiTop.setMax(45);
+        seekRoiTop.setMax(85);
         seekRoiTop.setProgress((int) (roiTopRatio * 100));
         seekRoiTop.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 roiTopRatio = progress / 100f;
+                lastSplitRoiSig = null;
                 updateRoiOverlayPosition();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -347,12 +434,13 @@ public class MainActivity extends BridgeActivity {
         });
 
         seekRoiHeight = new SeekBar(this);
-        seekRoiHeight.setMax(18);
+        seekRoiHeight.setMax(55);
         seekRoiHeight.setProgress((int) (roiHeightRatio * 100));
         seekRoiHeight.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
             public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
                 roiHeightRatio = Math.max(3, progress) / 100f;
+                lastSplitRoiSig = null;
                 updateRoiOverlayPosition();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) {}
@@ -375,37 +463,33 @@ public class MainActivity extends BridgeActivity {
             captureAndAnalyzeBrowser(true);
         });
 
+        btnBacBoMode = createBarButton("Modo: " + formatBacBoModeLabel(bacBoScanMode), "#93C5FD", "#1E293B");
+        btnBacBoMode.setLayoutParams(new LinearLayout.LayoutParams(0, dp(34), 1.15f));
+        btnBacBoMode.setVisibility(RoiConfigStore.GAME_BACBO.equals(activeGameMode) ? View.VISIBLE : View.GONE);
+        btnBacBoMode.setOnClickListener(v -> {
+            String next = RoiConfigStore.BACBO_MODE_AUTO.equals(bacBoScanMode)
+                    ? RoiConfigStore.BACBO_MODE_BLOCKS
+                    : (RoiConfigStore.BACBO_MODE_BLOCKS.equals(bacBoScanMode)
+                    ? RoiConfigStore.BACBO_MODE_BEAD_PLATE
+                    : RoiConfigStore.BACBO_MODE_AUTO);
+            setBacBoScanMode(next);
+        });
+
+        btnDebugToggle = createBarButton(debugOverlayEnabled ? "Debug ON" : "Debug OFF", "#F1F5F9", "#1E293B");
+        btnDebugToggle.setLayoutParams(new LinearLayout.LayoutParams(0, dp(34), 0.9f));
+        btnDebugToggle.setOnClickListener(v -> setDebugOverlayEnabled(!debugOverlayEnabled));
+
         Button btnDone = createBarButton("Confirmar", "#0B0F17", "#10B981");
         btnDone.setLayoutParams(new LinearLayout.LayoutParams(0, dp(34), 1f));
         btnDone.setOnClickListener(v -> {
-            if ("bacbo".equals(activeGameMode)) {
-                prefs.edit()
-                        .putFloat("bacbo_blocks_v2_top", roiTopRatio)
-                        .putFloat("bacbo_blocks_v2_height", roiHeightRatio)
-                        .apply();
-            } else if ("aviator".equals(activeGameMode)) {
-                prefs.edit()
-                        .putFloat("aviator_roi_top", roiTopRatio)
-                        .putFloat("aviator_roi_height", roiHeightRatio)
-                        .apply();
-                if (AviatorCaptureService.isServiceRunning()) {
-                    Intent updIntent = new Intent(this, AviatorCaptureService.class);
-                    updIntent.setAction(AviatorCaptureService.ACTION_UPDATE_ROI);
-                    updIntent.putExtra(AviatorCaptureService.EXTRA_ROI_TOP, roiTopRatio);
-                    updIntent.putExtra(AviatorCaptureService.EXTRA_ROI_HEIGHT, roiHeightRatio);
-                    startService(updIntent);
-                }
-            } else {
-                prefs.edit()
-                        .putFloat("roi_top", roiTopRatio)
-                        .putFloat("roi_height", roiHeightRatio)
-                        .apply();
-            }
+            saveRoiRectForSite(activeGameMode, activeSiteKey, roiLeftRatio, roiTopRatio, roiWidthRatio, roiHeightRatio);
             calibrationBar.setVisibility(View.GONE);
             roiOverlay.setVisibility(View.GONE);
         });
 
         btnRow.addView(btnTest);
+        btnRow.addView(btnBacBoMode);
+        btnRow.addView(btnDebugToggle);
         btnRow.addView(btnDone);
 
         bar.addView(tvCalibTitle);
@@ -414,6 +498,12 @@ public class MainActivity extends BridgeActivity {
         bar.addView(tvCalibStatus);
         bar.addView(btnRow);
         return bar;
+    }
+
+    private String formatBacBoModeLabel(String mode) {
+        if (RoiConfigStore.BACBO_MODE_BLOCKS.equals(mode)) return "Blocos";
+        if (RoiConfigStore.BACBO_MODE_BEAD_PLATE.equals(mode)) return "Grelha";
+        return "Auto";
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -547,68 +637,136 @@ public class MainActivity extends BridgeActivity {
     }
 
     public void setActiveGameMode(String mode) {
-        String nextMode;
-        if ("bacbo".equals(mode)) {
-            nextMode = "bacbo";
-        } else if ("aviator".equals(mode)) {
-            nextMode = "aviator";
-        } else {
-            nextMode = "roulette";
-        }
-        this.activeGameMode = nextMode;
+        this.activeGameMode = RoiConfigStore.normalizeGame(mode);
         this.isScanningFrame = false;
+        this.lastSplitRoiSig = null;
+        loadRoiForCurrentMode();
 
-        if (prefs != null) {
-            if ("bacbo".equals(nextMode)) {
-                roiTopRatio = prefs.getFloat("bacbo_blocks_v2_top", 0.34f);
-                roiHeightRatio = prefs.getFloat("bacbo_blocks_v2_height", 0.40f);
-                if (seekRoiTop != null) {
-                    seekRoiTop.setMax(85);
-                    seekRoiTop.setProgress((int) (roiTopRatio * 100));
-                }
-                if (seekRoiHeight != null) {
-                    seekRoiHeight.setMax(50);
-                    seekRoiHeight.setProgress((int) (roiHeightRatio * 100));
-                }
-                if (tvCalibTitle != null) {
-                    tvCalibTitle.setText("Alinhar caixa verde sobre os 3 blocos (JOGADOR | EMPATE | BANCA)");
-                }
-            } else if ("aviator".equals(nextMode)) {
-                roiTopRatio = prefs.getFloat("aviator_roi_top", 0.14f);
-                roiHeightRatio = prefs.getFloat("aviator_roi_height", 0.34f);
-                if (seekRoiTop != null) {
-                    seekRoiTop.setMax(65);
-                    seekRoiTop.setProgress((int) (roiTopRatio * 100));
-                }
-                if (seekRoiHeight != null) {
-                    seekRoiHeight.setMax(55);
-                    seekRoiHeight.setProgress((int) (roiHeightRatio * 100));
-                }
-                if (tvCalibTitle != null) {
-                    tvCalibTitle.setText("Alinhar caixa verde sobre a faixa + multiplicador do Aviator");
-                }
+        if (seekRoiTop != null) {
+            if (RoiConfigStore.GAME_BACBO.equals(activeGameMode)) {
+                seekRoiTop.setMax(85);
+            } else if (RoiConfigStore.GAME_AVIATOR.equals(activeGameMode)) {
+                seekRoiTop.setMax(65);
             } else {
-                roiTopRatio = prefs.getFloat("roi_top", 0.04f);
-                roiHeightRatio = prefs.getFloat("roi_height", 0.07f);
-                if (seekRoiTop != null) {
-                    seekRoiTop.setMax(45);
-                    seekRoiTop.setProgress((int) (roiTopRatio * 100));
-                }
-                if (seekRoiHeight != null) {
-                    seekRoiHeight.setMax(18);
-                    seekRoiHeight.setProgress((int) (roiHeightRatio * 100));
-                }
-                if (tvCalibTitle != null) {
-                    tvCalibTitle.setText("Alinhar caixa verde sobre os numeros da roleta");
-                }
+                seekRoiTop.setMax(45);
             }
+            seekRoiTop.setProgress((int) (roiTopRatio * 100));
+        }
+        if (seekRoiHeight != null) {
+            if (RoiConfigStore.GAME_BACBO.equals(activeGameMode)) {
+                seekRoiHeight.setMax(50);
+            } else if (RoiConfigStore.GAME_AVIATOR.equals(activeGameMode)) {
+                seekRoiHeight.setMax(55);
+            } else {
+                seekRoiHeight.setMax(18);
+            }
+            seekRoiHeight.setProgress((int) (roiHeightRatio * 100));
+        }
+        if (tvCalibTitle != null) {
+            if (RoiConfigStore.GAME_BACBO.equals(activeGameMode)) {
+                tvCalibTitle.setText("Alinhar caixa verde sobre os 3 blocos ou Bead Plate do Bac Bo");
+            } else if (RoiConfigStore.GAME_AVIATOR.equals(activeGameMode)) {
+                tvCalibTitle.setText("Alinhar caixa verde sobre a faixa + multiplicador do Aviator");
+            } else {
+                tvCalibTitle.setText("Alinhar caixa verde sobre os numeros da roleta");
+            }
+        }
+        if (btnBacBoMode != null) {
+            btnBacBoMode.setVisibility(RoiConfigStore.GAME_BACBO.equals(activeGameMode) ? View.VISIBLE : View.GONE);
+        }
+        updateRoiOverlayPosition();
+
+        if (GameCaptureService.isServiceRunning()) {
+            Intent updIntent = new Intent(this, GameCaptureService.class);
+            updIntent.setAction(GameCaptureService.ACTION_SET_MODE);
+            updIntent.putExtra(GameCaptureService.EXTRA_GAME_MODE, activeGameMode);
+            updIntent.putExtra(GameCaptureService.EXTRA_SITE_KEY, activeSiteKey);
+            startService(updIntent);
+        }
+    }
+
+    public void setBacBoScanMode(String mode) {
+        if (configStore != null) {
+            configStore.setBacBoScanMode(mode);
+            this.bacBoScanMode = configStore.getBacBoScanMode();
+        } else {
+            this.bacBoScanMode = mode;
+        }
+        this.lastSplitRoiSig = null;
+        if (btnBacBoMode != null) {
+            btnBacBoMode.setText("Modo: " + formatBacBoModeLabel(this.bacBoScanMode));
+        }
+        if (tvCalibStatus != null && RoiConfigStore.GAME_BACBO.equals(activeGameMode)) {
+            tvCalibStatus.setText("Modo Bac Bo alterado para: " + formatBacBoModeLabel(this.bacBoScanMode));
+        }
+        if (GameCaptureService.isServiceRunning()) {
+            Intent updIntent = new Intent(this, GameCaptureService.class);
+            updIntent.setAction(GameCaptureService.ACTION_UPDATE_CONFIG);
+            updIntent.putExtra(GameCaptureService.EXTRA_GAME_MODE, activeGameMode);
+            updIntent.putExtra(GameCaptureService.EXTRA_SITE_KEY, activeSiteKey);
+            startService(updIntent);
+        }
+    }
+
+    public void setActiveSiteProfile(String site) {
+        if (configStore != null) {
+            configStore.setActiveSite(site);
+            this.activeSiteKey = configStore.getActiveSite();
+        } else {
+            this.activeSiteKey = RoiConfigStore.normalizeSite(site);
+        }
+        this.lastSplitRoiSig = null;
+        loadRoiForCurrentMode();
+        updateRoiOverlayPosition();
+        if (GameCaptureService.isServiceRunning()) {
+            Intent updIntent = new Intent(this, GameCaptureService.class);
+            updIntent.setAction(GameCaptureService.ACTION_UPDATE_CONFIG);
+            updIntent.putExtra(GameCaptureService.EXTRA_GAME_MODE, activeGameMode);
+            updIntent.putExtra(GameCaptureService.EXTRA_SITE_KEY, activeSiteKey);
+            startService(updIntent);
+        }
+    }
+
+    public void saveRoiRectForSite(String game, String site, float left, float top, float width, float height) {
+        RoiConfigStore.RoiRect rect = new RoiConfigStore.RoiRect(left, top, width, height);
+        if (configStore != null) {
+            configStore.saveRoiRect(game, site, rect);
+        }
+        if (RoiConfigStore.normalizeGame(game).equals(activeGameMode)) {
+            roiLeftRatio = rect.leftRatio;
+            roiTopRatio = rect.topRatio;
+            roiWidthRatio = rect.widthRatio;
+            roiHeightRatio = rect.heightRatio;
+            lastSplitRoiSig = null;
             updateRoiOverlayPosition();
         }
     }
 
-    public void requestAviatorScreenCapturePermission(int intervalMs) {
-        aviatorCaptureIntervalMs = Math.max(350, Math.min(2000, intervalMs));
-        BrowserScannerPlugin.emitAviatorCaptureStatus(false, aviatorCaptureIntervalMs, "pending", "");
+    public void setDebugOverlayEnabled(boolean enabled) {
+        this.debugOverlayEnabled = enabled;
+        if (configStore != null) {
+            configStore.setDebugOverlayEnabled(enabled);
+        }
+        if (debugBoxesView != null) {
+            debugBoxesView.setVisibility(enabled ? View.VISIBLE : View.GONE);
+            if (!enabled) {
+                debugBoxesView.updateBoxes(new RoiConfigStore.RoiRect(roiLeftRatio, roiTopRatio, roiWidthRatio, roiHeightRatio), Collections.emptyList());
+            }
+        }
+        if (btnDebugToggle != null) {
+            btnDebugToggle.setText(enabled ? "Debug ON" : "Debug OFF");
+        }
+    }
+
+    public void requestUnifiedScreenCapturePermission(int intervalMs, String requestedGameMode, String requestedSite) {
+        captureIntervalMs = Math.max(350, Math.min(2000, intervalMs));
+        if (requestedGameMode != null && !requestedGameMode.isEmpty()) {
+            setActiveGameMode(requestedGameMode);
+        }
+        if (requestedSite != null && !requestedSite.isEmpty()) {
+            setActiveSiteProfile(requestedSite);
+        }
+        BrowserScannerPlugin.emitCaptureStatus(false, captureIntervalMs, activeGameMode, activeSiteKey, "pending", "");
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -624,9 +782,11 @@ public class MainActivity extends BridgeActivity {
         MediaProjectionManager manager =
                 (MediaProjectionManager) getSystemService(Context.MEDIA_PROJECTION_SERVICE);
         if (manager == null || mediaProjectionLauncher == null) {
-            BrowserScannerPlugin.emitAviatorCaptureStatus(
+            BrowserScannerPlugin.emitCaptureStatus(
                     false,
-                    aviatorCaptureIntervalMs,
+                    captureIntervalMs,
+                    activeGameMode,
+                    activeSiteKey,
                     "denied",
                     "MediaProjection indisponível neste dispositivo."
             );
@@ -635,27 +795,28 @@ public class MainActivity extends BridgeActivity {
         mediaProjectionLauncher.launch(manager.createScreenCaptureIntent());
     }
 
-    public void stopAviatorScreenCaptureService() {
-        Intent stopIntent = new Intent(this, AviatorCaptureService.class);
-        stopIntent.setAction(AviatorCaptureService.ACTION_STOP);
+    public void stopUnifiedScreenCaptureService() {
+        Intent stopIntent = new Intent(this, GameCaptureService.class);
+        stopIntent.setAction(GameCaptureService.ACTION_STOP);
         startService(stopIntent);
-        BrowserScannerPlugin.emitAviatorCaptureStatus(false, aviatorCaptureIntervalMs, "idle", "");
+        BrowserScannerPlugin.emitCaptureStatus(false, captureIntervalMs, activeGameMode, activeSiteKey, "idle", "");
     }
 
-    public void updateAviatorCaptureInterval(int intervalMs) {
-        aviatorCaptureIntervalMs = Math.max(350, Math.min(2000, intervalMs));
-        if (AviatorCaptureService.isServiceRunning()) {
-            Intent svcIntent = new Intent(this, AviatorCaptureService.class);
-            svcIntent.setAction(AviatorCaptureService.ACTION_SET_INTERVAL);
-            svcIntent.putExtra(AviatorCaptureService.EXTRA_INTERVAL_MS, (long) aviatorCaptureIntervalMs);
+    public void updateUnifiedCaptureInterval(int intervalMs) {
+        captureIntervalMs = Math.max(350, Math.min(2000, intervalMs));
+        if (GameCaptureService.isServiceRunning()) {
+            Intent svcIntent = new Intent(this, GameCaptureService.class);
+            svcIntent.setAction(GameCaptureService.ACTION_SET_INTERVAL);
+            svcIntent.putExtra(GameCaptureService.EXTRA_INTERVAL_MS, (long) captureIntervalMs);
             startService(svcIntent);
         } else {
-            BrowserScannerPlugin.emitAviatorCaptureStatus(false, aviatorCaptureIntervalMs, "idle", "");
+            BrowserScannerPlugin.emitCaptureStatus(false, captureIntervalMs, activeGameMode, activeSiteKey, "idle", "");
         }
     }
 
     public void triggerImmediateScan() {
         if (!browserVisible) return;
+        lastSplitRoiSig = null;
         if (isScanningFrame) {
             handler.postDelayed(() -> {
                 if (browserVisible && !isScanningFrame) {
@@ -668,13 +829,14 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void updateRoiOverlayPosition() {
+        int w = browserFrame.getWidth();
         int h = browserFrame.getHeight();
-        if (h <= 0) return;
+        if (h <= 0 || w <= 0) return;
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) roiOverlay.getLayoutParams();
+        lp.leftMargin = Math.max(dp(4), (int) (w * roiLeftRatio));
         lp.topMargin = (int) (h * roiTopRatio);
+        lp.width = Math.max(dp(60), (int) (w * roiWidthRatio) - dp(8));
         lp.height = Math.max(dp(28), (int) (h * roiHeightRatio));
-        lp.leftMargin = dp(6);
-        lp.rightMargin = dp(6);
         roiOverlay.setLayoutParams(lp);
     }
 
@@ -780,15 +942,35 @@ public class MainActivity extends BridgeActivity {
             boolean showCalibrationFeedback,
             long scanStartMs
     ) {
-        if ("bacbo".equals(activeGameMode)) {
-            processBacBoBitmap(bitmap, showCalibrationFeedback, scanStartMs);
+        final RoiConfigStore.RoiRect activeRoi =
+                new RoiConfigStore.RoiRect(roiLeftRatio, roiTopRatio, roiWidthRatio, roiHeightRatio);
+        long nowMono = SystemClock.elapsedRealtime();
+        ScreenScanner.RoiFrameSignature currSig = ScreenScanner.computeRoiSignature(bitmap, activeRoi);
+        if (!showCalibrationFeedback
+                && lastSplitRoiSig != null
+                && !ScreenScanner.hasSignificantRoiChange(lastSplitRoiSig, currSig)
+                && (nowMono - lastSplitFullScanMs) < SPLIT_HEARTBEAT_SCAN_MS) {
+            bitmap.recycle();
+            isScanningFrame = false;
             return;
         }
-        if ("aviator".equals(activeGameMode)) {
-            processAviatorBitmap(bitmap, showCalibrationFeedback, scanStartMs);
+        lastSplitRoiSig = currSig;
+        lastSplitFullScanMs = nowMono;
+
+        final RoiConfigStore.HsvColorProfile hsvProfile =
+                configStore != null
+                        ? configStore.getHsvProfile(activeSiteKey)
+                        : RoiConfigStore.HsvColorProfile.defaultForSite(activeSiteKey);
+
+        if (RoiConfigStore.GAME_BACBO.equals(activeGameMode)) {
+            processBacBoBitmap(bitmap, activeRoi, hsvProfile, showCalibrationFeedback, scanStartMs);
             return;
         }
-        scanner.scanHistoryStrip(bitmap, roiTopRatio, roiHeightRatio, (detectedNewestFirst, ocrOk) -> {
+        if (RoiConfigStore.GAME_AVIATOR.equals(activeGameMode)) {
+            processAviatorBitmap(bitmap, activeRoi, hsvProfile, showCalibrationFeedback, scanStartMs);
+            return;
+        }
+        scanner.scanRouletteFrame(bitmap, activeRoi, hsvProfile, debugOverlayEnabled, (detectedNewestFirst, avgConfidence, timestampMs, debugBoxes, hsvSamples, ocrOk) -> {
             bitmap.recycle();
             isScanningFrame = false;
 
@@ -812,6 +994,13 @@ public class MainActivity extends BridgeActivity {
                     totalReadTicks
             );
 
+            if (debugOverlayEnabled) {
+                if (debugBoxesView != null) {
+                    debugBoxesView.updateBoxes(activeRoi, debugBoxes);
+                }
+                BrowserScannerPlugin.emitDebugOverlay(activeGameMode, "roulette", avgConfidence, debugBoxes);
+            }
+
             if (showCalibrationFeedback) {
                 BrowserScannerPlugin.emitScanFeedback(stripSize, "ocr");
             }
@@ -820,12 +1009,12 @@ public class MainActivity extends BridgeActivity {
                 if (!hasNumbers) {
                     tvCalibStatus.setText("Nenhum lido. Arraste a caixa verde sobre os numeros.");
                 } else {
-                    tvCalibStatus.setText("Lidos: " + detectedNewestFirst.toString());
+                    tvCalibStatus.setText(String.format(Locale.US, "Lidos (conf %.0f%%): %s", avgConfidence * 100f, detectedNewestFirst.toString()));
                 }
             }
 
             if (stripSize >= 3) {
-                reconcileDetectedStrip(detectedNewestFirst);
+                reconcileDetectedStrip(detectedNewestFirst, avgConfidence);
             }
         });
     }
@@ -838,7 +1027,7 @@ public class MainActivity extends BridgeActivity {
     private Integer pendingInitHead = null;
     private int pendingInitCount = 0;
 
-    private void reconcileDetectedStrip(List<Integer> newStrip) {
+    private void reconcileDetectedStrip(List<Integer> newStrip, float avgConfidence) {
         if (newStrip == null || newStrip.size() < 4) return;
 
         // Primeira leitura ao abrir mesa: exige 2 leituras concordantes no numero da cabeca
@@ -856,6 +1045,9 @@ public class MainActivity extends BridgeActivity {
                 confirmedStrip.addAll(newStrip);
                 pendingInitHead = null;
                 pendingInitCount = 0;
+                if (historyDb != null) {
+                    historyDb.insertRouletteResult(System.currentTimeMillis(), activeSiteKey, newStrip, avgConfidence, "integrated_browser");
+                }
                 BrowserScannerPlugin.emitSpins(newStrip, true);
             }
             return;
@@ -935,6 +1127,9 @@ public class MainActivity extends BridgeActivity {
                 if (browserPanel != null) {
                     browserPanel.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 }
+                if (historyDb != null) {
+                    historyDb.insertRouletteResult(System.currentTimeMillis(), activeSiteKey, candidateNew, avgConfidence, "integrated_browser");
+                }
                 BrowserScannerPlugin.emitSpins(candidateNew, false);
             }
             return;
@@ -959,6 +1154,9 @@ public class MainActivity extends BridgeActivity {
                 unrelatedStripCount = 0;
                 pendingInitHead = null;
                 pendingInitCount = 0;
+                if (historyDb != null) {
+                    historyDb.insertRouletteResult(System.currentTimeMillis(), activeSiteKey, newStrip, avgConfidence, "integrated_browser");
+                }
                 BrowserScannerPlugin.emitSpins(newStrip, true);
             }
         }
@@ -994,10 +1192,12 @@ public class MainActivity extends BridgeActivity {
 
     private void processBacBoBitmap(
             Bitmap bitmap,
+            RoiConfigStore.RoiRect roi,
+            RoiConfigStore.HsvColorProfile hsvProfile,
             boolean showCalibrationFeedback,
             long scanStartMs
     ) {
-        scanner.scanBacBoFrame(bitmap, roiTopRatio, roiHeightRatio, (pTotal, bTotal, blocksVisible, plateCells, ocrOk) -> {
+        scanner.scanBacBoFrame(bitmap, roi, bacBoScanMode, hsvProfile, debugOverlayEnabled, (pTotal, bTotal, blocksVisible, plateCells, confidence, resolvedMode, debugBoxes, ocrOk) -> {
             bitmap.recycle();
             isScanningFrame = false;
 
@@ -1006,7 +1206,7 @@ public class MainActivity extends BridgeActivity {
 
             boolean hasScore = pTotal >= 2 && bTotal >= 2;
             int stripSize = plateCells != null ? plateCells.size() : 0;
-            boolean hasSignal = ocrOk && (hasScore || blocksVisible || stripSize >= 6);
+            boolean hasSignal = ocrOk && (hasScore || blocksVisible || stripSize >= 4);
             if (hasSignal) {
                 consecutiveFailures = 0;
             } else {
@@ -1026,32 +1226,39 @@ public class MainActivity extends BridgeActivity {
                     totalReadTicks
             );
 
+            if (debugOverlayEnabled) {
+                if (debugBoxesView != null) {
+                    debugBoxesView.updateBoxes(roi, debugBoxes);
+                }
+                BrowserScannerPlugin.emitDebugOverlay(activeGameMode, resolvedMode, confidence, debugBoxes);
+            }
+
             if (showCalibrationFeedback) {
-                BrowserScannerPlugin.emitScanFeedback(hasScore ? 2 : (blocksVisible ? 1 : stripSize), "bacbo-ocr");
+                BrowserScannerPlugin.emitScanFeedback(hasScore ? 2 : (blocksVisible ? 1 : stripSize), "bacbo-" + resolvedMode);
             }
 
             if (showCalibrationFeedback && tvCalibStatus != null) {
                 if (hasScore) {
                     String winner = pTotal > bTotal ? "JOGADOR" : (bTotal > pTotal ? "BANCA" : "EMPATE");
-                    tvCalibStatus.setText("4 Dados OK: JOGADOR " + pTotal + " x " + bTotal + " BANCA (" + winner + ")");
+                    tvCalibStatus.setText("Bac Bo (" + formatBacBoModeLabel(resolvedMode) + "): JOGADOR " + pTotal + " x " + bTotal + " BANCA (" + winner + ")");
                 } else if (blocksVisible) {
-                    tvCalibStatus.setText("3 Blocos visiveis! Aguardando os 4 dados pararem...");
-                } else if (stripSize >= 6) {
-                    tvCalibStatus.setText("Grelha Bac Bo: " + stripSize + " resultados lidos.");
+                    tvCalibStatus.setText("3 Blocos visiveis! Aguardando totais...");
+                } else if (stripSize >= 4) {
+                    tvCalibStatus.setText("Bead Plate (" + formatBacBoModeLabel(resolvedMode) + "): " + stripSize + " celulas lidas.");
                 } else {
-                    tvCalibStatus.setText("Bac Bo: Ajuste a Mira verde sobre os 3 blocos (JOGADOR | EMPATE | BANCA).");
+                    tvCalibStatus.setText("Bac Bo: Ajuste a Mira ou altere Modo (Blocos/Grelha).");
                 }
             }
 
-            if (hasScore || blocksVisible) {
-                reconcileBacBoBlocks(pTotal, bTotal);
-            } else if (stripSize >= 6) {
-                reconcileBacBoPlate(plateCells);
+            if (RoiConfigStore.BACBO_MODE_BLOCKS.equals(resolvedMode) && (hasScore || blocksVisible)) {
+                reconcileBacBoBlocks(pTotal, bTotal, confidence);
+            } else if (stripSize >= 4) {
+                reconcileBacBoPlate(plateCells, confidence);
             }
         });
     }
 
-    private void reconcileBacBoBlocks(int pTotal, int bTotal) {
+    private void reconcileBacBoBlocks(int pTotal, int bTotal, float confidence) {
         long nowMs = System.currentTimeMillis();
 
         if (pTotal >= 2 && bTotal >= 2) {
@@ -1063,7 +1270,6 @@ public class MainActivity extends BridgeActivity {
                 if (sameResult || withinMinCycle) {
                     return;
                 }
-                // Passaram >= 12s e os 2 placares com 4 dados mudaram diretamente -> desbloqueia
                 blockRoundLocked = false;
             }
 
@@ -1075,8 +1281,9 @@ public class MainActivity extends BridgeActivity {
                 pendingBlockStableCount = 1;
             }
 
-            // 3 leituras idênticas (1.5s) com os 4 dados visíveis garantem resultado final fechado
-            if (pendingBlockStableCount >= 3) {
+            // 2 leituras estáveis em modo forçado Blocos (ou 3 em Auto) garantem leitura rápida sem travar
+            int requiredStable = RoiConfigStore.BACBO_MODE_BLOCKS.equals(bacBoScanMode) ? 2 : 3;
+            if (pendingBlockStableCount >= requiredStable) {
                 String outcome = pTotal > bTotal ? "P" : (bTotal > pTotal ? "B" : "T");
                 int winTotal = Math.max(pTotal, bTotal);
 
@@ -1094,6 +1301,9 @@ public class MainActivity extends BridgeActivity {
 
                 if (browserPanel != null) {
                     browserPanel.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
+                }
+                if (historyDb != null) {
+                    historyDb.insertBacBoResult(nowMs, activeSiteKey, outcome, pTotal, bTotal, bacBoScanMode, confidence, "integrated_browser");
                 }
                 BrowserScannerPlugin.emitBacBo(Collections.singletonList(cell), false);
             }
@@ -1143,8 +1353,8 @@ public class MainActivity extends BridgeActivity {
         return matches;
     }
 
-    private void reconcileBacBoPlate(List<ScreenScanner.BacBoCell> newCells) {
-        if (newCells == null || newCells.size() < 6) return;
+    private void reconcileBacBoPlate(List<ScreenScanner.BacBoCell> newCells, float confidence) {
+        if (newCells == null || newCells.size() < 4) return;
 
         if (confirmedBacBo.isEmpty()) {
             String sig = newCells.get(0).signature();
@@ -1159,6 +1369,10 @@ public class MainActivity extends BridgeActivity {
                 confirmedBacBo.addAll(newCells);
                 pendingBacBoInitSig = null;
                 pendingBacBoInitCount = 0;
+                if (historyDb != null) {
+                    ScreenScanner.BacBoCell head = newCells.get(0);
+                    historyDb.insertBacBoResult(System.currentTimeMillis(), activeSiteKey, head.outcome, head.playerTotal, head.bankerTotal, bacBoScanMode, confidence, "integrated_browser");
+                }
                 BrowserScannerPlugin.emitBacBo(newCells, true);
             }
             return;
@@ -1237,6 +1451,10 @@ public class MainActivity extends BridgeActivity {
                 if (browserPanel != null) {
                     browserPanel.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP);
                 }
+                if (historyDb != null) {
+                    ScreenScanner.BacBoCell head = candidateNew.get(0);
+                    historyDb.insertBacBoResult(lastLiveBacBoEmitMs, activeSiteKey, head.outcome, head.playerTotal, head.bankerTotal, bacBoScanMode, confidence, "integrated_browser");
+                }
                 BrowserScannerPlugin.emitBacBo(candidateNew, false);
             }
             return;
@@ -1246,7 +1464,7 @@ public class MainActivity extends BridgeActivity {
         pendingBacBoFull = null;
         pendingBacBoConfirmCount = 0;
         unrelatedBacBoCount++;
-        if (unrelatedBacBoCount >= 4 && newCells.size() >= 6) {
+        if (unrelatedBacBoCount >= 4 && newCells.size() >= 4) {
             String sig = newCells.get(0).signature();
             if (sig.equals(pendingBacBoInitSig)) {
                 pendingBacBoInitCount++;
@@ -1260,6 +1478,10 @@ public class MainActivity extends BridgeActivity {
                 unrelatedBacBoCount = 0;
                 pendingBacBoInitSig = null;
                 pendingBacBoInitCount = 0;
+                if (historyDb != null) {
+                    ScreenScanner.BacBoCell head = newCells.get(0);
+                    historyDb.insertBacBoResult(System.currentTimeMillis(), activeSiteKey, head.outcome, head.playerTotal, head.bankerTotal, bacBoScanMode, confidence, "integrated_browser");
+                }
                 BrowserScannerPlugin.emitBacBo(newCells, true);
             }
         }
@@ -1269,10 +1491,12 @@ public class MainActivity extends BridgeActivity {
 
     private void processAviatorBitmap(
             Bitmap bitmap,
+            RoiConfigStore.RoiRect roi,
+            RoiConfigStore.HsvColorProfile hsvProfile,
             boolean showCalibrationFeedback,
             long scanStartMs
     ) {
-        scanner.scanAviatorFrame(bitmap, roiTopRatio, roiHeightRatio, (liveMult, isCrashedColor, historyNewestFirst, confidence, ocrOk) -> {
+        scanner.scanAviatorFrame(bitmap, roi, hsvProfile, debugOverlayEnabled, (liveMult, isCrashedColor, historyNewestFirst, confidence, debugBoxes, ocrOk) -> {
             bitmap.recycle();
             isScanningFrame = false;
 
@@ -1302,6 +1526,13 @@ public class MainActivity extends BridgeActivity {
                     totalReadTicks
             );
 
+            if (debugOverlayEnabled) {
+                if (debugBoxesView != null) {
+                    debugBoxesView.updateBoxes(roi, debugBoxes);
+                }
+                BrowserScannerPlugin.emitDebugOverlay(activeGameMode, "aviator", confidence, debugBoxes);
+            }
+
             if (showCalibrationFeedback) {
                 BrowserScannerPlugin.emitScanFeedback(
                         liveMult >= 1.0 ? stripSize + 1 : stripSize,
@@ -1321,6 +1552,12 @@ public class MainActivity extends BridgeActivity {
             }
 
             if (hasSignal) {
+                if (liveMult >= 1.0 && isCrashedColor && historyDb != null) {
+                    if (lastSplitAviatorCrashSaved == null || Math.abs(lastSplitAviatorCrashSaved - liveMult) > 0.01) {
+                        historyDb.insertAviatorCrash(System.currentTimeMillis(), activeSiteKey, liveMult, true, confidence, "integrated_browser");
+                        lastSplitAviatorCrashSaved = liveMult;
+                    }
+                }
                 BrowserScannerPlugin.emitAviator(
                         liveMult,
                         isCrashedColor,

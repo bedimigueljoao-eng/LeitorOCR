@@ -36,6 +36,12 @@
         </provider>
 
         <service
+            android:name=".GameCaptureService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
+
+        <service
             android:name=".AviatorCaptureService"
             android:enabled="true"
             android:exported="false"

@@ -64,6 +64,8 @@ interface BacBoDashboardProps {
   }) => { valid: boolean; reason?: string };
   onImportRounds: (restored: BacBoRoundRecord[]) => void;
   onResetAll: () => void;
+  bacboScanMode?: 'auto' | 'blocks' | 'bead_plate';
+  onChangeBacBoScanMode?: (mode: 'auto' | 'blocks' | 'bead_plate') => void;
 }
 
 function outcomeStyle(outcome: BacBoOutcome | 'NONE') {
@@ -110,6 +112,8 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
   onAddRound,
   onImportRounds,
   onResetAll,
+  bacboScanMode = 'auto',
+  onChangeBacBoScanMode,
 }) => {
   const [section, setSection] = useState<BacBoSection>('live');
   const [pTotalInput, setPTotalInput] = useState('');
@@ -364,6 +368,35 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {onChangeBacBoScanMode && (
+              <div
+                role="group"
+                aria-label="Modo de leitura OCR do Bac Bo"
+                className="inline-flex items-center rounded-lg border border-slate-800 bg-[#0B0F17] p-0.5"
+              >
+                {(
+                  [
+                    { id: 'auto', label: 'OCR Auto' },
+                    { id: 'blocks', label: 'Modo Blocos' },
+                    { id: 'bead_plate', label: 'Bead Plate' },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => onChangeBacBoScanMode(m.id)}
+                    className={`rounded-md px-2.5 py-1.5 text-[11px] font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                      bacboScanMode === m.id
+                        ? 'bg-blue-600 text-white'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <button
               type="button"
               onClick={handleRunLogicTests}

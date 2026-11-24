@@ -15,16 +15,333 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
+/**
+ * Motor OCR reescrito para Roleta, Bac Bo e Aviator:
+ * - Recorte exato de ROI (x, y, w, h)
+ * - Escala de cinza + CLAHE local + binarização adaptativa para texto pequeno
+ * - Escala inteligente 2x apenas se altura da ROI < 120 px
+ * - Amostragem de cor HSV calibrável por site
+ * - Modo forçado Bac Bo (Blocos / Bead Plate / Auto) + fallback por cor dominante
+ * - Saída de caixas de debug visual + confiança média + timestamp
+ */
 public class ScreenScanner {
+
+    private static final int MIN_IMAGE_DIMENSION_PX = 40;
+    private static final int MIN_ROI_CROP_PX = 20;
+    private static final int SMART_UPSCALE_HEIGHT_THRESHOLD_PX = 120;
+    private static final int ADAPTIVE_BINARIZE_HEIGHT_THRESHOLD_PX = 140;
+
+    private static final int CLAHE_GRID_COLS = 4;
+    private static final int CLAHE_GRID_ROWS = 2;
+    private static final float CLAHE_CLIP_FACTOR = 2.6f;
+
+    private static final float MAX_ROULETTE_BOX_HEIGHT_RATIO = 0.85f;
+    private static final float MAX_ROULETTE_BOX_WIDTH_RATIO = 1.65f;
+    private static final float ROULETTE_ROW_Y_TOLERANCE_RATIO = 0.24f;
+    private static final float ROULETTE_MIN_SPACING_FACTOR = 0.52f;
+
+    private static final float BACBO_BLOCK_LEFT_MAX_X = 0.48f;
+    private static final float BACBO_BLOCK_RIGHT_MIN_X = 0.52f;
+    private static final float BACBO_BLOCK_MAX_Y = 0.85f;
+    private static final float BACBO_BLOCK_MIN_HEIGHT_RATIO = 0.08f;
+
+    private static final float AVIATOR_LIVE_MIN_HEIGHT_RATIO = 0.16f;
+    private static final float AVIATOR_STRIP_MAX_HEIGHT_RATIO = 0.34f;
+    private static final int DHASH_COLS = 9;
+    private static final int DHASH_ROWS = 8;
 
     public enum PillColor {
         GREEN, RED, BLACK
     }
 
+    public static class OcrDebugBox {
+        public final float leftRatio;
+        public final float topRatio;
+        public final float rightRatio;
+        public final float bottomRatio;
+        public final String text;
+        public final String colorLabel;
+        public final boolean accepted;
+        public final String reason;
+
+        public OcrDebugBox(
+                Rect box,
+                int imgW,
+                int imgH,
+                String text,
+                String colorLabel,
+                boolean accepted,
+                String reason
+        ) {
+            float safeW = Math.max(1f, imgW);
+            float safeH = Math.max(1f, imgH);
+            this.leftRatio = clampRatio(box.left / safeW);
+            this.topRatio = clampRatio(box.top / safeH);
+            this.rightRatio = clampRatio(box.right / safeW);
+            this.bottomRatio = clampRatio(box.bottom / safeH);
+            this.text = text != null ? text : "";
+            this.colorLabel = colorLabel != null ? colorLabel : "";
+            this.accepted = accepted;
+            this.reason = reason != null ? reason : "";
+        }
+
+        private static float clampRatio(float v) {
+            return Math.max(0f, Math.min(1f, v));
+        }
+    }
+
+    public static class RoiFrameSignature {
+        public final long dHash;
+        public final int meanLuma;
+
+        public RoiFrameSignature(long dHash, int meanLuma) {
+            this.dHash = dHash;
+            this.meanLuma = meanLuma;
+        }
+    }
+
+    /**
+     * Calcula dHash 64-bit e luminância média dentro da ROI em < 1 ms para descartar frames iguais.
+     */
+    public static RoiFrameSignature computeRoiSignature(Bitmap bitmap, RoiConfigStore.RoiRect roi) {
+        if (bitmap == null || bitmap.isRecycled()) return new RoiFrameSignature(0L, 0);
+        int w = bitmap.getWidth();
+        int h = bitmap.getHeight();
+        if (w < MIN_IMAGE_DIMENSION_PX || h < MIN_IMAGE_DIMENSION_PX) {
+            return new RoiFrameSignature(0L, 0);
+        }
+
+        int x0 = clamp((int) (w * roi.leftRatio), 0, w - 2);
+        int y0 = clamp((int) (h * roi.topRatio), 0, h - 2);
+        int rw = clamp((int) (w * roi.widthRatio), 16, w - x0);
+        int rh = clamp((int) (h * roi.heightRatio), 16, h - y0);
+
+        int[][] grid = new int[DHASH_ROWS][DHASH_COLS];
+        long sumLuma = 0L;
+        int samples = DHASH_ROWS * DHASH_COLS;
+
+        for (int r = 0; r < DHASH_ROWS; r++) {
+            int py = clamp(y0 + ((r * 2 + 1) * rh) / (DHASH_ROWS * 2), 0, h - 1);
+            for (int c = 0; c < DHASH_COLS; c++) {
+                int px = clamp(x0 + ((c * 2 + 1) * rw) / (DHASH_COLS * 2), 0, w - 1);
+                int pixel = bitmap.getPixel(px, py);
+                int luma = (77 * Color.red(pixel) + 150 * Color.green(pixel) + 29 * Color.blue(pixel)) >> 8;
+                grid[r][c] = luma;
+                sumLuma += luma;
+            }
+        }
+
+        long hash = 0L;
+        int bit = 0;
+        for (int r = 0; r < DHASH_ROWS; r++) {
+            for (int c = 0; c < DHASH_COLS - 1; c++) {
+                if (grid[r][c] > grid[r][c + 1]) {
+                    hash |= (1L << bit);
+                }
+                bit++;
+            }
+        }
+        return new RoiFrameSignature(hash, (int) (sumLuma / Math.max(1, samples)));
+    }
+
+    public static boolean hasSignificantRoiChange(RoiFrameSignature prev, RoiFrameSignature curr) {
+        if (prev == null || curr == null) return true;
+        int hamming = Long.bitCount(prev.dHash ^ curr.dHash);
+        int lumaDiff = Math.abs(prev.meanLuma - curr.meanLuma);
+        return hamming >= 3 || lumaDiff >= 5;
+    }
+
+    private static class PreparedCrop {
+        final Bitmap colorBitmap;
+        final Bitmap ocrBitmap;
+        final int scaleFactor;
+
+        PreparedCrop(Bitmap colorBitmap, Bitmap ocrBitmap, int scaleFactor) {
+            this.colorBitmap = colorBitmap;
+            this.ocrBitmap = ocrBitmap;
+            this.scaleFactor = scaleFactor;
+        }
+
+        void recycle() {
+            if (ocrBitmap != null && ocrBitmap != colorBitmap && !ocrBitmap.isRecycled()) {
+                ocrBitmap.recycle();
+            }
+            if (colorBitmap != null && !colorBitmap.isRecycled()) {
+                colorBitmap.recycle();
+            }
+        }
+    }
+
+    private PreparedCrop preprocessCropForOcr(
+            Bitmap fullBitmap,
+            RoiConfigStore.RoiRect roi,
+            boolean forceBinaryForSmall
+    ) {
+        int w = fullBitmap.getWidth();
+        int h = fullBitmap.getHeight();
+        int leftX = clamp((int) (w * roi.leftRatio), 0, w - MIN_ROI_CROP_PX);
+        int topY = clamp((int) (h * roi.topRatio), 0, h - MIN_ROI_CROP_PX);
+        int cropW = clamp((int) (w * roi.widthRatio), MIN_ROI_CROP_PX, w - leftX);
+        int cropH = clamp((int) (h * roi.heightRatio), MIN_ROI_CROP_PX, h - topY);
+
+        Bitmap cropped = Bitmap.createBitmap(fullBitmap, leftX, topY, cropW, cropH);
+        // Regra explícita: escala inteligente 2x SOMENTE se altura da ROI < 120 px
+        int scaleFactor = cropH < SMART_UPSCALE_HEIGHT_THRESHOLD_PX ? 2 : 1;
+        Bitmap colorScaled = scaleFactor > 1
+                ? Bitmap.createScaledBitmap(cropped, cropW * scaleFactor, cropH * scaleFactor, true)
+                : cropped;
+        if (colorScaled != cropped) {
+            cropped.recycle();
+        }
+
+        boolean applyBinary = forceBinaryForSmall && cropH < ADAPTIVE_BINARIZE_HEIGHT_THRESHOLD_PX;
+        Bitmap ocrBitmap = buildClaheGrayscaleBitmap(colorScaled, applyBinary);
+        return new PreparedCrop(colorScaled, ocrBitmap, scaleFactor);
+    }
+
+    /**
+     * Converte para luminância em escala de cinza + CLAHE por blocos + binarização adaptativa opcional.
+     */
+    private Bitmap buildClaheGrayscaleBitmap(Bitmap src, boolean adaptiveBinarize) {
+        int w = src.getWidth();
+        int h = src.getHeight();
+        int total = w * h;
+        int[] pixels = new int[total];
+        src.getPixels(pixels, 0, w, 0, 0, w, h);
+
+        int[] gray = new int[total];
+        for (int i = 0; i < total; i++) {
+            int p = pixels[i];
+            int r = (p >> 16) & 0xFF;
+            int g = (p >> 8) & 0xFF;
+            int b = p & 0xFF;
+            gray[i] = (77 * r + 150 * g + 29 * b) >> 8;
+        }
+
+        // CLAHE local em grade 4x2
+        int cols = Math.min(CLAHE_GRID_COLS, Math.max(1, w / 32));
+        int rows = Math.min(CLAHE_GRID_ROWS, Math.max(1, h / 24));
+        int[][][] luts = new int[rows][cols][256];
+
+        for (int ty = 0; ty < rows; ty++) {
+            int y0 = (ty * h) / rows;
+            int y1 = ((ty + 1) * h) / rows;
+            for (int tx = 0; tx < cols; tx++) {
+                int x0 = (tx * w) / cols;
+                int x1 = ((tx + 1) * w) / cols;
+
+                int[] hist = new int[256];
+                int count = 0;
+                for (int y = y0; y < y1; y++) {
+                    int rowOff = y * w;
+                    for (int x = x0; x < x1; x++) {
+                        hist[gray[rowOff + x]]++;
+                        count++;
+                    }
+                }
+                if (count == 0) continue;
+
+                int clipLimit = Math.max(2, (int) ((count / 256f) * CLAHE_CLIP_FACTOR));
+                int excess = 0;
+                for (int i = 0; i < 256; i++) {
+                    if (hist[i] > clipLimit) {
+                        excess += hist[i] - clipLimit;
+                        hist[i] = clipLimit;
+                    }
+                }
+                int addAll = excess / 256;
+                int rem = excess % 256;
+                for (int i = 0; i < 256; i++) {
+                    hist[i] += addAll + (i < rem ? 1 : 0);
+                }
+
+                int cdf = 0;
+                for (int i = 0; i < 256; i++) {
+                    cdf += hist[i];
+                    luts[ty][tx][i] = clamp((cdf * 255) / count, 0, 255);
+                }
+            }
+        }
+
+        int[] enhanced = new int[total];
+        for (int y = 0; y < h; y++) {
+            float fy = ((y + 0.5f) * rows / h) - 0.5f;
+            int ty0 = clamp((int) Math.floor(fy), 0, rows - 1);
+            int ty1 = clamp(ty0 + 1, 0, rows - 1);
+            float wy = Math.max(0f, Math.min(1f, fy - ty0));
+
+            int rowOff = y * w;
+            for (int x = 0; x < w; x++) {
+                float fx = ((x + 0.5f) * cols / w) - 0.5f;
+                int tx0 = clamp((int) Math.floor(fx), 0, cols - 1);
+                int tx1 = clamp(tx0 + 1, 0, cols - 1);
+                float wx = Math.max(0f, Math.min(1f, fx - tx0));
+
+                int v = gray[rowOff + x];
+                float topVal = luts[ty0][tx0][v] * (1f - wx) + luts[ty0][tx1][v] * wx;
+                float botVal = luts[ty1][tx0][v] * (1f - wx) + luts[ty1][tx1][v] * wx;
+                int outVal = clamp(Math.round(topVal * (1f - wy) + botVal * wy), 0, 255);
+                enhanced[rowOff + x] = outVal;
+            }
+        }
+
+        if (adaptiveBinarize && w > 8 && h > 8) {
+            // Binarização suave preservando anti-aliasing de dígitos claros sobre fundo escuro
+            int[] outPixels = new int[total];
+            int win = 6;
+            for (int y = 0; y < h; y++) {
+                int yUp = Math.max(0, y - win);
+                int yDn = Math.min(h - 1, y + win);
+                int rowOff = y * w;
+                for (int x = 0; x < w; x++) {
+                    int cVal = enhanced[rowOff + x];
+                    int localMean = (enhanced[yUp * w + x] + enhanced[yDn * w + x]
+                            + enhanced[rowOff + Math.max(0, x - win)]
+                            + enhanced[rowOff + Math.min(w - 1, x + win)]) >> 2;
+                    int finalVal;
+                    if (cVal > localMean + 18) {
+                        finalVal = Math.min(255, cVal + 36);
+                    } else if (cVal < localMean - 14) {
+                        finalVal = Math.max(0, cVal - 28);
+                    } else {
+                        finalVal = cVal;
+                    }
+                    outPixels[rowOff + x] = 0xFF000000 | (finalVal << 16) | (finalVal << 8) | finalVal;
+                }
+            }
+            Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            out.setPixels(outPixels, 0, w, 0, 0, w, h);
+            return out;
+        }
+
+        int[] outPixels = new int[total];
+        for (int i = 0; i < total; i++) {
+            int v = enhanced[i];
+            outPixels[i] = 0xFF000000 | (v << 16) | (v << 8) | v;
+        }
+        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+        out.setPixels(outPixels, 0, w, 0, 0, w, h);
+        return out;
+    }
+
+    // ==================== ROLETA OCR (HSV + PERFIS POR SITE) ====================
+
     public interface ScanCallback {
         void onResult(List<Integer> numbersNewestFirst, boolean ocrOk);
+    }
+
+    public interface RouletteFrameCallback {
+        void onResult(
+                List<Integer> numbersNewestFirst,
+                float avgConfidence,
+                long timestampMs,
+                List<OcrDebugBox> debugBoxes,
+                List<RoiConfigStore.HsvSample> colorSamples,
+                boolean ocrOk
+        );
     }
 
     private static class DetectedPill {
@@ -32,12 +349,14 @@ public class ScreenScanner {
         final int leftX;
         final int centerY;
         final int boxHeight;
+        final float confidence;
 
-        DetectedPill(int number, int leftX, int centerY, int boxHeight) {
+        DetectedPill(int number, int leftX, int centerY, int boxHeight, float confidence) {
             this.number = number;
             this.leftX = leftX;
             this.centerY = centerY;
             this.boxHeight = boxHeight;
+            this.confidence = confidence;
         }
     }
 
@@ -54,32 +373,47 @@ public class ScreenScanner {
             float roiHeightRatio,
             ScanCallback callback
     ) {
+        scanRouletteFrame(
+                fullBitmap,
+                new RoiConfigStore.RoiRect(0f, roiTopRatio, 1f, roiHeightRatio),
+                RoiConfigStore.HsvColorProfile.defaultForSite("kwanzabet"),
+                false,
+                (numbersNewestFirst, avgConfidence, timestampMs, debugBoxes, colorSamples, ocrOk) ->
+                        callback.onResult(numbersNewestFirst, ocrOk)
+        );
+    }
+
+    public void scanRouletteFrame(
+            Bitmap fullBitmap,
+            RoiConfigStore.RoiRect roi,
+            RoiConfigStore.HsvColorProfile hsvProfile,
+            boolean collectDebug,
+            RouletteFrameCallback callback
+    ) {
+        if (fullBitmap == null || fullBitmap.isRecycled()) {
+            callback.onResult(Collections.emptyList(), 0f, System.currentTimeMillis(), Collections.emptyList(), Collections.emptyList(), false);
+            return;
+        }
         int width = fullBitmap.getWidth();
         int height = fullBitmap.getHeight();
-        if (width < 40 || height < 40) {
-            callback.onResult(Collections.emptyList(), false);
+        if (width < MIN_IMAGE_DIMENSION_PX || height < MIN_IMAGE_DIMENSION_PX) {
+            callback.onResult(Collections.emptyList(), 0f, System.currentTimeMillis(), Collections.emptyList(), Collections.emptyList(), false);
             return;
         }
 
-        int topY = Math.max(0, Math.min(height - 20, (int) (height * roiTopRatio)));
-        int cropH = Math.max(20, Math.min(height - topY, (int) (height * roiHeightRatio)));
+        final RoiConfigStore.HsvColorProfile profile =
+                hsvProfile != null ? hsvProfile : RoiConfigStore.HsvColorProfile.defaultForSite("kwanzabet");
+        final PreparedCrop prep = preprocessCropForOcr(fullBitmap, roi, true);
+        final int sw = prep.ocrBitmap.getWidth();
+        final int sh = prep.ocrBitmap.getHeight();
 
-        Bitmap cropped = Bitmap.createBitmap(fullBitmap, 0, topY, width, cropH);
-        Bitmap scaled = Bitmap.createScaledBitmap(
-                cropped,
-                cropped.getWidth() * 2,
-                cropped.getHeight() * 2,
-                true
-        );
-        if (scaled != cropped) {
-            cropped.recycle();
-        }
-
-        final int scaledH = scaled.getHeight();
-        InputImage image = InputImage.fromBitmap(scaled, 0);
+        InputImage image = InputImage.fromBitmap(prep.ocrBitmap, 0);
         recognizer.process(image)
                 .addOnSuccessListener(visionText -> {
                     List<DetectedPill> candidates = new ArrayList<>();
+                    List<OcrDebugBox> debugBoxes = collectDebug ? new ArrayList<>() : Collections.emptyList();
+                    List<RoiConfigStore.HsvSample> hsvSamples = collectDebug ? new ArrayList<>() : Collections.emptyList();
+
                     for (Text.TextBlock block : visionText.getTextBlocks()) {
                         for (Text.Line line : block.getLines()) {
                             for (Text.Element element : line.getElements()) {
@@ -87,41 +421,59 @@ public class ScreenScanner {
                                 if (box == null) continue;
                                 int bh = box.height();
                                 int bw = box.width();
-                                if (bh < 8 || bh > scaledH * 0.85f || bw > scaledH * 1.6f) {
+                                if (bh < 8 || bh > sh * MAX_ROULETTE_BOX_HEIGHT_RATIO || bw > sh * MAX_ROULETTE_BOX_WIDTH_RATIO) {
                                     continue;
                                 }
-                                PillColor sampledColor = samplePillColor(scaled, box);
+                                float[] avgHsv = new float[3];
+                                PillColor sampledColor = samplePillColorHsv(prep.colorBitmap, box, profile, avgHsv);
                                 Integer parsed = parseRouletteToken(element.getText(), sampledColor);
                                 if (parsed != null) {
+                                    float conf = estimateElementConfidence(element, sampledColor != null);
                                     candidates.add(new DetectedPill(
                                             parsed,
                                             box.left,
                                             (box.top + box.bottom) / 2,
-                                            bh
+                                            bh,
+                                            conf
                                     ));
+                                    if (collectDebug) {
+                                        debugBoxes.add(new OcrDebugBox(box, sw, sh, String.valueOf(parsed), sampledColor.name(), true, "ok"));
+                                        hsvSamples.add(new RoiConfigStore.HsvSample(sampledColor.name(), avgHsv[0], avgHsv[1], avgHsv[2]));
+                                    }
+                                } else if (collectDebug) {
+                                    debugBoxes.add(new OcrDebugBox(box, sw, sh, element.getText(), sampledColor.name(), false, "cross-check"));
                                 }
                             }
                         }
                     }
-                    scaled.recycle();
+                    prep.recycle();
 
-                    List<DetectedPill> row = extractMainHorizontalRow(candidates, scaledH);
-                    List<Integer> ordered = new ArrayList<>();
+                    List<DetectedPill> row = extractMainHorizontalRow(candidates, sh);
+                    List<Integer> ordered = new ArrayList<>(row.size());
+                    float confSum = 0f;
                     for (DetectedPill pill : row) {
                         ordered.add(pill.number);
+                        confSum += pill.confidence;
                     }
-                    callback.onResult(ordered, true);
+                    float avgConf = row.isEmpty() ? 0f : (confSum / row.size());
+                    callback.onResult(ordered, avgConf, System.currentTimeMillis(), debugBoxes, hsvSamples, !ordered.isEmpty());
                 })
                 .addOnFailureListener(e -> {
-                    scaled.recycle();
-                    callback.onResult(Collections.emptyList(), false);
+                    prep.recycle();
+                    callback.onResult(Collections.emptyList(), 0f, System.currentTimeMillis(), Collections.emptyList(), Collections.emptyList(), false);
                 });
+    }
+
+    private float estimateElementConfidence(Text.Element element, boolean colorMatched) {
+        float raw = element.getConfidence();
+        float base = raw > 0f ? raw : 0.84f;
+        return Math.min(0.99f, colorMatched ? base * 0.85f + 0.14f : base * 0.7f);
     }
 
     private List<DetectedPill> extractMainHorizontalRow(List<DetectedPill> candidates, int scaledH) {
         if (candidates.isEmpty()) return Collections.emptyList();
 
-        int yTolerance = Math.max(12, (int) (scaledH * 0.24f));
+        int yTolerance = Math.max(12, (int) (scaledH * ROULETTE_ROW_Y_TOLERANCE_RATIO));
         List<DetectedPill> bestRow = Collections.emptyList();
 
         for (DetectedPill anchor : candidates) {
@@ -144,7 +496,7 @@ public class ScreenScanner {
         List<DetectedPill> deduped = new ArrayList<>();
         int lastX = -9999;
         for (DetectedPill p : sorted) {
-            int minSpacing = Math.max(10, p.boxHeight / 2);
+            int minSpacing = Math.max(10, (int) (p.boxHeight * ROULETTE_MIN_SPACING_FACTOR));
             if (p.leftX - lastX >= minSpacing) {
                 deduped.add(p);
                 lastX = p.leftX;
@@ -158,7 +510,6 @@ public class ScreenScanner {
         String trimmed = rawText.trim();
         if (trimmed.isEmpty() || trimmed.length() > 3) return null;
 
-        // Rejeita palavras/rótulos mistos (ex: "Depósito", "KWANZA", "2to1", "Odd")
         String cleaned = trimmed;
         if (cleaned.length() == 1 && (cleaned.equals("O") || cleaned.equals("o"))) {
             return color == PillColor.GREEN ? 0 : null;
@@ -191,72 +542,85 @@ public class ScreenScanner {
         return num;
     }
 
-    private PillColor samplePillColor(Bitmap bitmap, Rect box) {
+    private PillColor samplePillColorHsv(
+            Bitmap bitmap,
+            Rect box,
+            RoiConfigStore.HsvColorProfile profile,
+            float[] outAvgHsv
+    ) {
         int w = bitmap.getWidth();
         int h = bitmap.getHeight();
         int midY = clamp((box.top + box.bottom) / 2, 0, h - 1);
         int midX = clamp((box.left + box.right) / 2, 0, w - 1);
+        int padX = Math.max(3, box.width() / 4);
+        int padY = Math.max(3, box.height() / 4);
 
         int[][] points = new int[][]{
-                {clamp(box.left - 5, 0, w - 1), midY},
-                {clamp(box.right + 5, 0, w - 1), midY},
-                {midX, clamp(box.top - 5, 0, h - 1)},
-                {midX, clamp(box.bottom + 5, 0, h - 1)},
+                {clamp(box.left - padX, 0, w - 1), midY},
+                {clamp(box.right + padX, 0, w - 1), midY},
+                {midX, clamp(box.top - padY, 0, h - 1)},
+                {midX, clamp(box.bottom + padY, 0, h - 1)},
                 {clamp(box.left - 2, 0, w - 1), midY},
-                {clamp(box.right + 2, 0, w - 1), midY}
+                {clamp(box.right + 2, 0, w - 1), midY},
+                {clamp(box.left - 2, 0, w - 1), clamp(box.top - 2, 0, h - 1)},
+                {clamp(box.right + 2, 0, w - 1), clamp(box.bottom + 2, 0, h - 1)}
         };
 
-        int sumR = 0;
-        int sumG = 0;
-        int sumB = 0;
-        int count = 0;
+        int votesGreen = 0;
+        int votesRed = 0;
+        int votesBlack = 0;
+        float sumH = 0f, sumS = 0f, sumV = 0f;
+        int validCount = 0;
+        float[] hsv = new float[3];
 
         for (int[] pt : points) {
             int px = bitmap.getPixel(pt[0], pt[1]);
-            int r = Color.red(px);
-            int g = Color.green(px);
-            int b = Color.blue(px);
-            // Ignora pixeis brancos da borda do ultimo numero ou do texto
-            if (r > 185 && g > 185 && b > 185) {
-                continue;
+            Color.colorToHSV(px, hsv);
+            float hue = hsv[0];
+            float sat = hsv[1];
+            float val = hsv[2];
+
+            // Ignora borda branca de destaque ou texto branco
+            if (sat < 0.14f && val > 0.72f) continue;
+
+            sumH += hue;
+            sumS += sat;
+            sumV += val;
+            validCount++;
+
+            if (hue >= profile.greenHueMin && hue <= profile.greenHueMax
+                    && sat >= profile.greenMinSat && val >= profile.greenMinVal) {
+                votesGreen++;
+            } else if ((hue <= profile.redHueLowMax || hue >= profile.redHueHighMin)
+                    && sat >= profile.redMinSat && val >= profile.redMinVal) {
+                votesRed++;
+            } else if (sat <= profile.blackMaxSat || val <= profile.blackMaxVal) {
+                votesBlack++;
             }
-            sumR += r;
-            sumG += g;
-            sumB += b;
-            count++;
         }
 
-        if (count == 0) {
-            int fallback = bitmap.getPixel(clamp(box.left - 4, 0, w - 1), midY);
-            sumR = Color.red(fallback);
-            sumG = Color.green(fallback);
-            sumB = Color.blue(fallback);
-            count = 1;
+        if (outAvgHsv != null && validCount > 0) {
+            outAvgHsv[0] = sumH / validCount;
+            outAvgHsv[1] = sumS / validCount;
+            outAvgHsv[2] = sumV / validCount;
         }
 
-        int r = sumR / count;
-        int g = sumG / count;
-        int b = sumB / count;
-
-        if (g > r + 20 && g > b + 15) return PillColor.GREEN;
-        if (r > g + 30 && r > b + 25) return PillColor.RED;
+        if (votesGreen > votesRed && votesGreen >= votesBlack && votesGreen > 0) return PillColor.GREEN;
+        if (votesRed > votesGreen && votesRed >= votesBlack && votesRed > 0) return PillColor.RED;
         return PillColor.BLACK;
     }
 
-    private int clamp(int v, int min, int max) {
-        return Math.max(min, Math.min(max, v));
-    }
-
-    // ==================== BAC BO OCR ====================
+    // ==================== BAC BO OCR (MODOS EXPLÍCITOS + FALLBACK COR) ====================
 
     public static class BacBoCell {
         public final String outcome; // "P", "B", "T"
-        public final int total;      // 2..12 or -1 if unknown
+        public final int total;      // 2..12 or -1 if unknown (color-only fallback)
         public final int centerX;
         public final int centerY;
         public final int boxHeight;
         public int playerTotal = -1;
         public int bankerTotal = -1;
+        public boolean colorFallback = false;
 
         public BacBoCell(String outcome, int total, int centerX, int centerY, int boxHeight) {
             this.outcome = outcome;
@@ -281,60 +645,87 @@ public class ScreenScanner {
         );
     }
 
-    /**
-     * Scanner unificado para Bac Bo:
-     * 1) Modo 3 Blocos (Split-Screen): lê diretamente o total grande no cartão azul JOGADOR (esquerda)
-     *    e no cartão vermelho BANCA (direita), ignorando completamente a tabela fixa central do EMPATE.
-     * 2) Modo Grelha (Bead Plate): se a área contiver >= 6 células com bolas Azuis/Vermelhas, lê a grelha.
-     */
+    public interface BacBoDetailedCallback {
+        void onResult(
+                int playerTotal,
+                int bankerTotal,
+                boolean blocksVisible,
+                List<BacBoCell> plateCellsNewestFirst,
+                float confidence,
+                String resolvedMode,
+                List<OcrDebugBox> debugBoxes,
+                boolean ocrOk
+        );
+    }
+
     public void scanBacBoFrame(
             Bitmap fullBitmap,
             float roiTopRatio,
             float roiHeightRatio,
             BacBoFrameCallback callback
     ) {
+        scanBacBoFrame(
+                fullBitmap,
+                new RoiConfigStore.RoiRect(0f, roiTopRatio, 1f, roiHeightRatio),
+                RoiConfigStore.BACBO_MODE_AUTO,
+                RoiConfigStore.HsvColorProfile.defaultForSite("kwanzabet"),
+                false,
+                (pTotal, bTotal, blocksVisible, plateCellsNewestFirst, confidence, resolvedMode, debugBoxes, ocrOk) ->
+                        callback.onResult(pTotal, bTotal, blocksVisible, plateCellsNewestFirst, ocrOk)
+        );
+    }
+
+    public void scanBacBoFrame(
+            Bitmap fullBitmap,
+            RoiConfigStore.RoiRect roi,
+            String scanMode,
+            RoiConfigStore.HsvColorProfile hsvProfile,
+            boolean collectDebug,
+            BacBoDetailedCallback callback
+    ) {
+        if (fullBitmap == null || fullBitmap.isRecycled()) {
+            callback.onResult(-1, -1, false, Collections.emptyList(), 0f, scanMode, Collections.emptyList(), false);
+            return;
+        }
         int width = fullBitmap.getWidth();
         int height = fullBitmap.getHeight();
-        if (width < 40 || height < 40) {
-            callback.onResult(-1, -1, false, Collections.emptyList(), false);
+        if (width < MIN_IMAGE_DIMENSION_PX || height < MIN_IMAGE_DIMENSION_PX) {
+            callback.onResult(-1, -1, false, Collections.emptyList(), 0f, scanMode, Collections.emptyList(), false);
             return;
         }
 
-        int topY = Math.max(0, Math.min(height - 20, (int) (height * roiTopRatio)));
-        int cropH = Math.max(24, Math.min(height - topY, (int) (height * roiHeightRatio)));
+        final String mode = scanMode != null ? scanMode : RoiConfigStore.BACBO_MODE_AUTO;
+        final RoiConfigStore.HsvColorProfile profile =
+                hsvProfile != null ? hsvProfile : RoiConfigStore.HsvColorProfile.defaultForSite("kwanzabet");
+        final PreparedCrop prep = preprocessCropForOcr(fullBitmap, roi, true);
+        final int sw = prep.ocrBitmap.getWidth();
+        final int sh = prep.ocrBitmap.getHeight();
 
-        Bitmap cropped = Bitmap.createBitmap(fullBitmap, 0, topY, width, cropH);
-        int scaleFactor = cropH < 240 ? 2 : 1;
-        Bitmap scaled = scaleFactor > 1
-                ? Bitmap.createScaledBitmap(cropped, cropped.getWidth() * scaleFactor, cropped.getHeight() * scaleFactor, true)
-                : cropped;
-        if (scaled != cropped) {
-            cropped.recycle();
-        }
-
-        final int sw = scaled.getWidth();
-        final int sh = scaled.getHeight();
-        InputImage image = InputImage.fromBitmap(scaled, 0);
+        InputImage image = InputImage.fromBitmap(prep.ocrBitmap, 0);
         recognizer.process(image)
                 .addOnSuccessListener(visionText -> {
                     int bestP = -1;
                     int bestPH = 0;
+                    boolean pHasDice = false;
+
                     int bestB = -1;
                     int bestBH = 0;
-                    boolean blocksVisible = false;
+                    boolean bHasDice = false;
 
+                    boolean blocksVisible = false;
                     List<BacBoCell> plateCandidates = new ArrayList<>();
                     int pbPlateCount = 0;
+                    List<OcrDebugBox> debugBoxes = collectDebug ? new ArrayList<>() : Collections.emptyList();
 
                     for (Text.TextBlock block : visionText.getTextBlocks()) {
                         for (Text.Line line : block.getLines()) {
                             for (Text.Element element : line.getElements()) {
                                 String rawText = element.getText();
                                 if (rawText == null) continue;
-                                String upper = rawText.trim().toUpperCase();
+                                String upper = rawText.trim().toUpperCase(Locale.US);
                                 if (upper.contains("JOGADOR") || upper.contains("PLAYER")
                                         || upper.contains("BANCA") || upper.contains("BANKER")
-                                        || upper.contains("EMPATE") || upper.contains("PAGAMENTO")
+                                        || upper.contains("EMPATE") || upper.contains("TIE")
                                         || upper.contains("TOTAL") || upper.equals("1:1")) {
                                     blocksVisible = true;
                                 }
@@ -346,70 +737,196 @@ public class ScreenScanner {
                                 int cx = (box.left + box.right) / 2;
                                 int cy = (box.top + box.bottom) / 2;
 
+                                String outcomeColor = sampleBacBoOutcomeColorHsv(prep.colorBitmap, box, profile);
                                 Integer num = parseBacBoNumberOnly(upper);
-                                if (num == null) continue;
 
-                                // 1. Deteção nos 3 Blocos (JOGADOR à esquerda | BANCA à direita)
-                                // Usa detector próprio para cartões com gradiente escuro + exige os 2 dados do lado visíveis (4 dados na mesa)
-                                if (bh >= Math.max(14, (int) (sh * 0.09f)) && cy < sh * 0.72f) {
-                                    String blockSide = sampleBlockCardSide(scaled, box);
-                                    if (cx < sw * 0.40f && "P".equals(blockSide)) {
+                                // 1. Modo Blocos (ou Auto)
+                                if (!RoiConfigStore.BACBO_MODE_BEAD_PLATE.equals(mode)
+                                        && num != null
+                                        && bh >= Math.max(12, (int) (sh * BACBO_BLOCK_MIN_HEIGHT_RATIO))
+                                        && cy < sh * BACBO_BLOCK_MAX_Y) {
+                                    String cardSide = sampleBlockCardSideHsv(prep.colorBitmap, box, profile);
+                                    if (cx < sw * BACBO_BLOCK_LEFT_MAX_X && ("P".equals(cardSide) || "P".equals(outcomeColor))) {
                                         blocksVisible = true;
-                                        if (bh > bestPH && hasTwoDiceWithPips(scaled, box, true)) {
+                                        boolean diceReady = hasTwoDiceWithPips(prep.colorBitmap, box, true);
+                                        if (bh > bestPH && (diceReady || RoiConfigStore.BACBO_MODE_BLOCKS.equals(mode))) {
                                             bestP = num;
                                             bestPH = bh;
+                                            pHasDice = diceReady;
                                         }
-                                    } else if (cx > sw * 0.60f && "B".equals(blockSide)) {
+                                        if (collectDebug) {
+                                            debugBoxes.add(new OcrDebugBox(box, sw, sh, "P:" + num, "P", true, diceReady ? "dice-ok" : "forced-block"));
+                                        }
+                                    } else if (cx > sw * BACBO_BLOCK_RIGHT_MIN_X && ("B".equals(cardSide) || "B".equals(outcomeColor))) {
                                         blocksVisible = true;
-                                        if (bh > bestBH && hasTwoDiceWithPips(scaled, box, false)) {
+                                        boolean diceReady = hasTwoDiceWithPips(prep.colorBitmap, box, false);
+                                        if (bh > bestBH && (diceReady || RoiConfigStore.BACBO_MODE_BLOCKS.equals(mode))) {
                                             bestB = num;
                                             bestBH = bh;
+                                            bHasDice = diceReady;
+                                        }
+                                        if (collectDebug) {
+                                            debugBoxes.add(new OcrDebugBox(box, sw, sh, "B:" + num, "B", true, diceReady ? "dice-ok" : "forced-block"));
                                         }
                                     }
                                 }
 
-                                String colorOutcome = sampleBacBoOutcomeColor(scaled, box);
-
-                                // 2. Candidato a Bead Plate (células menores e uniformes; exige bolas Azuis/Vermelhas)
-                                if (colorOutcome != null
-                                        && bh >= 8
-                                        && bh <= sh * 0.34f
-                                        && bw <= sh * 1.1f) {
-                                    plateCandidates.add(new BacBoCell(colorOutcome, num, cx, cy, bh));
-                                    if ("P".equals(colorOutcome) || "B".equals(colorOutcome)) {
-                                        pbPlateCount++;
+                                // 2. Modo Bead Plate (aceita dígitos 2..12 OU letras P/B/T com cor HSV correspondente)
+                                if (!RoiConfigStore.BACBO_MODE_BLOCKS.equals(mode)
+                                        && outcomeColor != null
+                                        && bh >= 7
+                                        && bh <= sh * 0.40f
+                                        && bw <= sh * 1.2f) {
+                                    Integer plateVal = parseBacBoToken(upper, outcomeColor);
+                                    if (plateVal != null) {
+                                        plateCandidates.add(new BacBoCell(outcomeColor, plateVal, cx, cy, bh));
+                                        if ("P".equals(outcomeColor) || "B".equals(outcomeColor)) {
+                                            pbPlateCount++;
+                                        }
+                                        if (collectDebug) {
+                                            debugBoxes.add(new OcrDebugBox(box, sw, sh, outcomeColor + (plateVal > 0 ? ":" + plateVal : ""), outcomeColor, true, "plate-ocr"));
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                    scaled.recycle();
 
-                    // Só aceita Bead Plate se os 3 blocos não estiverem visíveis (exige bolas Azuis/Vermelhas reais)
                     List<BacBoCell> orderedPlate = Collections.emptyList();
-                    if (!blocksVisible && bestP < 2 && bestB < 2 && plateCandidates.size() >= 6 && pbPlateCount >= 2) {
-                        orderedPlate = orderBacBoCells(plateCandidates);
+                    String resolvedMode = mode;
+                    float confidence = 0f;
+
+                    boolean preferBlocks = RoiConfigStore.BACBO_MODE_BLOCKS.equals(mode)
+                            || (RoiConfigStore.BACBO_MODE_AUTO.equals(mode) && (blocksVisible || (bestP >= 2 && bestB >= 2)));
+
+                    if (preferBlocks) {
+                        resolvedMode = RoiConfigStore.BACBO_MODE_BLOCKS;
+                        if (bestP >= 2 && bestB >= 2) {
+                            confidence = (pHasDice && bHasDice) ? 0.94f : 0.78f;
+                        } else if (blocksVisible) {
+                            confidence = 0.45f;
+                        }
+                    } else {
+                        resolvedMode = RoiConfigStore.BACBO_MODE_BEAD_PLATE;
+                        if (plateCandidates.size() >= 4 && pbPlateCount >= 2) {
+                            orderedPlate = orderBacBoCells(plateCandidates);
+                            confidence = Math.min(0.92f, 0.62f + orderedPlate.size() * 0.015f);
+                        } else {
+                            // Fallback por cor dominante da célula quando OCR de dígito falha no Bead Plate
+                            List<BacBoCell> colorCells = scanBacBoColorGridFallback(prep.colorBitmap, profile, debugBoxes, collectDebug);
+                            if (colorCells.size() >= 4) {
+                                orderedPlate = orderBacBoCells(colorCells);
+                                confidence = 0.68f;
+                            }
+                        }
                     }
 
-                    boolean ocrOk = blocksVisible || (bestP >= 2 && bestB >= 2) || !orderedPlate.isEmpty();
-                    callback.onResult(bestP, bestB, blocksVisible, orderedPlate, ocrOk);
+                    prep.recycle();
+
+                    boolean ocrOk = (bestP >= 2 && bestB >= 2) || blocksVisible || !orderedPlate.isEmpty();
+                    callback.onResult(bestP, bestB, blocksVisible, orderedPlate, confidence, resolvedMode, debugBoxes, ocrOk);
                 })
                 .addOnFailureListener(e -> {
-                    scaled.recycle();
-                    callback.onResult(-1, -1, false, Collections.emptyList(), false);
+                    prep.recycle();
+                    callback.onResult(-1, -1, false, Collections.emptyList(), 0f, mode, Collections.emptyList(), false);
                 });
     }
 
     /**
-     * Identifica se o número grande está sobre o cartão azul (P) ou vermelho (B) dos 3 blocos,
-     * tolerando o gradiente escuro perto do círculo central EMPATE.
+     * Fallback por cor dominante HSV no Bead Plate quando os números dentro das bolas são muito pequenos para o ML Kit.
      */
-    private String sampleBlockCardSide(Bitmap bitmap, Rect box) {
+    private List<BacBoCell> scanBacBoColorGridFallback(
+            Bitmap colorBitmap,
+            RoiConfigStore.HsvColorProfile profile,
+            List<OcrDebugBox> debugBoxes,
+            boolean collectDebug
+    ) {
+        int w = colorBitmap.getWidth();
+        int h = colorBitmap.getHeight();
+        if (w < 80 || h < 40) return Collections.emptyList();
+
+        int rows = 6;
+        int cellH = Math.max(8, h / rows);
+        int cols = Math.max(4, Math.min(18, w / Math.max(8, cellH)));
+        int cellW = w / cols;
+
+        List<BacBoCell> found = new ArrayList<>();
+        float[] hsv = new float[3];
+
+        for (int c = 0; c < cols; c++) {
+            int x0 = c * cellW + Math.max(2, cellW / 5);
+            int x1 = Math.min(w - 1, (c + 1) * cellW - Math.max(2, cellW / 5));
+            for (int r = 0; r < rows; r++) {
+                int y0 = r * cellH + Math.max(2, cellH / 5);
+                int y1 = Math.min(h - 1, (r + 1) * cellH - Math.max(2, cellH / 5));
+                if (x1 <= x0 || y1 <= y0) continue;
+
+                int votesP = 0, votesB = 0, votesT = 0, total = 0;
+                int stepX = Math.max(1, (x1 - x0) / 4);
+                int stepY = Math.max(1, (y1 - y0) / 4);
+
+                for (int y = y0; y <= y1; y += stepY) {
+                    for (int x = x0; x <= x1; x += stepX) {
+                        total++;
+                        Color.colorToHSV(colorBitmap.getPixel(x, y), hsv);
+                        String color = classifyBacBoHsv(hsv[0], hsv[1], hsv[2], profile);
+                        if ("P".equals(color)) votesP++;
+                        else if ("B".equals(color)) votesB++;
+                        else if ("T".equals(color)) votesT++;
+                    }
+                }
+
+                int minVotes = Math.max(2, total / 4);
+                String winner = null;
+                if (votesP >= minVotes && votesP >= votesB && votesP >= votesT) winner = "P";
+                else if (votesB >= minVotes && votesB > votesP && votesB >= votesT) winner = "B";
+                else if (votesT >= minVotes && votesT > votesP && votesT > votesB) winner = "T";
+
+                if (winner != null) {
+                    int cx = (x0 + x1) / 2;
+                    int cy = (y0 + y1) / 2;
+                    BacBoCell cell = new BacBoCell(winner, -1, cx, cy, cellH);
+                    cell.colorFallback = true;
+                    found.add(cell);
+                    if (collectDebug) {
+                        debugBoxes.add(new OcrDebugBox(new Rect(x0, y0, x1, y1), w, h, winner, winner, true, "hsv-fallback"));
+                    }
+                }
+            }
+        }
+        return found;
+    }
+
+    private String classifyBacBoHsv(
+            float hue,
+            float sat,
+            float val,
+            RoiConfigStore.HsvColorProfile profile
+    ) {
+        if (sat < 0.22f || val < 0.16f) return null;
+        if (hue >= profile.blueHueMin && hue <= profile.blueHueMax && sat >= profile.blueMinSat) {
+            return "P";
+        }
+        if ((hue >= profile.goldHueMin && hue <= profile.goldHueMax && sat >= profile.goldMinSat)
+                || (hue >= profile.greenHueMin && hue <= profile.greenHueMax && sat >= profile.greenMinSat)) {
+            return "T";
+        }
+        if ((hue <= profile.redHueLowMax || hue >= profile.redHueHighMin) && sat >= profile.redMinSat) {
+            return "B";
+        }
+        return null;
+    }
+
+    private String sampleBlockCardSideHsv(
+            Bitmap bitmap,
+            Rect box,
+            RoiConfigStore.HsvColorProfile profile
+    ) {
         int w = bitmap.getWidth();
         int h = bitmap.getHeight();
         int midX = clamp((box.left + box.right) / 2, 0, w - 1);
         int midY = clamp((box.top + box.bottom) / 2, 0, h - 1);
-        int pad = Math.max(4, box.height() / 6);
+        int pad = Math.max(4, box.height() / 5);
 
         int[][] points = new int[][]{
                 {clamp(box.left - pad, 0, w - 1), midY},
@@ -424,15 +941,13 @@ public class ScreenScanner {
 
         int votesP = 0;
         int votesB = 0;
+        float[] hsv = new float[3];
         for (int[] pt : points) {
-            int px = bitmap.getPixel(pt[0], pt[1]);
-            int r = Color.red(px);
-            int g = Color.green(px);
-            int b = Color.blue(px);
-            if (r > 175 && g > 175 && b > 175) continue;
-            if (b > r + 12 && b >= g - 6 && b > 35) {
+            Color.colorToHSV(bitmap.getPixel(pt[0], pt[1]), hsv);
+            if (hsv[1] < 0.16f && hsv[2] > 0.72f) continue;
+            if (hsv[0] >= profile.blueHueMin - 10f && hsv[0] <= profile.blueHueMax + 10f && hsv[1] >= 0.20f) {
                 votesP++;
-            } else if (r > b + 15 && r > g + 16 && r > 40) {
+            } else if ((hsv[0] <= profile.redHueLowMax + 4f || hsv[0] >= profile.redHueHighMin - 6f) && hsv[1] >= 0.22f) {
                 votesB++;
             }
         }
@@ -440,38 +955,68 @@ public class ScreenScanner {
         return votesP >= votesB ? "P" : "B";
     }
 
-    /**
-     * Verifica se existem os 2 ícones de dados (superior e inferior) com pintas brancas visíveis
-     * imediatamente ao lado do número total (à esquerda para Player, à direita para Banker).
-     * Evita ler antes de lançar os dados ou quando apenas 1 dos 2 dados parou.
-     */
+    private String sampleBacBoOutcomeColorHsv(
+            Bitmap bitmap,
+            Rect box,
+            RoiConfigStore.HsvColorProfile profile
+    ) {
+        int w = bitmap.getWidth();
+        int h = bitmap.getHeight();
+        int midY = clamp((box.top + box.bottom) / 2, 0, h - 1);
+        int midX = clamp((box.left + box.right) / 2, 0, w - 1);
+        int dx = Math.max(2, box.width() / 4);
+        int dy = Math.max(2, box.height() / 4);
+
+        int[][] points = new int[][]{
+                {clamp(box.left - 2, 0, w - 1), midY},
+                {clamp(box.right + 2, 0, w - 1), midY},
+                {clamp(box.left - dx, 0, w - 1), midY},
+                {clamp(box.right + dx, 0, w - 1), midY},
+                {midX, clamp(box.top - 2, 0, h - 1)},
+                {midX, clamp(box.bottom + 2, 0, h - 1)},
+                {midX, clamp(box.top - dy, 0, h - 1)},
+                {midX, clamp(box.bottom + dy, 0, h - 1)}
+        };
+
+        int votesP = 0, votesB = 0, votesT = 0;
+        float[] hsv = new float[3];
+        for (int[] pt : points) {
+            Color.colorToHSV(bitmap.getPixel(pt[0], pt[1]), hsv);
+            String c = classifyBacBoHsv(hsv[0], hsv[1], hsv[2], profile);
+            if ("P".equals(c)) votesP++;
+            else if ("B".equals(c)) votesB++;
+            else if ("T".equals(c)) votesT++;
+        }
+
+        if (votesP == 0 && votesB == 0 && votesT == 0) return null;
+        if (votesP >= votesB && votesP >= votesT) return "P";
+        if (votesT >= votesB && votesT >= votesP) return "T";
+        return "B";
+    }
+
     private boolean hasTwoDiceWithPips(Bitmap bitmap, Rect totalBox, boolean isPlayer) {
         int imgW = bitmap.getWidth();
         int imgH = bitmap.getHeight();
         int h = totalBox.height();
-        if (h < 12 || imgW < 40 || imgH < 40) return false;
+        if (h < 12 || imgW < MIN_IMAGE_DIMENSION_PX || imgH < MIN_IMAGE_DIMENSION_PX) return false;
 
         int cy = (totalBox.top + totalBox.bottom) / 2;
-        int x0;
-        int x1;
-        if (isPlayer) {
-            x0 = clamp(totalBox.left - (int) (h * 1.75f), 0, imgW - 1);
-            x1 = clamp(totalBox.left - (int) (h * 0.10f), 0, imgW - 1);
-        } else {
-            x0 = clamp(totalBox.right + (int) (h * 0.10f), 0, imgW - 1);
-            x1 = clamp(totalBox.right + (int) (h * 1.75f), 0, imgW - 1);
-        }
+        int x0 = isPlayer
+                ? clamp(totalBox.left - (int) (h * 1.85f), 0, imgW - 1)
+                : clamp(totalBox.right + (int) (h * 0.08f), 0, imgW - 1);
+        int x1 = isPlayer
+                ? clamp(totalBox.left - (int) (h * 0.08f), 0, imgW - 1)
+                : clamp(totalBox.right + (int) (h * 1.85f), 0, imgW - 1);
         if (x1 - x0 < 8) return false;
 
-        int topY0 = clamp(cy - (int) (h * 1.15f), 0, imgH - 1);
-        int topY1 = clamp(cy - (int) (h * 0.05f), 0, imgH - 1);
-        int botY0 = clamp(cy + (int) (h * 0.05f), 0, imgH - 1);
-        int botY1 = clamp(cy + (int) (h * 1.15f), 0, imgH - 1);
+        int topY0 = clamp(cy - (int) (h * 1.20f), 0, imgH - 1);
+        int topY1 = clamp(cy - (int) (h * 0.04f), 0, imgH - 1);
+        int botY0 = clamp(cy + (int) (h * 0.04f), 0, imgH - 1);
+        int botY1 = clamp(cy + (int) (h * 1.20f), 0, imgH - 1);
 
         int step = Math.max(1, h / 48);
-        boolean topReady = dieRegionHasPips(bitmap, x0, topY0, x1, topY1, step, isPlayer);
-        boolean botReady = dieRegionHasPips(bitmap, x0, botY0, x1, botY1, step, isPlayer);
-        return topReady && botReady;
+        return dieRegionHasPips(bitmap, x0, topY0, x1, topY1, step, isPlayer)
+                && dieRegionHasPips(bitmap, x0, botY0, x1, botY1, step, isPlayer);
     }
 
     private boolean dieRegionHasPips(
@@ -487,37 +1032,32 @@ public class ScreenScanner {
         int total = 0;
         int whitePips = 0;
         int cardBg = 0;
+        float[] hsv = new float[3];
 
         for (int y = y0; y <= y1; y += step) {
             for (int x = x0; x <= x1; x += step) {
                 total++;
                 int px = bitmap.getPixel(x, y);
-                int r = Color.red(px);
-                int g = Color.green(px);
-                int b = Color.blue(px);
-                int maxC = Math.max(r, Math.max(g, b));
-                int minC = Math.min(r, Math.min(g, b));
-
-                if (r >= 165 && g >= 165 && b >= 165 && (maxC - minC) < 70) {
+                Color.colorToHSV(px, hsv);
+                if (hsv[1] < 0.25f && hsv[2] > 0.65f) {
                     whitePips++;
-                } else if (isPlayer && b > r + 10 && b > 35) {
+                } else if (isPlayer && hsv[0] >= 185f && hsv[0] <= 255f && hsv[1] > 0.22f) {
                     cardBg++;
-                } else if (!isPlayer && r > b + 12 && r > 38) {
+                } else if (!isPlayer && (hsv[0] <= 26f || hsv[0] >= 332f) && hsv[1] > 0.24f) {
                     cardBg++;
                 }
             }
         }
 
-        if (total < 12) return false;
+        if (total < 10) return false;
         float whitePct = (whitePips * 100f) / total;
         float bgPct = (cardBg * 100f) / total;
-        return whitePips >= 3 && whitePct <= 65.0f && bgPct >= 10.0f;
+        return whitePips >= 2 && whitePct <= 70.0f && bgPct >= 8.0f;
     }
 
     private List<BacBoCell> orderBacBoCells(List<BacBoCell> rawCandidates) {
         if (rawCandidates.isEmpty()) return Collections.emptyList();
 
-        // 1. Filtra ruído por altura mediana das células reais do Bead Plate
         List<Integer> heights = new ArrayList<>(rawCandidates.size());
         for (BacBoCell c : rawCandidates) heights.add(c.boxHeight);
         Collections.sort(heights);
@@ -525,14 +1065,13 @@ public class ScreenScanner {
 
         List<BacBoCell> candidates = new ArrayList<>();
         for (BacBoCell c : rawCandidates) {
-            if (c.boxHeight >= Math.max(6, (int) (medianH * 0.52f))
-                    && c.boxHeight <= Math.max(20, (int) (medianH * 1.75f))) {
+            if (c.boxHeight >= Math.max(6, (int) (medianH * 0.50f))
+                    && c.boxHeight <= Math.max(20, (int) (medianH * 1.80f))) {
                 candidates.add(c);
             }
         }
         if (candidates.isEmpty()) return Collections.emptyList();
 
-        // 2. Deduplica elementos na mesma célula (mesmo X/Y aproximado)
         List<BacBoCell> deduped = new ArrayList<>();
         int dupTolX = Math.max(10, (int) (medianH * 0.75f));
         int dupTolY = Math.max(8, (int) (medianH * 0.60f));
@@ -545,12 +1084,9 @@ public class ScreenScanner {
                     break;
                 }
             }
-            if (!duplicate) {
-                deduped.add(c);
-            }
+            if (!duplicate) deduped.add(c);
         }
 
-        // 3. Agrupa por colunas verticais usando centerX (robusto para 1 e 2 dígitos como 7 vs 11)
         Collections.sort(deduped, (a, b) -> Integer.compare(a.centerX, b.centerX));
         int colTolerance = Math.max(12, (int) (medianH * 0.90f));
         List<List<BacBoCell>> columns = new ArrayList<>();
@@ -574,14 +1110,12 @@ public class ScreenScanner {
             }
         }
 
-        // 4. Dentro de cada coluna, ordena de cima para baixo (Row 0 -> Row 5)
         List<BacBoCell> chronological = new ArrayList<>(deduped.size());
         for (List<BacBoCell> col : columns) {
             Collections.sort(col, (a, b) -> Integer.compare(a.centerY, b.centerY));
             chronological.addAll(col);
         }
 
-        // 5. Inverte para newestFirst (índice 0 = célula mais inferior da coluna mais à direita)
         Collections.reverse(chronological);
         return chronological;
     }
@@ -603,7 +1137,7 @@ public class ScreenScanner {
 
     private Integer parseBacBoToken(String rawText, String detectedOutcome) {
         if (rawText == null) return null;
-        String trimmed = rawText.trim().toUpperCase();
+        String trimmed = rawText.trim().toUpperCase(Locale.US);
         if (trimmed.isEmpty() || trimmed.length() > 2) return null;
 
         if (trimmed.equals("P") && "P".equals(detectedOutcome)) return -1;
@@ -613,69 +1147,7 @@ public class ScreenScanner {
         return parseBacBoNumberOnly(trimmed);
     }
 
-    private String sampleBacBoOutcomeColor(Bitmap bitmap, Rect box) {
-        int w = bitmap.getWidth();
-        int h = bitmap.getHeight();
-        int midY = clamp((box.top + box.bottom) / 2, 0, h - 1);
-        int midX = clamp((box.left + box.right) / 2, 0, w - 1);
-        int bw = Math.max(4, box.width());
-        int bh = Math.max(4, box.height());
-        int dx = Math.max(2, bw / 4);
-        int dy = Math.max(2, bh / 4);
-
-        // Amostra o anel colorido ao redor do número branco sem invadir o fundo cinza/branco da grelha
-        int[][] points = new int[][]{
-                {clamp(box.left - 2, 0, w - 1), midY},
-                {clamp(box.right + 2, 0, w - 1), midY},
-                {clamp(box.left - dx, 0, w - 1), midY},
-                {clamp(box.right + dx, 0, w - 1), midY},
-                {midX, clamp(box.top - 2, 0, h - 1)},
-                {midX, clamp(box.bottom + 2, 0, h - 1)},
-                {midX, clamp(box.top - dy, 0, h - 1)},
-                {midX, clamp(box.bottom + dy, 0, h - 1)},
-                {clamp(box.left + 1, 0, w - 1), clamp(box.top + 1, 0, h - 1)},
-                {clamp(box.right - 1, 0, w - 1), clamp(box.top + 1, 0, h - 1)},
-                {clamp(box.left + 1, 0, w - 1), clamp(box.bottom - 1, 0, h - 1)},
-                {clamp(box.right - 1, 0, w - 1), clamp(box.bottom - 1, 0, h - 1)}
-        };
-
-        int votesP = 0;
-        int votesB = 0;
-        int votesT = 0;
-
-        for (int[] pt : points) {
-            int px = bitmap.getPixel(pt[0], pt[1]);
-            int r = Color.red(px);
-            int g = Color.green(px);
-            int b = Color.blue(px);
-            int maxC = Math.max(r, Math.max(g, b));
-            int minC = Math.min(r, Math.min(g, b));
-
-            // Ignora número branco, fundo cinza claro da grelha e linhas de borda neutras
-            if (r > 180 && g > 180 && b > 180) continue;
-            if (maxC < 45) continue;
-            if (maxC - minC < 26) continue;
-
-            // 1. Tie (Dourado/Ocre #C59436 ou Verde): verifica ANTES de Red pois dourado também tem R alto
-            if ((g > b + 32 && g > 90 && r > 115 && (r - g) < 88)
-                    || (g > r + 15 && g > b + 15)) {
-                votesT++;
-            } else if (b > r + 24 && b >= g - 12 && b > 80) {
-                // 2. Player (Azul)
-                votesP++;
-            } else if (r > b + 30 && r > g + 40 && r > 90 && g < b + 45) {
-                // 3. Banker (Vermelho)
-                votesB++;
-            }
-        }
-
-        if (votesP == 0 && votesB == 0 && votesT == 0) return null;
-        if (votesP >= votesB && votesP >= votesT) return "P";
-        if (votesT >= votesB && votesT >= votesP) return "T";
-        return "B";
-    }
-
-    // ==================== AVIATOR OCR ====================
+    // ==================== AVIATOR OCR (HSV + MULTIPLICADOR + CRASH) ====================
 
     private static class AviatorTokenCandidate {
         final double multiplier;
@@ -703,53 +1175,74 @@ public class ScreenScanner {
         );
     }
 
+    public interface AviatorDetailedCallback {
+        void onResult(
+                double liveMultiplier,
+                boolean isCrashedColor,
+                List<Double> historyNewestFirst,
+                float confidence,
+                List<OcrDebugBox> debugBoxes,
+                boolean ocrOk
+        );
+    }
+
     public void scanAviatorFrame(
             Bitmap fullBitmap,
             float roiTopRatio,
             float roiHeightRatio,
             AviatorFrameCallback callback
     ) {
-        if (fullBitmap == null) {
-            callback.onResult(-1.0, false, Collections.emptyList(), 0f, false);
+        scanAviatorFrame(
+                fullBitmap,
+                new RoiConfigStore.RoiRect(0f, roiTopRatio, 1f, roiHeightRatio),
+                RoiConfigStore.HsvColorProfile.defaultForSite("kwanzabet"),
+                false,
+                (liveMultiplier, isCrashedColor, historyNewestFirst, confidence, debugBoxes, ocrOk) ->
+                        callback.onResult(liveMultiplier, isCrashedColor, historyNewestFirst, confidence, ocrOk)
+        );
+    }
+
+    public void scanAviatorFrame(
+            Bitmap fullBitmap,
+            RoiConfigStore.RoiRect roi,
+            RoiConfigStore.HsvColorProfile hsvProfile,
+            boolean collectDebug,
+            AviatorDetailedCallback callback
+    ) {
+        if (fullBitmap == null || fullBitmap.isRecycled()) {
+            callback.onResult(-1.0, false, Collections.emptyList(), 0f, Collections.emptyList(), false);
             return;
         }
         int width = fullBitmap.getWidth();
         int height = fullBitmap.getHeight();
-        if (width < 40 || height < 40) {
-            callback.onResult(-1.0, false, Collections.emptyList(), 0f, false);
+        if (width < MIN_IMAGE_DIMENSION_PX || height < MIN_IMAGE_DIMENSION_PX) {
+            callback.onResult(-1.0, false, Collections.emptyList(), 0f, Collections.emptyList(), false);
             return;
         }
 
-        int topY = Math.max(0, Math.min(height - 24, (int) (height * roiTopRatio)));
-        int cropH = Math.max(30, Math.min(height - topY, (int) (height * roiHeightRatio)));
+        final RoiConfigStore.HsvColorProfile profile =
+                hsvProfile != null ? hsvProfile : RoiConfigStore.HsvColorProfile.defaultForSite("kwanzabet");
+        final PreparedCrop prep = preprocessCropForOcr(fullBitmap, roi, true);
+        final int sw = prep.ocrBitmap.getWidth();
+        final int sh = prep.ocrBitmap.getHeight();
 
-        Bitmap cropped = Bitmap.createBitmap(fullBitmap, 0, topY, width, cropH);
-        int scaleFactor = cropH < 320 ? 2 : 1;
-        Bitmap scaled = scaleFactor > 1
-                ? Bitmap.createScaledBitmap(cropped, cropped.getWidth() * scaleFactor, cropped.getHeight() * scaleFactor, true)
-                : cropped;
-        if (scaled != cropped) {
-            cropped.recycle();
-        }
-
-        final int sh = scaled.getHeight();
-        InputImage image = InputImage.fromBitmap(scaled, 0);
+        InputImage image = InputImage.fromBitmap(prep.ocrBitmap, 0);
         recognizer.process(image)
                 .addOnSuccessListener(visionText -> {
                     List<AviatorTokenCandidate> candidates = new ArrayList<>();
+                    List<OcrDebugBox> debugBoxes = collectDebug ? new ArrayList<>() : Collections.emptyList();
                     boolean hasCrashKeyword = false;
 
                     for (Text.TextBlock block : visionText.getTextBlocks()) {
                         for (Text.Line line : block.getLines()) {
                             String lineRaw = line.getText();
                             if (lineRaw != null) {
-                                String lineUpper = lineRaw.trim().toUpperCase();
+                                String lineUpper = lineRaw.trim().toUpperCase(Locale.US);
                                 if (lineUpper.contains("VOOU") || lineUpper.contains("FLEW")) {
                                     hasCrashKeyword = true;
                                 }
                             }
 
-                            // Tenta analisar cada elemento individualmente (ex: "1.38x", "48.92x")
                             boolean parsedFromElements = false;
                             for (Text.Element element : line.getElements()) {
                                 Rect box = element.getBoundingBox();
@@ -766,16 +1259,18 @@ public class ScreenScanner {
                                                 box
                                         ));
                                         parsedFromElements = true;
+                                        if (collectDebug) {
+                                            debugBoxes.add(new OcrDebugBox(box, sw, sh, mult + "x", classifyAviatorTier(mult), true, "aviator-elem"));
+                                        }
                                     }
                                 }
                             }
 
-                            // Fallback caso o OCR separe "1.39" e "x" na mesma linha grande do multiplicador central
                             if (!parsedFromElements && lineRaw != null && line.getBoundingBox() != null) {
                                 Double lineMult = parseAviatorMultiplier(lineRaw);
                                 Rect lbox = line.getBoundingBox();
                                 int lbh = lbox.height();
-                                if (lineMult != null && lbh >= Math.max(20, (int) (sh * 0.14f)) && lbh <= sh * 0.85f) {
+                                if (lineMult != null && lbh >= Math.max(18, (int) (sh * 0.12f)) && lbh <= sh * 0.85f) {
                                     candidates.add(new AviatorTokenCandidate(
                                             lineMult,
                                             lbox.left,
@@ -783,14 +1278,16 @@ public class ScreenScanner {
                                             lbh,
                                             lbox
                                     ));
+                                    if (collectDebug) {
+                                        debugBoxes.add(new OcrDebugBox(lbox, sw, sh, lineMult + "x", classifyAviatorTier(lineMult), true, "aviator-line"));
+                                    }
                                 }
                             }
                         }
                     }
 
-                    // Separa o multiplicador grande ao vivo (voando/crashado) da faixa superior de pílulas pequenas
                     AviatorTokenCandidate liveCandidate = null;
-                    int liveMinH = Math.max(22, (int) (sh * 0.16f));
+                    int liveMinH = Math.max(20, (int) (sh * AVIATOR_LIVE_MIN_HEIGHT_RATIO));
                     for (AviatorTokenCandidate c : candidates) {
                         if (c.boxHeight >= liveMinH) {
                             if (liveCandidate == null || c.boxHeight > liveCandidate.boxHeight) {
@@ -803,13 +1300,13 @@ public class ScreenScanner {
                     double liveMult = -1.0;
                     if (liveCandidate != null) {
                         liveMult = liveCandidate.multiplier;
-                        isCrashedColor = hasCrashKeyword || isAviatorRedMultiplier(scaled, liveCandidate.box);
+                        isCrashedColor = hasCrashKeyword || isAviatorRedMultiplierHsv(prep.colorBitmap, liveCandidate.box, profile);
                     }
 
                     List<AviatorTokenCandidate> stripPool = new ArrayList<>();
                     int stripMaxH = liveCandidate != null
                             ? Math.max(16, (int) (liveCandidate.boxHeight * 0.60f))
-                            : (int) (sh * 0.30f);
+                            : (int) (sh * AVIATOR_STRIP_MAX_HEIGHT_RATIO);
                     for (AviatorTokenCandidate c : candidates) {
                         if (c != liveCandidate && c.boxHeight <= stripMaxH) {
                             stripPool.add(c);
@@ -822,27 +1319,27 @@ public class ScreenScanner {
                         historyNewestFirst.add(item.multiplier);
                     }
 
-                    scaled.recycle();
+                    prep.recycle();
 
                     boolean hasLive = liveMult >= 1.0;
                     boolean hasStrip = !historyNewestFirst.isEmpty();
                     float confidence = 0f;
                     if (hasLive && hasStrip) confidence = 0.95f;
                     else if (hasLive || historyNewestFirst.size() >= 3) confidence = 0.85f;
-                    else if (hasStrip) confidence = 0.70f;
+                    else if (hasStrip) confidence = 0.72f;
 
-                    callback.onResult(
-                            liveMult,
-                            isCrashedColor,
-                            historyNewestFirst,
-                            confidence,
-                            hasLive || hasStrip
-                    );
+                    callback.onResult(liveMult, isCrashedColor, historyNewestFirst, confidence, debugBoxes, hasLive || hasStrip);
                 })
                 .addOnFailureListener(e -> {
-                    scaled.recycle();
-                    callback.onResult(-1.0, false, Collections.emptyList(), 0f, false);
+                    prep.recycle();
+                    callback.onResult(-1.0, false, Collections.emptyList(), 0f, Collections.emptyList(), false);
                 });
+    }
+
+    private String classifyAviatorTier(double mult) {
+        if (mult < 2.0) return "BLUE";
+        if (mult < 10.0) return "PURPLE";
+        return "PINK";
     }
 
     private Double parseAviatorMultiplier(String rawText) {
@@ -873,7 +1370,11 @@ public class ScreenScanner {
         }
     }
 
-    private boolean isAviatorRedMultiplier(Bitmap bitmap, Rect box) {
+    private boolean isAviatorRedMultiplierHsv(
+            Bitmap bitmap,
+            Rect box,
+            RoiConfigStore.HsvColorProfile profile
+    ) {
         int w = bitmap.getWidth();
         int h = bitmap.getHeight();
         int x0 = clamp(box.left, 0, w - 1);
@@ -885,20 +1386,19 @@ public class ScreenScanner {
 
         int redTextPx = 0;
         int whiteTextPx = 0;
+        float[] hsv = new float[3];
         for (int y = y0; y <= y1; y += stepY) {
             for (int x = x0; x <= x1; x += stepX) {
-                int px = bitmap.getPixel(x, y);
-                int r = Color.red(px);
-                int g = Color.green(px);
-                int b = Color.blue(px);
-                if (r > 155 && r > g + 45 && r > b + 45) {
+                Color.colorToHSV(bitmap.getPixel(x, y), hsv);
+                if ((hsv[0] <= profile.redHueLowMax + 4f || hsv[0] >= profile.redHueHighMin - 6f)
+                        && hsv[1] >= 0.42f && hsv[2] >= 0.45f) {
                     redTextPx++;
-                } else if (r > 195 && g > 195 && b > 195) {
+                } else if (hsv[1] < 0.20f && hsv[2] > 0.78f) {
                     whiteTextPx++;
                 }
             }
         }
-        return redTextPx >= 4 && redTextPx >= whiteTextPx * 0.75f;
+        return redTextPx >= 4 && redTextPx >= whiteTextPx * 0.70f;
     }
 
     private List<AviatorTokenCandidate> extractAviatorHorizontalRow(
@@ -935,5 +1435,9 @@ public class ScreenScanner {
             }
         }
         return deduped;
+    }
+
+    private static int clamp(int v, int min, int max) {
+        return Math.max(min, Math.min(max, v));
     }
 }

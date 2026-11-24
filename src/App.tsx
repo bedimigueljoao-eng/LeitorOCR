@@ -23,7 +23,18 @@ import { AndroidBuilderTab } from './components/AndroidBuilderTab';
 import { BacBoDashboard } from './components/BacBoDashboard';
 import { AviatorDashboard, multiplierBadgeClass } from './components/AviatorDashboard';
 import { QuantLabDesktop } from './components/QuantLabDesktop';
-import { BrowserScanner, isNativeAndroidApp } from './plugins/browserScanner';
+import { StrategiesKnowledgeTab } from './components/StrategiesKnowledgeTab';
+import {
+  BacBoScanMode,
+  BrowserScanner,
+  isNativeAndroidApp,
+  OcrDebugOverlayEvent,
+} from './plugins/browserScanner';
+import {
+  BankrollPolicyConfig,
+  SessionBetEntry,
+  UnifiedGameKey,
+} from './modules/strategy/masterBetEngine';
 import {
   analyzeBacBoEngine,
   BEAD_PLATE_ROWS,
@@ -83,12 +94,14 @@ import {
   settleActiveAutoBetOnCrash,
 } from './modules/aviator';
 
-type GameMode = 'roulette' | 'bacbo' | 'aviator' | 'quantlab';
+type GameMode = 'roulette' | 'bacbo' | 'aviator' | 'strategies' | 'quantlab';
 type ActiveTab = 'analyzer' | 'scanner' | 'board' | 'android';
 
 const STORAGE_KEY_SESSION_SPINS = 'roletavision_session_spins_v3';
 const STORAGE_KEY_LEARNED_BACKUP = 'roletavision_learned_backup_v3';
 const STORAGE_KEY_BANKROLL = 'roletavision_bankroll_v1';
+const STORAGE_KEY_UNIFIED_POLICY = 'roletavision_unified_policy_v1';
+const STORAGE_KEY_UNIFIED_LEDGER = 'roletavision_unified_ledger_v1';
 const SPLIT_PRESETS = [0.56, 0.45, 0.66] as const;
 
 function reconcileScannerSpins(
@@ -260,11 +273,44 @@ export default function App() {
     return () => window.clearInterval(id);
   }, [gameMode, lastBacBoLiveResultAt]);
 
+  const [activeSite, setActiveSite] = useState<string>('kwanzabet');
+  const [bacboScanMode, setBacboScanMode] = useState<BacBoScanMode>('auto');
+  const [debugOverlayEnabled, setDebugOverlayEnabled] = useState<boolean>(false);
+  const [latestDebugOverlay, setLatestDebugOverlay] = useState<OcrDebugOverlayEvent | null>(null);
+
+  const [bankrollPolicy, setBankrollPolicy] = useState<BankrollPolicyConfig>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_UNIFIED_POLICY);
+      if (saved) return JSON.parse(saved) as BankrollPolicyConfig;
+    } catch {
+      // ignore storage errors
+    }
+    return {
+      initialBalanceAoa: 1000,
+      currentBalanceAoa: 1000,
+      unitPct: 2,
+      dailyStopLossPct: 15,
+      dailyStopWinPct: 25,
+    };
+  });
+
+  const [sessionLedger, setSessionLedger] = useState<SessionBetEntry[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_UNIFIED_LEDGER);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return [];
+  });
+
   useEffect(() => {
     gameModeRef.current = gameMode;
-    if (isAndroidApk) {
-      const nativeMode = gameMode === 'quantlab' ? 'roulette' : gameMode;
-      void BrowserScanner.setGameMode({ mode: nativeMode });
+    if (isAndroidApk && (gameMode === 'roulette' || gameMode === 'bacbo' || gameMode === 'aviator')) {
+      void BrowserScanner.setGameMode({ mode: gameMode });
     }
   }, [gameMode, isAndroidApk]);
 
@@ -599,6 +645,11 @@ export default function App() {
         }));
       });
 
+      const debugSub = await BrowserScanner.addListener('ocrDebugOverlay', (event) => {
+        if (!mounted) return;
+        setLatestDebugOverlay(event);
+      });
+
       const telemetrySub = await BrowserScanner.addListener('scanTelemetry', (event) => {
         if (!mounted) return;
         const nowStr = new Date().toLocaleTimeString('pt-PT', { hour12: false });
@@ -678,6 +729,7 @@ export default function App() {
         void bacboSub.remove();
         void aviatorSub.remove();
         void aviatorCapSub.remove();
+        void debugSub.remove();
         void telemetrySub.remove();
         void visSub.remove();
         void feedbackSub.remove();
@@ -1041,6 +1093,20 @@ export default function App() {
     }
     await BrowserScanner.startMediaProjection({
       intervalMs: aviatorCaptureStatus.captureIntervalMs,
+      gameMode: 'aviator',
+      siteKey: activeSite,
+    });
+  };
+
+  const handleStartUnifiedCapture = async (game: UnifiedGameKey) => {
+    if (!isAndroidApk) {
+      setBrowserNotice('Captura em segundo plano (MediaProjection) disponível no APK Android instalado.');
+      return;
+    }
+    await BrowserScanner.startMediaProjection({
+      intervalMs: aviatorCaptureStatus.captureIntervalMs,
+      gameMode: game,
+      siteKey: activeSite,
     });
   };
 
@@ -1054,6 +1120,61 @@ export default function App() {
     if (isAndroidApk) {
       await BrowserScanner.setCaptureIntervalMs({ intervalMs: ms });
     }
+  };
+
+  const handleChangeSite = (site: string) => {
+    setActiveSite(site);
+    if (isAndroidApk) {
+      void BrowserScanner.setSiteProfile({ site });
+    }
+  };
+
+  const handleChangeBacBoScanMode = (mode: BacBoScanMode) => {
+    setBacboScanMode(mode);
+    if (isAndroidApk) {
+      void BrowserScanner.setBacBoScanMode({ mode });
+    }
+  };
+
+  const handleToggleDebugOverlay = (enabled: boolean) => {
+    setDebugOverlayEnabled(enabled);
+    if (isAndroidApk) {
+      void BrowserScanner.setDebugOverlay({ enabled });
+    }
+  };
+
+  const handleUpdateBankrollPolicy = (cfg: BankrollPolicyConfig) => {
+    setBankrollPolicy(cfg);
+    try {
+      localStorage.setItem(STORAGE_KEY_UNIFIED_POLICY, JSON.stringify(cfg));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const handleRecordSessionBet = (entry: SessionBetEntry) => {
+    setSessionLedger((prev) => {
+      const next = [entry, ...prev].slice(0, 200);
+      try {
+        localStorage.setItem(STORAGE_KEY_UNIFIED_LEDGER, JSON.stringify(next));
+      } catch {
+        // ignore storage errors
+      }
+      return next;
+    });
+  };
+
+  const handleResetSessionLedger = () => {
+    setSessionLedger([]);
+    try {
+      localStorage.removeItem(STORAGE_KEY_UNIFIED_LEDGER);
+    } catch {
+      // ignore storage errors
+    }
+    handleUpdateBankrollPolicy({
+      ...bankrollPolicy,
+      currentBalanceAoa: bankrollPolicy.initialBalanceAoa,
+    });
   };
 
   const { fieldSuggestions, accuracy } = analysis;
@@ -2023,6 +2144,19 @@ export default function App() {
               <button
                 type="button"
                 role="tab"
+                aria-selected={gameMode === 'strategies'}
+                onClick={() => setGameMode('strategies')}
+                className={`rounded-md px-3 py-1.5 text-xs font-bold tracking-wide transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  gameMode === 'strategies'
+                    ? 'bg-amber-300 text-slate-950'
+                    : 'text-slate-400 hover:text-slate-100'
+                }`}
+              >
+                ESTRATÉGIAS
+              </button>
+              <button
+                type="button"
+                role="tab"
                 aria-selected={gameMode === 'quantlab'}
                 onClick={() => setGameMode('quantlab')}
                 className={`rounded-md px-3 py-1.5 text-xs font-bold tracking-wide transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
@@ -2069,6 +2203,12 @@ export default function App() {
               <span className="text-red-400 font-semibold">AVIATOR INTELLIGENCE</span>
               <span aria-hidden="true">·</span>
               <span>{aviatorRounds.length} rodadas guardadas</span>
+            </div>
+          ) : gameMode === 'strategies' ? (
+            <div className="hidden lg:flex items-center gap-3 text-xs text-slate-400 font-mono tabular-nums">
+              <span className="text-amber-300 font-semibold">Aposta Mestra &amp; Calibração HSV</span>
+              <span aria-hidden="true">·</span>
+              <span>Site: {activeSite}</span>
             </div>
           ) : (
             <div className="hidden lg:flex items-center gap-3 text-xs text-slate-400 font-mono tabular-nums">
@@ -2179,6 +2319,8 @@ export default function App() {
             onAddRound={handleAddBacBoRound}
             onImportRounds={handleImportBacBoRounds}
             onResetAll={handleResetAllBacBo}
+            bacboScanMode={bacboScanMode}
+            onChangeBacBoScanMode={handleChangeBacBoScanMode}
           />
         ) : gameMode === 'aviator' ? (
           <AviatorDashboard
@@ -2210,6 +2352,31 @@ export default function App() {
             onStartMediaProjection={handleStartAviatorMediaProjection}
             onStopMediaProjection={handleStopAviatorMediaProjection}
             onChangeCaptureInterval={handleChangeAviatorInterval}
+          />
+        ) : gameMode === 'strategies' ? (
+          <StrategiesKnowledgeTab
+            activeGameDefault="roulette"
+            rouletteSpinsNewestFirst={combinedSpins}
+            bacboRounds={bacboRounds}
+            aviatorRounds={aviatorRounds}
+            isAndroidApk={isAndroidApk}
+            activeSite={activeSite}
+            onChangeSite={handleChangeSite}
+            bacboScanMode={bacboScanMode}
+            onChangeBacBoScanMode={handleChangeBacBoScanMode}
+            debugOverlayEnabled={debugOverlayEnabled}
+            onToggleDebugOverlay={handleToggleDebugOverlay}
+            latestDebugOverlay={latestDebugOverlay}
+            captureRunning={aviatorCaptureStatus.mediaProjectionActive}
+            captureIntervalMs={aviatorCaptureStatus.captureIntervalMs}
+            onStartUnifiedCapture={handleStartUnifiedCapture}
+            onStopUnifiedCapture={handleStopAviatorMediaProjection}
+            onChangeCaptureInterval={handleChangeAviatorInterval}
+            bankrollPolicy={bankrollPolicy}
+            onUpdateBankrollPolicy={handleUpdateBankrollPolicy}
+            sessionLedger={sessionLedger}
+            onRecordSessionBet={handleRecordSessionBet}
+            onResetSessionLedger={handleResetSessionLedger}
           />
         ) : gameMode === 'quantlab' ? (
           <QuantLabDesktop

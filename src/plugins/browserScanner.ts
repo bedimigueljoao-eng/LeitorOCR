@@ -1,5 +1,67 @@
 import { Capacitor, registerPlugin, PluginListenerHandle } from '@capacitor/core';
 
+export type NativeGameMode = 'roulette' | 'bacbo' | 'aviator';
+export type BacBoScanMode = 'auto' | 'blocks' | 'bead_plate';
+
+export interface RoiRectConfig {
+  leftRatio: number;
+  topRatio: number;
+  widthRatio: number;
+  heightRatio: number;
+}
+
+export interface HsvColorProfileConfig {
+  siteKey: string;
+  greenHueMin: number;
+  greenHueMax: number;
+  greenMinSat: number;
+  greenMinVal: number;
+  redHueLowMax: number;
+  redHueHighMin: number;
+  redMinSat: number;
+  redMinVal: number;
+  blackMaxSat: number;
+  blackMaxVal: number;
+  blueHueMin: number;
+  blueHueMax: number;
+  blueMinSat: number;
+  blueMinVal: number;
+  goldHueMin: number;
+  goldHueMax: number;
+  goldMinSat: number;
+  goldMinVal: number;
+  calibratedSamplesCount: number;
+}
+
+export interface HsvCalibrationSample {
+  label: 'GREEN' | 'RED' | 'BLACK' | 'P' | 'B' | 'T';
+  r?: number;
+  g?: number;
+  b?: number;
+  hue?: number;
+  sat?: number;
+  val?: number;
+}
+
+export interface OcrDebugBoxEvent {
+  leftRatio: number;
+  topRatio: number;
+  rightRatio: number;
+  bottomRatio: number;
+  text: string;
+  colorLabel: string;
+  accepted: boolean;
+  reason: string;
+}
+
+export interface OcrDebugOverlayEvent {
+  gameMode: NativeGameMode;
+  resolvedMode: string;
+  confidence: number;
+  timestampMs: number;
+  boxes: OcrDebugBoxEvent[];
+}
+
 export interface SpinsDetectedEvent {
   numbersNewestFirst: number[];
   isFullStrip: boolean;
@@ -28,6 +90,7 @@ export interface BacBoCellEvent {
   total: number; // 2..12 or -1 if unavailable
   playerTotal?: number;
   bankerTotal?: number;
+  colorFallback?: boolean;
 }
 
 export interface BacBoDetectedEvent {
@@ -51,6 +114,11 @@ export interface AviatorCaptureStatusEvent {
   error?: string;
 }
 
+export interface UnifiedCaptureStatusEvent extends AviatorCaptureStatusEvent {
+  gameMode: NativeGameMode;
+  siteKey: string;
+}
+
 export interface BrowserScannerPlugin {
   openBrowser(options?: { url?: string }): Promise<void>;
   closeBrowser(): Promise<void>;
@@ -58,11 +126,43 @@ export interface BrowserScannerPlugin {
   toggleCalibration(): Promise<void>;
   setAutoScan(options: { enabled: boolean }): Promise<void>;
   scanNow(): Promise<void>;
-  setGameMode(options: { mode: 'roulette' | 'bacbo' | 'aviator' }): Promise<void>;
-  startMediaProjection(options?: { intervalMs?: number }): Promise<void>;
+  setGameMode(options: { mode: NativeGameMode }): Promise<void>;
+  setBacBoScanMode(options: { mode: BacBoScanMode }): Promise<void>;
+  setSiteProfile(options: { site: string }): Promise<void>;
+  saveRoiRect(options: {
+    game: NativeGameMode;
+    site: string;
+    leftRatio: number;
+    topRatio: number;
+    widthRatio: number;
+    heightRatio: number;
+  }): Promise<void>;
+  getRoiRect(options: { game: NativeGameMode; site: string }): Promise<RoiRectConfig>;
+  getHsvProfile(options: { site: string }): Promise<HsvColorProfileConfig>;
+  calibrateHsvProfile(options: {
+    site: string;
+    samples: HsvCalibrationSample[];
+  }): Promise<HsvColorProfileConfig>;
+  resetHsvProfile(options: { site: string }): Promise<HsvColorProfileConfig>;
+  setDebugOverlay(options: { enabled: boolean }): Promise<void>;
+  getDbHistory(options: { game: NativeGameMode; limit?: number }): Promise<{ rows: unknown[] }>;
+  exportDbCsv(options: { game: NativeGameMode }): Promise<{ csv: string }>;
+  clearDbHistory(options: { game: NativeGameMode }): Promise<void>;
+  startMediaProjection(options?: {
+    intervalMs?: number;
+    gameMode?: NativeGameMode;
+    siteKey?: string;
+  }): Promise<void>;
   stopMediaProjection(): Promise<void>;
   setCaptureIntervalMs(options: { intervalMs: number }): Promise<void>;
-  getCaptureStatus(): Promise<{ mediaProjectionActive: boolean; captureIntervalMs: number }>;
+  getCaptureStatus(): Promise<{
+    mediaProjectionActive: boolean;
+    captureIntervalMs: number;
+    gameMode?: NativeGameMode;
+    siteKey?: string;
+    bacBoScanMode?: BacBoScanMode;
+    debugOverlayEnabled?: boolean;
+  }>;
   addListener(
     eventName: 'spinsDetected',
     listenerFunc: (event: SpinsDetectedEvent) => void
@@ -78,6 +178,14 @@ export interface BrowserScannerPlugin {
   addListener(
     eventName: 'aviatorCaptureStatus',
     listenerFunc: (event: AviatorCaptureStatusEvent) => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'captureStatus',
+    listenerFunc: (event: UnifiedCaptureStatusEvent) => void
+  ): Promise<PluginListenerHandle>;
+  addListener(
+    eventName: 'ocrDebugOverlay',
+    listenerFunc: (event: OcrDebugOverlayEvent) => void
   ): Promise<PluginListenerHandle>;
   addListener(
     eventName: 'browserVisibilityChanged',
