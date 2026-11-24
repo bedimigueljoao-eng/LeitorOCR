@@ -22,6 +22,7 @@ import { ScreenshotScannerTab } from './components/ScreenshotScannerTab';
 import { AndroidBuilderTab } from './components/AndroidBuilderTab';
 import { BacBoDashboard } from './components/BacBoDashboard';
 import { AviatorDashboard, multiplierBadgeClass } from './components/AviatorDashboard';
+import { QuantLabDesktop } from './components/QuantLabDesktop';
 import { BrowserScanner, isNativeAndroidApp } from './plugins/browserScanner';
 import {
   analyzeBacBoEngine,
@@ -82,7 +83,7 @@ import {
   settleActiveAutoBetOnCrash,
 } from './modules/aviator';
 
-type GameMode = 'roulette' | 'bacbo' | 'aviator';
+type GameMode = 'roulette' | 'bacbo' | 'aviator' | 'quantlab';
 type ActiveTab = 'analyzer' | 'scanner' | 'board' | 'android';
 
 const STORAGE_KEY_SESSION_SPINS = 'roletavision_session_spins_v3';
@@ -262,7 +263,8 @@ export default function App() {
   useEffect(() => {
     gameModeRef.current = gameMode;
     if (isAndroidApk) {
-      void BrowserScanner.setGameMode({ mode: gameMode });
+      const nativeMode = gameMode === 'quantlab' ? 'roulette' : gameMode;
+      void BrowserScanner.setGameMode({ mode: nativeMode });
     }
   }, [gameMode, isAndroidApk]);
 
@@ -2018,6 +2020,19 @@ export default function App() {
               >
                 AVIATOR
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={gameMode === 'quantlab'}
+                onClick={() => setGameMode('quantlab')}
+                className={`rounded-md px-3 py-1.5 text-xs font-bold tracking-wide transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                  gameMode === 'quantlab'
+                    ? 'bg-emerald-500 text-slate-950'
+                    : 'text-slate-400 hover:text-slate-100'
+                }`}
+              >
+                QUANTLAB PC
+              </button>
             </div>
           </div>
 
@@ -2049,11 +2064,17 @@ export default function App() {
               <span aria-hidden="true">·</span>
               <span>{bacboRounds.length} rodadas guardadas</span>
             </div>
-          ) : (
+          ) : gameMode === 'aviator' ? (
             <div className="hidden lg:flex items-center gap-3 text-xs text-slate-400 font-mono tabular-nums">
               <span className="text-red-400 font-semibold">AVIATOR INTELLIGENCE</span>
               <span aria-hidden="true">·</span>
               <span>{aviatorRounds.length} rodadas guardadas</span>
+            </div>
+          ) : (
+            <div className="hidden lg:flex items-center gap-3 text-xs text-slate-400 font-mono tabular-nums">
+              <span className="text-emerald-400 font-semibold">QuantLab Pro Web/Desktop</span>
+              <span aria-hidden="true">·</span>
+              <span>Screen Capture OCR &amp; Regime Detector</span>
             </div>
           )}
 
@@ -2189,6 +2210,20 @@ export default function App() {
             onStartMediaProjection={handleStartAviatorMediaProjection}
             onStopMediaProjection={handleStopAviatorMediaProjection}
             onChangeCaptureInterval={handleChangeAviatorInterval}
+          />
+        ) : gameMode === 'quantlab' ? (
+          <QuantLabDesktop
+            onSyncRouletteSpins={(spins) =>
+              setSpinMemory((prev) => ({
+                session: spins.slice(0, 500),
+                backup: prev.backup,
+              }))
+            }
+            onSyncAviatorMultipliers={(mults) => {
+              if (mults.length > 0) {
+                handleBulkAddAviator(mults.slice(0, 20));
+              }
+            }}
           />
         ) : (
           <>

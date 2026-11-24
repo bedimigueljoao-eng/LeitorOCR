@@ -197,6 +197,72 @@ app.post('/api/analyze-aviator-ai', async (req, res) => {
   }
 });
 
+app.post('/api/analyze-quant-ai', async (req, res) => {
+  if (!ai) {
+    res.status(503).json({ error: 'GEMINI_API_KEY não configurada no servidor.' });
+    return;
+  }
+
+  const body = req.body as {
+    game?: unknown;
+    sampleSize?: unknown;
+    unpredictabilityPct?: unknown;
+    decisionHeadline?: unknown;
+    regimeReasons?: unknown;
+    topStrategiesSummary?: unknown;
+    recentValues?: unknown;
+  };
+
+  const game = body.game === 'roulette' ? 'Roleta Europeia' : 'Aviator';
+  const sampleSize = typeof body.sampleSize === 'number' ? body.sampleSize : 0;
+  const unpredictabilityPct = typeof body.unpredictabilityPct === 'number' ? body.unpredictabilityPct : 100;
+  const decisionHeadline = typeof body.decisionHeadline === 'string' ? body.decisionHeadline.slice(0, 200) : '';
+  const regimeReasons = Array.isArray(body.regimeReasons)
+    ? body.regimeReasons.filter((r): r is string => typeof r === 'string').slice(0, 6).join(' | ')
+    : '';
+  const topStrategiesSummary =
+    typeof body.topStrategiesSummary === 'string' ? body.topStrategiesSummary.slice(0, 1200) : '';
+  const recentValues = Array.isArray(body.recentValues)
+    ? body.recentValues.slice(0, 25).join(', ')
+    : '';
+
+  if (sampleSize < 5) {
+    res.status(400).json({ error: 'Registe pelo menos 5 rodadas para análise quantitativa.' });
+    return;
+  }
+
+  try {
+    const prompt = [
+      'Você é o Analista Quantitativo do QuantLab Pro.',
+      'Responda em português objetivo (máx. 3 parágrafos curtos).',
+      'Nunca prometa previsão garantida nem sugira Martingale; respeite o semáforo de imprevisibilidade.',
+      `JOGO: ${game}`,
+      `AMOSTRA (n): ${sampleSize}`,
+      `ÍNDICE DE IMPREVISIBILIDADE: ${unpredictabilityPct}%`,
+      `DECISÃO DO MOTOR: ${decisionHeadline}`,
+      `MOTIVOS DO REGIME: ${regimeReasons}`,
+      `ÚLTIMOS RESULTADOS (mais recente à esquerda): ${recentValues}`,
+      `ESTRATÉGIAS VALIDADAS OOS: ${topStrategiesSummary}`,
+    ].join('\n');
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-4-hydrogen',
+      contents: prompt,
+    });
+
+    const answer = (response.text ?? '').trim();
+    if (!answer) {
+      res.status(502).json({ error: 'Resposta vazia do modelo Gemini.' });
+      return;
+    }
+
+    res.json({ answer, model: 'gemini-4-hydrogen' });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro ao consultar Gemini AI.';
+    res.status(500).json({ error: message });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');

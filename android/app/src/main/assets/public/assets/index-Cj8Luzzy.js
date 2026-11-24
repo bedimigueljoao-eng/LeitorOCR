@@ -5,7 +5,24 @@ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __getOwnPropNames = Object.getOwnPropertyNames;
 var __getProtoOf = Object.getPrototypeOf;
 var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __esmMin = (fn, res, err) => () => {
+	if (err) throw err[0];
+	try {
+		return fn && (res = fn(fn = 0)), res;
+	} catch (e) {
+		throw err = [e], e;
+	}
+};
 var __commonJSMin = (cb, mod) => () => (mod || (cb((mod = { exports: {} }).exports, mod, mod.exports), cb = null), mod.exports);
+var __exportAll = (all, no_symbols) => {
+	let target = {};
+	for (var name in all) __defProp(target, name, {
+		get: all[name],
+		enumerable: true
+	});
+	if (!no_symbols) __defProp(target, Symbol.toStringTag, { value: "Module" });
+	return target;
+};
 var __copyProps = (to, from, except, desc) => {
 	if (from && typeof from === "object" || typeof from === "function") for (var keys = __getOwnPropNames(from), i = 0, n = keys.length, key; i < n; i++) {
 		key = keys[i];
@@ -20,6 +37,11 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 	value: mod,
 	enumerable: true
 }) : target, mod));
+var __toCommonJS = (mod) => __hasOwnProp.call(mod, "module.exports") ? mod["module.exports"] : __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, { get: (a, b) => (typeof require !== "undefined" ? require : a)[b] }) : x)(function(x) {
+	if (typeof require !== "undefined") return require.apply(this, arguments);
+	throw Error("Calling `require` for \"" + x + "\" in an environment that doesn't expose the `require` function. See https://rolldown.rs/in-depth/bundling-cjs#require-external-modules for more details.");
+});
 // \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -11957,6 +11979,36 @@ var Layers = createLucideIcon("layers", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Monitor = createLucideIcon("monitor", [
+	["rect", {
+		width: "20",
+		height: "14",
+		x: "2",
+		y: "3",
+		rx: "2",
+		key: "48i651"
+	}],
+	["line", {
+		x1: "8",
+		x2: "16",
+		y1: "21",
+		y2: "21",
+		key: "1svkeh"
+	}],
+	["line", {
+		x1: "12",
+		x2: "12",
+		y1: "17",
+		y2: "21",
+		key: "vw1qmm"
+	}]
+]);
+/**
+* @license lucide-react v0.546.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Play = createLucideIcon("play", [["path", {
 	d: "M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z",
 	key: "10ikf1"
@@ -12011,6 +12063,26 @@ var RotateCcw = createLucideIcon("rotate-ccw", [["path", {
 	d: "M3 3v5h5",
 	key: "1xhq8a"
 }]]);
+/**
+* @license lucide-react v0.546.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
+var Save = createLucideIcon("save", [
+	["path", {
+		d: "M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z",
+		key: "1c8476"
+	}],
+	["path", {
+		d: "M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7",
+		key: "1ydtos"
+	}],
+	["path", {
+		d: "M7 3v4a1 1 0 0 0 1 1h7",
+		key: "t51u73"
+	}]
+]);
 /**
 * @license lucide-react v0.546.0 - ISC
 *
@@ -12234,6 +12306,34 @@ var Target = createLucideIcon("target", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Trash2 = createLucideIcon("trash-2", [
+	["path", {
+		d: "M10 11v6",
+		key: "nco0om"
+	}],
+	["path", {
+		d: "M14 11v6",
+		key: "outv1u"
+	}],
+	["path", {
+		d: "M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6",
+		key: "miytrc"
+	}],
+	["path", {
+		d: "M3 6h18",
+		key: "d0wm0j"
+	}],
+	["path", {
+		d: "M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2",
+		key: "e791ji"
+	}]
+]);
+/**
+* @license lucide-react v0.546.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var TrendingUp = createLucideIcon("trending-up", [["path", {
 	d: "M16 7h6v6",
 	key: "box55l"
@@ -12306,7 +12406,7 @@ var Zap = createLucideIcon("zap", [["path", {
 }]]);
 // src/utils/rouletteEngine.ts
 var import_client = require_client();
-var WHEEL_ORDER = [
+var WHEEL_ORDER$1 = [
 	0,
 	32,
 	15,
@@ -12345,7 +12445,7 @@ var WHEEL_ORDER = [
 	3,
 	26
 ];
-var RED_NUMBERS = /* @__PURE__ */ new Set([
+var RED_NUMBERS$1 = /* @__PURE__ */ new Set([
 	1,
 	3,
 	5,
@@ -12365,7 +12465,7 @@ var RED_NUMBERS = /* @__PURE__ */ new Set([
 	34,
 	36
 ]);
-var VOISINS_NUMBERS = [
+var VOISINS_NUMBERS$1 = [
 	22,
 	18,
 	29,
@@ -12384,7 +12484,7 @@ var VOISINS_NUMBERS = [
 	2,
 	25
 ];
-var TIERS_NUMBERS = [
+var TIERS_NUMBERS$1 = [
 	27,
 	13,
 	36,
@@ -12398,7 +12498,7 @@ var TIERS_NUMBERS = [
 	16,
 	33
 ];
-var ORPHELINS_NUMBERS = [
+var ORPHELINS_NUMBERS$1 = [
 	1,
 	20,
 	14,
@@ -12423,27 +12523,27 @@ var INITIAL_SCREENSHOT_SPINS = [
 	12,
 	28
 ];
-function getRouletteColor(num) {
+function getRouletteColor$1(num) {
 	if (num === 0) return "green";
-	return RED_NUMBERS.has(num) ? "red" : "black";
+	return RED_NUMBERS$1.has(num) ? "red" : "black";
 }
-function getWheelNeighbors(anchor, radius = 2) {
-	const idx = WHEEL_ORDER.indexOf(anchor);
+function getWheelNeighbors$1(anchor, radius = 2) {
+	const idx = WHEEL_ORDER$1.indexOf(anchor);
 	if (idx === -1) return [anchor];
 	const result = [];
 	for (let offset = -radius; offset <= radius; offset++) {
-		const pos = ((idx + offset) % WHEEL_ORDER.length + WHEEL_ORDER.length) % WHEEL_ORDER.length;
-		result.push(WHEEL_ORDER[pos]);
+		const pos = ((idx + offset) % WHEEL_ORDER$1.length + WHEEL_ORDER$1.length) % WHEEL_ORDER$1.length;
+		result.push(WHEEL_ORDER$1[pos]);
 	}
 	return result;
 }
-function getDozenOf(num) {
+function getDozenOf$1(num) {
 	if (num === 0) return 0;
 	if (num <= 12) return 1;
 	if (num <= 24) return 2;
 	return 3;
 }
-function getColumnOf(num) {
+function getColumnOf$1(num) {
 	if (num === 0) return 0;
 	return (num - 1) % 3 + 1;
 }
@@ -12470,7 +12570,7 @@ function computeFieldSuggestions(spinsNewestFirst, profile = "neighbors") {
 	recentWindow.forEach((num, idx) => {
 		const recencyWeight = (recentWindow.length - idx) / recentWindow.length;
 		scores[num] += 1.2 * recencyWeight;
-		for (const nb of getWheelNeighbors(num, 1)) scores[nb] += .35 * recencyWeight;
+		for (const nb of getWheelNeighbors$1(num, 1)) scores[nb] += .35 * recencyWeight;
 	});
 	for (let n = 0; n <= 36; n++) scores[n] += transitions[n] * 1.6;
 	let anchor = last;
@@ -12479,19 +12579,19 @@ function computeFieldSuggestions(spinsNewestFirst, profile = "neighbors") {
 		bestScore = scores[n];
 		anchor = n;
 	}
-	const neighbors = getWheelNeighbors(anchor, 2);
+	const neighbors = getWheelNeighbors$1(anchor, 2);
 	const sectors = [
 		{
 			name: "Voisins du Zéro",
-			numbers: VOISINS_NUMBERS
+			numbers: VOISINS_NUMBERS$1
 		},
 		{
 			name: "Tiers du Cylindre",
-			numbers: TIERS_NUMBERS
+			numbers: TIERS_NUMBERS$1
 		},
 		{
 			name: "Orphelins",
-			numbers: ORPHELINS_NUMBERS
+			numbers: ORPHELINS_NUMBERS$1
 		}
 	].map((s) => {
 		const set = new Set(s.numbers);
@@ -12510,8 +12610,8 @@ function computeFieldSuggestions(spinsNewestFirst, profile = "neighbors") {
 		2,
 		3
 	].map((dz) => {
-		const delayIdx = spinsNewestFirst.findIndex((n) => getDozenOf(n) === dz);
-		const count = spinsNewestFirst.filter((n) => getDozenOf(n) === dz).length;
+		const delayIdx = spinsNewestFirst.findIndex((n) => getDozenOf$1(n) === dz);
+		const count = spinsNewestFirst.filter((n) => getDozenOf$1(n) === dz).length;
 		return {
 			index: dz,
 			label: dz === 1 ? "1ª Dúzia (1–12)" : dz === 2 ? "2ª Dúzia (13–24)" : "3ª Dúzia (25–36)",
@@ -12526,8 +12626,8 @@ function computeFieldSuggestions(spinsNewestFirst, profile = "neighbors") {
 		2,
 		3
 	].map((col) => {
-		const delayIdx = spinsNewestFirst.findIndex((n) => getColumnOf(n) === col);
-		const count = spinsNewestFirst.filter((n) => getColumnOf(n) === col).length;
+		const delayIdx = spinsNewestFirst.findIndex((n) => getColumnOf$1(n) === col);
+		const count = spinsNewestFirst.filter((n) => getColumnOf$1(n) === col).length;
 		return {
 			index: col,
 			label: `Coluna ${col}`,
@@ -12537,12 +12637,12 @@ function computeFieldSuggestions(spinsNewestFirst, profile = "neighbors") {
 	});
 	const delayedColumn = [...columns].sort((a, b) => b.delay - a.delay)[0];
 	const recent12 = spinsNewestFirst.slice(0, 12);
-	const red12 = recent12.filter((n) => getRouletteColor(n) === "red").length;
-	const black12 = recent12.filter((n) => getRouletteColor(n) === "black").length;
+	const red12 = recent12.filter((n) => getRouletteColor$1(n) === "red").length;
+	const black12 = recent12.filter((n) => getRouletteColor$1(n) === "black").length;
 	let redStreak = 0;
 	let blackStreak = 0;
 	for (const n of spinsNewestFirst) {
-		const c = getRouletteColor(n);
+		const c = getRouletteColor$1(n);
 		if (c === "red" && blackStreak === 0) redStreak++;
 		else if (c === "black" && redStreak === 0) blackStreak++;
 		else break;
@@ -12746,22 +12846,22 @@ function evaluateAccuracy(sessionSpinsNewestFirst, profile = "neighbors", learne
 		if (combinedPriorNewestFirst.length === 0) continue;
 		const { suggestions, topSector } = computeFieldSuggestions(combinedPriorNewestFirst, profile);
 		const actual = sessionChronological[i];
-		const actualColor = getRouletteColor(actual);
+		const actualColor = getRouletteColor$1(actual);
 		const colorActualLabel = actualColor === "green" ? "Zero (0)" : actualColor === "red" ? "Vermelho" : "Preto";
 		const colorHit = suggestions.color === "Vermelho" && actualColor === "red" || suggestions.color === "Preto" && actualColor === "black";
 		const parityActualLabel = actual === 0 ? "Zero (0)" : actual % 2 === 0 ? "Par" : "Ímpar";
 		const parityHit = actual !== 0 && (suggestions.parity === "Par" && actual % 2 === 0 || suggestions.parity === "Ímpar" && actual % 2 === 1);
 		const halfActualLabel = actual === 0 ? "Zero (0)" : actual <= 18 ? "1–18 (Baixo)" : "19–36 (Alto)";
 		const halfHit = actual !== 0 && (suggestions.half.startsWith("1–18") && actual <= 18 || suggestions.half.startsWith("19–36") && actual >= 19);
-		const actualDz = getDozenOf(actual);
+		const actualDz = getDozenOf$1(actual);
 		const dzActualLabel = actualDz === 0 ? "Zero (0)" : actualDz === 1 ? "1ª Dúzia (1–12)" : actualDz === 2 ? "2ª Dúzia (13–24)" : "3ª Dúzia (25–36)";
 		const dzHit = actualDz === suggestions.dozenIndex;
-		const actualCol = getColumnOf(actual);
+		const actualCol = getColumnOf$1(actual);
 		const colActualLabel = actualCol === 0 ? "Zero (0)" : `Coluna ${actualCol}`;
 		const colHit = actualCol === suggestions.columnIndex;
 		const neighborsHit = suggestions.neighbors.includes(actual);
 		const sectorHit = topSector.numbers.includes(actual);
-		const actualSectorLabel = VOISINS_NUMBERS.includes(actual) ? "Voisins du Zéro" : TIERS_NUMBERS.includes(actual) ? "Tiers du Cylindre" : "Orphelins";
+		const actualSectorLabel = VOISINS_NUMBERS$1.includes(actual) ? "Voisins du Zéro" : TIERS_NUMBERS$1.includes(actual) ? "Tiers du Cylindre" : "Orphelins";
 		const evals = [
 			{
 				market: "Vermelho / Preto",
@@ -12885,8 +12985,8 @@ function analyzeSpins(sessionSpinsNewestFirst, profile = "neighbors", bankrollAo
 		fieldSuggestions: computed.suggestions,
 		accuracy
 	};
-	const redCount = combinedForPrediction.filter((n) => getRouletteColor(n) === "red").length;
-	const blackCount = combinedForPrediction.filter((n) => getRouletteColor(n) === "black").length;
+	const redCount = combinedForPrediction.filter((n) => getRouletteColor$1(n) === "red").length;
+	const blackCount = combinedForPrediction.filter((n) => getRouletteColor$1(n) === "black").length;
 	const greenCount = combinedForPrediction.filter((n) => n === 0).length;
 	const evenCount = combinedForPrediction.filter((n) => n !== 0 && n % 2 === 0).length;
 	const oddCount = combinedForPrediction.filter((n) => n !== 0 && n % 2 === 1).length;
@@ -12965,7 +13065,7 @@ var import_jsx_runtime = (/* @__PURE__ */ __commonJSMin(((exports, module) => {
 var EuropeanWheel = ({ lastNumber, suggestedNumbers, hotNumbers, onSelectNumber }) => {
 	const suggestedSet = new Set(suggestedNumbers);
 	const hotSet = new Set(hotNumbers);
-	const total = WHEEL_ORDER.length;
+	const total = WHEEL_ORDER$1.length;
 	const sliceAngle = 2 * Math.PI / total;
 	const cx = 180;
 	const cy = 180;
@@ -12988,7 +13088,7 @@ var EuropeanWheel = ({ lastNumber, suggestedNumbers, hotNumbers, onSelectNumber 
 					stroke: "#2A3548",
 					strokeWidth: 2
 				}),
-				WHEEL_ORDER.map((num, idx) => {
+				WHEEL_ORDER$1.map((num, idx) => {
 					const startAngle = idx * sliceAngle - Math.PI / 2 - sliceAngle / 2;
 					const endAngle = startAngle + sliceAngle;
 					const midAngle = (startAngle + endAngle) / 2;
@@ -13007,7 +13107,7 @@ var EuropeanWheel = ({ lastNumber, suggestedNumbers, hotNumbers, onSelectNumber 
 						`A ${innerR} ${innerR} 0 0 0 ${x2In.toFixed(2)} ${y2In.toFixed(2)}`,
 						"Z"
 					].join(" ");
-					const color = getRouletteColor(num);
+					const color = getRouletteColor$1(num);
 					const fill = color === "green" ? "#059669" : color === "red" ? "#991B1B" : "#161B26";
 					const isLast = lastNumber === num;
 					const isSuggested = suggestedSet.has(num);
@@ -13201,7 +13301,7 @@ var CreedroomzBoard = ({ lastNumber, suggestedChips, fieldSuggestions, onRegiste
 				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 					className: "col-start-3 row-start-2 grid grid-cols-3 gap-1",
 					children: rows.flat().map((num) => {
-						const color = getRouletteColor(num);
+						const color = getRouletteColor$1(num);
 						const isSuggested = suggestedSet.has(num);
 						return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
 							type: "button",
@@ -13550,7 +13650,7 @@ var ScreenshotScannerTab = ({ roiTopPct, roiHeightPct, onChangeRoiTop, onChangeR
 							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 								className: "flex flex-wrap gap-1.5",
 								children: scanResult.numbersNewestFirst.map((num, idx) => {
-									const col = getRouletteColor(num);
+									const col = getRouletteColor$1(num);
 									return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 										className: `inline-flex h-8 w-8 items-center justify-center rounded border font-mono text-xs font-bold text-white tabular-nums ${col === "green" ? "bg-emerald-700 border-emerald-500" : col === "red" ? "bg-[#B91C1C] border-red-800" : "bg-[#181C24] border-slate-700"} ${idx === 0 ? "ring-2 ring-amber-400" : ""}`,
 										children: num
@@ -22387,6 +22487,4761 @@ var AviatorDashboard = ({ rounds, analysis, liveState, captureStatus, bankrollCf
 		]
 	});
 };
+// src/engine/rouletteEngine.ts
+var WHEEL_ORDER = [
+	0,
+	32,
+	15,
+	19,
+	4,
+	21,
+	2,
+	25,
+	17,
+	34,
+	6,
+	27,
+	13,
+	36,
+	11,
+	30,
+	8,
+	23,
+	10,
+	5,
+	24,
+	16,
+	33,
+	1,
+	20,
+	14,
+	31,
+	9,
+	22,
+	18,
+	29,
+	7,
+	28,
+	12,
+	35,
+	3,
+	26
+];
+var RED_NUMBERS = /* @__PURE__ */ new Set([
+	1,
+	3,
+	5,
+	7,
+	9,
+	12,
+	14,
+	16,
+	18,
+	19,
+	21,
+	23,
+	25,
+	27,
+	30,
+	32,
+	34,
+	36
+]);
+var VOISINS_NUMBERS = [
+	22,
+	18,
+	29,
+	7,
+	28,
+	12,
+	35,
+	3,
+	26,
+	0,
+	32,
+	15,
+	19,
+	4,
+	21,
+	2,
+	25
+];
+var TIERS_NUMBERS = [
+	27,
+	13,
+	36,
+	11,
+	30,
+	8,
+	23,
+	10,
+	5,
+	24,
+	16,
+	33
+];
+var ORPHELINS_NUMBERS = [
+	1,
+	20,
+	14,
+	31,
+	9,
+	17,
+	34,
+	6
+];
+var ZERO_SPIEL_NUMBERS = [
+	12,
+	35,
+	3,
+	26,
+	0,
+	32,
+	15
+];
+function isValidRouletteNumber(n) {
+	return Number.isInteger(n) && n >= 0 && n <= 36;
+}
+function getRouletteColor(num) {
+	if (num === 0) return "green";
+	return RED_NUMBERS.has(num) ? "red" : "black";
+}
+function getDozenOf(num) {
+	if (num === 0) return 0;
+	if (num <= 12) return 1;
+	if (num <= 24) return 2;
+	return 3;
+}
+function getColumnOf(num) {
+	if (num === 0) return 0;
+	return (num - 1) % 3 + 1;
+}
+function getWheelNeighbors(anchor, radius = 2) {
+	const idx = WHEEL_ORDER.indexOf(anchor);
+	if (idx === -1) return [anchor];
+	const result = [];
+	for (let offset = -radius; offset <= radius; offset++) {
+		const pos = ((idx + offset) % WHEEL_ORDER.length + WHEEL_ORDER.length) % WHEEL_ORDER.length;
+		result.push(WHEEL_ORDER[pos]);
+	}
+	return result;
+}
+function computeGroupStat(spinsNewestFirst, id, label, expectedPct, predicate) {
+	const total = spinsNewestFirst.length;
+	let count = 0;
+	for (const n of spinsNewestFirst) if (predicate(n)) count++;
+	let currentDelay = 0;
+	for (const n of spinsNewestFirst) {
+		if (predicate(n)) break;
+		currentDelay++;
+	}
+	let currentStreak = 0;
+	for (const n of spinsNewestFirst) if (predicate(n)) currentStreak++;
+	else break;
+	let maxDelay = 0;
+	let runDelay = 0;
+	let maxStreak = 0;
+	let runStreak = 0;
+	for (let i = total - 1; i >= 0; i--) if (predicate(spinsNewestFirst[i])) {
+		runDelay = 0;
+		runStreak++;
+		if (runStreak > maxStreak) maxStreak = runStreak;
+	} else {
+		runStreak = 0;
+		runDelay++;
+		if (runDelay > maxDelay) maxDelay = runDelay;
+	}
+	return {
+		id,
+		label,
+		count,
+		pct: total > 0 ? count / total * 100 : 0,
+		expectedPct,
+		currentDelay,
+		maxDelay,
+		currentStreak,
+		maxStreak
+	};
+}
+function analyzeQuantRoulette(spinsNewestFirst) {
+	const clean = spinsNewestFirst.filter(isValidRouletteNumber).slice(0, 500);
+	const total = clean.length;
+	const numberStats = Array.from({ length: 37 }, (_, num) => {
+		let count = 0;
+		for (const s of clean) if (s === num) count++;
+		let currentDelay = 0;
+		for (const s of clean) {
+			if (s === num) break;
+			currentDelay++;
+		}
+		let maxDelay = 0;
+		let runDelay = 0;
+		for (let i = total - 1; i >= 0; i--) if (clean[i] === num) runDelay = 0;
+		else {
+			runDelay++;
+			if (runDelay > maxDelay) maxDelay = runDelay;
+		}
+		return {
+			number: num,
+			color: getRouletteColor(num),
+			count,
+			pct: total > 0 ? count / total * 100 : 0,
+			currentDelay,
+			maxDelay
+		};
+	});
+	const hotNumbers = [...numberStats].sort((a, b) => b.count - a.count || a.currentDelay - b.currentDelay).slice(0, 6);
+	const coldNumbers = [...numberStats].sort((a, b) => b.currentDelay - a.currentDelay || a.count - b.count).slice(0, 6);
+	const colors = {
+		red: computeGroupStat(clean, "red", "Vermelho", 18 / 37 * 100, (n) => getRouletteColor(n) === "red"),
+		black: computeGroupStat(clean, "black", "Preto", 18 / 37 * 100, (n) => getRouletteColor(n) === "black"),
+		green: computeGroupStat(clean, "green", "Zero (0)", 1 / 37 * 100, (n) => n === 0)
+	};
+	const parity = {
+		even: computeGroupStat(clean, "even", "Par", 18 / 37 * 100, (n) => n > 0 && n % 2 === 0),
+		odd: computeGroupStat(clean, "odd", "Ímpar", 18 / 37 * 100, (n) => n > 0 && n % 2 === 1)
+	};
+	const halves = {
+		low: computeGroupStat(clean, "low", "1–18 (Baixo)", 18 / 37 * 100, (n) => n >= 1 && n <= 18),
+		high: computeGroupStat(clean, "high", "19–36 (Alto)", 18 / 37 * 100, (n) => n >= 19 && n <= 36)
+	};
+	const dozens = [
+		computeGroupStat(clean, "d1", "1ª Dúzia (1–12)", 12 / 37 * 100, (n) => getDozenOf(n) === 1),
+		computeGroupStat(clean, "d2", "2ª Dúzia (13–24)", 12 / 37 * 100, (n) => getDozenOf(n) === 2),
+		computeGroupStat(clean, "d3", "3ª Dúzia (25–36)", 12 / 37 * 100, (n) => getDozenOf(n) === 3)
+	];
+	const columns = [
+		computeGroupStat(clean, "c1", "Coluna 1 (1,4..34)", 12 / 37 * 100, (n) => getColumnOf(n) === 1),
+		computeGroupStat(clean, "c2", "Coluna 2 (2,5..35)", 12 / 37 * 100, (n) => getColumnOf(n) === 2),
+		computeGroupStat(clean, "c3", "Coluna 3 (3,6..36)", 12 / 37 * 100, (n) => getColumnOf(n) === 3)
+	];
+	const sectors = [
+		{
+			id: "voisins",
+			label: "Voisins du Zéro",
+			numbers: VOISINS_NUMBERS
+		},
+		{
+			id: "tiers",
+			label: "Tiers du Cylindre",
+			numbers: TIERS_NUMBERS
+		},
+		{
+			id: "orphelins",
+			label: "Orphelins",
+			numbers: ORPHELINS_NUMBERS
+		},
+		{
+			id: "zero_spiel",
+			label: "Zero Spiel",
+			numbers: ZERO_SPIEL_NUMBERS
+		}
+	].map((sec) => {
+		const set = new Set(sec.numbers);
+		const stat = computeGroupStat(clean, sec.id, sec.label, sec.numbers.length / 37 * 100, (n) => set.has(n));
+		return {
+			id: sec.id,
+			label: sec.label,
+			numbers: sec.numbers,
+			count: stat.count,
+			pct: stat.pct,
+			expectedPct: stat.expectedPct,
+			deltaPct: stat.pct - stat.expectedPct,
+			currentDelay: stat.currentDelay
+		};
+	});
+	const topSector = [...sectors].sort((a, b) => b.deltaPct - a.deltaPct || b.pct - a.pct)[0];
+	const scores = new Array(37).fill(0);
+	const recent25 = clean.slice(0, 25);
+	recent25.forEach((n, idx) => {
+		const w = (recent25.length - idx) / Math.max(1, recent25.length);
+		scores[n] += 1.2 * w;
+		for (const nb of getWheelNeighbors(n, 2)) scores[nb] += .28 * w;
+	});
+	let recommendedAnchor = clean[0] ?? 0;
+	let bestScore = -1;
+	for (let n = 0; n <= 36; n++) if (scores[n] > bestScore) {
+		bestScore = scores[n];
+		recommendedAnchor = n;
+	}
+	return {
+		totalSpins: total,
+		lastNumber: total > 0 ? clean[0] : null,
+		lastColor: total > 0 ? getRouletteColor(clean[0]) : null,
+		numberStats,
+		hotNumbers,
+		coldNumbers,
+		colors,
+		parity,
+		halves,
+		dozens,
+		columns,
+		sectors,
+		recommendedAnchor,
+		neighborsPlusMinus2: getWheelNeighbors(recommendedAnchor, 2),
+		topSector,
+		recent20Numbers: clean.slice(0, 20)
+	};
+}
+// src/engine/aviatorEngine.ts
+function isValidAviatorValue(val) {
+	return Number.isFinite(val) && val >= 1 && val <= 1e4;
+}
+function classifyAviatorBand(mult) {
+	if (mult < 1.5) return "under_1_50";
+	if (mult < 2) return "1_50_to_1_99";
+	if (mult < 5) return "2_00_to_4_99";
+	if (mult < 10) return "5_00_to_9_99";
+	return "over_10_00";
+}
+function getAviatorPillColorTier(mult) {
+	if (mult >= 10) return "pink";
+	if (mult >= 2) return "purple";
+	return "blue";
+}
+function median(vals) {
+	if (vals.length === 0) return 0;
+	const s = [...vals].sort((a, b) => a - b);
+	const mid = Math.floor(s.length / 2);
+	return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];
+}
+function computeGapMetrics(newestFirst, threshold, label) {
+	const chrono = [...newestFirst].reverse();
+	const indices = [];
+	for (let i = 0; i < chrono.length; i++) if (chrono[i] >= threshold) indices.push(i);
+	const gaps = [];
+	for (let k = 1; k < indices.length; k++) gaps.push(indices[k] - indices[k - 1] - 1);
+	gaps.sort((a, b) => a - b);
+	let currentGap = 0;
+	for (let i = 0; i < newestFirst.length; i++) {
+		if (newestFirst[i] >= threshold) break;
+		currentGap++;
+	}
+	return {
+		threshold,
+		label,
+		count: indices.length,
+		currentGap,
+		minGap: gaps.length > 0 ? gaps[0] : null,
+		medianGap: gaps.length > 0 ? median(gaps) : null,
+		maxGap: gaps.length > 0 ? gaps[gaps.length - 1] : null
+	};
+}
+function analyzeQuantAviator(multipliersNewestFirst) {
+	const clean = multipliersNewestFirst.filter(isValidAviatorValue).map((m) => Math.round(m * 100) / 100).slice(0, 500);
+	const total = clean.length;
+	const counts = {
+		under_1_50: 0,
+		"1_50_to_1_99": 0,
+		"2_00_to_4_99": 0,
+		"5_00_to_9_99": 0,
+		over_10_00: 0
+	};
+	for (const m of clean) counts[classifyAviatorBand(m)]++;
+	const bands = [
+		{
+			key: "under_1_50",
+			label: "< 1.50x",
+			colorClass: "text-sky-300"
+		},
+		{
+			key: "1_50_to_1_99",
+			label: "1.50x – 1.99x",
+			colorClass: "text-blue-300"
+		},
+		{
+			key: "2_00_to_4_99",
+			label: "2.00x – 4.99x",
+			colorClass: "text-purple-300"
+		},
+		{
+			key: "5_00_to_9_99",
+			label: "5.00x – 9.99x",
+			colorClass: "text-violet-300"
+		},
+		{
+			key: "over_10_00",
+			label: ">= 10.00x",
+			colorClass: "text-fuchsia-300"
+		}
+	].map((b) => ({
+		...b,
+		count: counts[b.key],
+		pct: total > 0 ? counts[b.key] / total * 100 : 0
+	}));
+	let lowUnder2StreakCurrent = 0;
+	for (const m of clean) if (m < 2) lowUnder2StreakCurrent++;
+	else break;
+	let lowUnder150StreakCurrent = 0;
+	for (const m of clean) if (m < 1.5) lowUnder150StreakCurrent++;
+	else break;
+	let lowUnder2StreakMax = 0;
+	let run2 = 0;
+	let lowUnder150StreakMax = 0;
+	let run150 = 0;
+	for (let i = total - 1; i >= 0; i--) {
+		const m = clean[i];
+		if (m < 2) {
+			run2++;
+			if (run2 > lowUnder2StreakMax) lowUnder2StreakMax = run2;
+		} else run2 = 0;
+		if (m < 1.5) {
+			run150++;
+			if (run150 > lowUnder150StreakMax) lowUnder150StreakMax = run150;
+		} else run150 = 0;
+	}
+	const recent10 = clean.slice(0, 10);
+	const recent20 = clean.slice(0, 20);
+	const avg = (arr) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+	const movingAvg10 = avg(recent10);
+	const movingAvg20 = avg(recent20);
+	const overallAvg = avg(clean);
+	const medianAll = median(clean);
+	const variance20 = recent20.length > 0 ? recent20.reduce((acc, m) => acc + (m - movingAvg20) ** 2, 0) / recent20.length : 0;
+	const recent20StdDev = Math.sqrt(variance20);
+	const recent20CoefVar = movingAvg20 > 0 ? recent20StdDev / movingAvg20 : 0;
+	const chrono = [...clean].reverse();
+	let postPinkSamples = 0;
+	let postPinkLow = 0;
+	for (let i = 0; i < chrono.length - 1; i++) if (chrono[i] >= 10) {
+		postPinkSamples++;
+		if (chrono[i + 1] < 1.5) postPinkLow++;
+	}
+	return {
+		totalRounds: total,
+		lastMultiplier: total > 0 ? clean[0] : null,
+		bands,
+		lowUnder2StreakCurrent,
+		lowUnder2StreakMax,
+		lowUnder150StreakCurrent,
+		lowUnder150StreakMax,
+		purpleGap: computeGapMetrics(clean, 2, "Velas Roxas (>= 2.00x)"),
+		pinkGap: computeGapMetrics(clean, 10, "Velas Rosas (>= 10.00x)"),
+		movingAvg10,
+		movingAvg20,
+		overallAvg,
+		medianAll,
+		recent20StdDev,
+		recent20CoefVar,
+		postPinkUnder150Pct: postPinkSamples > 0 ? postPinkLow / postPinkSamples * 100 : null,
+		postPinkSamples,
+		recent20Multipliers: recent20
+	};
+}
+// src/engine/marketRegimeDetector.ts
+function shannonEntropyNormalized(counts) {
+	const total = counts.reduce((a, b) => a + b, 0);
+	if (total === 0 || counts.length <= 1) return 100;
+	let h = 0;
+	for (const c of counts) {
+		if (c <= 0) continue;
+		const p = c / total;
+		h -= p * Math.log2(p);
+	}
+	const maxH = Math.log2(counts.length);
+	return maxH > 0 ? h / maxH * 100 : 100;
+}
+function evaluateRouletteWindow(spinsNewestFirst, windowSize) {
+	const slice = spinsNewestFirst.slice(0, windowSize);
+	const n = slice.length;
+	if (n < 8) return {
+		windowSize,
+		availableRounds: n,
+		unpredictabilityPct: 80,
+		entropyPct: 100
+	};
+	const dozCounts = [
+		0,
+		0,
+		0
+	];
+	let redCount = 0;
+	let blackCount = 0;
+	let zeroCount = 0;
+	for (const num of slice) {
+		const col = getRouletteColor(num);
+		if (col === "green") zeroCount++;
+		else if (col === "red") redCount++;
+		else blackCount++;
+		if (num >= 1 && num <= 12) dozCounts[0]++;
+		else if (num >= 13 && num <= 24) dozCounts[1]++;
+		else if (num >= 25 && num <= 36) dozCounts[2]++;
+	}
+	const dozEntropy = shannonEntropyNormalized(dozCounts);
+	let transitions = 0;
+	let pairs = 0;
+	for (let i = 0; i < n - 1; i++) {
+		const a = getRouletteColor(slice[i]);
+		const b = getRouletteColor(slice[i + 1]);
+		if (a !== "green" && b !== "green") {
+			pairs++;
+			if (a !== b) transitions++;
+		}
+	}
+	const altRate = pairs > 0 ? transitions / pairs * 100 : 50;
+	const uniqueRatio = new Set(slice).size / Math.min(37, n);
+	const pbTotal = redCount + blackCount;
+	const colorImbalance = pbTotal > 0 ? Math.abs(redCount - blackCount) / pbTotal * 100 : 0;
+	const zeroPct = zeroCount / n * 100;
+	const zeroPenalty = zeroPct >= 8 ? 22 : zeroPct >= 5.5 ? 10 : 0;
+	let score = dozEntropy * .45 + uniqueRatio * 28 + Math.max(0, 22 - colorImbalance * .7) + (altRate > 75 || altRate >= 42 && altRate <= 58 ? 8 : 0) + zeroPenalty;
+	score = Math.max(12, Math.min(98, Math.round(score)));
+	return {
+		windowSize,
+		availableRounds: n,
+		unpredictabilityPct: score,
+		entropyPct: Math.round(dozEntropy)
+	};
+}
+function evaluateAviatorWindow(multsNewestFirst, windowSize) {
+	const slice = multsNewestFirst.slice(0, windowSize);
+	const n = slice.length;
+	if (n < 8) return {
+		windowSize,
+		availableRounds: n,
+		unpredictabilityPct: 80,
+		entropyPct: 100
+	};
+	const low150Pct = slice.filter((m) => m < 1.5).length / n * 100;
+	const bandEntropy = shannonEntropyNormalized([
+		slice.filter((m) => m < 1.5).length,
+		slice.filter((m) => m >= 1.5 && m < 2).length,
+		slice.filter((m) => m >= 2 && m < 5).length,
+		slice.filter((m) => m >= 5).length
+	]);
+	const avg = slice.reduce((a, b) => a + b, 0) / n;
+	const variance = slice.reduce((acc, m) => acc + (m - avg) ** 2, 0) / n;
+	const coefVar = avg > 0 ? Math.sqrt(variance) / avg : 1;
+	let lowStreak = 0;
+	for (const m of slice) if (m < 1.5) lowStreak++;
+	else break;
+	let score = 26 + bandEntropy * .25;
+	if (low150Pct >= 58) score += 28;
+	else if (low150Pct >= 48) score += 14;
+	if (lowStreak >= 3) score += 16;
+	if (coefVar >= 1.55) score += 16;
+	score = Math.max(15, Math.min(98, Math.round(score)));
+	return {
+		windowSize,
+		availableRounds: n,
+		unpredictabilityPct: score,
+		entropyPct: Math.round(bandEntropy)
+	};
+}
+function detectMarketRegime(params) {
+	const { game, valuesNewestFirst } = params;
+	const thresholdPct = params.thresholdPct ?? 60;
+	const minSampleSize = params.minSampleSize ?? 12;
+	const n = valuesNewestFirst.length;
+	if (n < minSampleSize) return {
+		game,
+		sampleSize: n,
+		unpredictabilityPct: 100,
+		thresholdPct,
+		blockEntries: true,
+		bannerText: `NÃO APOSTAR — AMOSTRA INSUFICIENTE (${n}/${minSampleSize} RODADAS)`,
+		regimeStatus: "AMOSTRA_INSUFICIENTE",
+		reasons: [`Foram recolhidas ${n} rodadas; mínimo exigido de ${minSampleSize} rodadas para validar o regime estatístico.`],
+		windows: []
+	};
+	const windows = [
+		20,
+		50,
+		100
+	].map((ws) => game === "roulette" ? evaluateRouletteWindow(valuesNewestFirst, ws) : evaluateAviatorWindow(valuesNewestFirst, ws));
+	const w20 = windows[0].unpredictabilityPct;
+	const w50 = windows[1].unpredictabilityPct;
+	const w100 = windows[2].unpredictabilityPct;
+	const combinedScore = Math.round(w20 * .55 + w50 * .3 + w100 * .15);
+	const reasons = [];
+	if (game === "roulette") {
+		const r20 = valuesNewestFirst.slice(0, 20);
+		const zeroCount = r20.filter((v) => v === 0).length;
+		const red = r20.filter((v) => getRouletteColor(v) === "red").length;
+		const black = r20.filter((v) => getRouletteColor(v) === "black").length;
+		const dozCounts = [
+			r20.filter((v) => v >= 1 && v <= 12).length,
+			r20.filter((v) => v >= 13 && v <= 24).length,
+			r20.filter((v) => v >= 25 && v <= 36).length
+		];
+		if (zeroCount >= 2) reasons.push(`Excesso anômalo de Zero: ${zeroCount}x nas últimas ${r20.length} rodadas (${(zeroCount / r20.length * 100).toFixed(1)}% vs 2.7% esperado).`);
+		if (Math.abs(red - black) <= 2) reasons.push(`Equilíbrio/alternância dispersa entre Vermelho (${red}) e Preto (${black}) sem tendência firme.`);
+		if (Math.max(...dozCounts) - Math.min(...dozCounts) <= 2) reasons.push(`Entropia elevada nas dúzias (${dozCounts.join(" / ")}): nenhum setor domina a janela.`);
+		if (n >= 40) {
+			const prior = valuesNewestFirst.slice(20, 60);
+			const rRedPct = red / Math.max(1, r20.length) * 100;
+			const pRedPct = prior.filter((v) => getRouletteColor(v) === "red").length / Math.max(1, prior.length) * 100;
+			if (Math.abs(rRedPct - pRedPct) >= 22) reasons.push(`Desvio abrupto de distribuição recente (${rRedPct.toFixed(0)}% Vermelho vs ${pRedPct.toFixed(0)}% no bloco anterior).`);
+		}
+	} else {
+		const r20 = valuesNewestFirst.slice(0, 20);
+		const low150 = r20.filter((m) => m < 1.5).length;
+		const low150Pct = low150 / Math.max(1, r20.length) * 100;
+		let lowStreak = 0;
+		for (const m of r20) if (m < 1.5) lowStreak++;
+		else break;
+		if (low150Pct >= 50) reasons.push(`Zona de crashes baixos: ${low150}/${r20.length} voos (${low150Pct.toFixed(0)}%) abaixo de 1.50x.`);
+		if (lowStreak >= 3) reasons.push(`Sequência ativa de ${lowStreak} crashes seguidos abaixo de 1.50x.`);
+		const pinks = r20.filter((m) => m >= 10).length;
+		if (pinks >= 2 && low150Pct >= 45) reasons.push(`Volatilidade errática: ${pinks} picos >=10x misturados com quedas frequentes <1.50x.`);
+	}
+	if (reasons.length === 0) reasons.push(combinedScore > thresholdPct ? `Entropia elevada (${windows[0].entropyPct}%) e dispersão estatística acima do limiar de ${thresholdPct}%.` : `Variância e entropia dentro da faixa operável (${combinedScore}% <= ${thresholdPct}%).`);
+	const blockEntries = combinedScore > thresholdPct;
+	const regimeStatus = blockEntries ? "IMPREVISIVEL" : combinedScore >= thresholdPct - 12 ? "CAUTELA" : "ESTAVEL";
+	return {
+		game,
+		sampleSize: n,
+		unpredictabilityPct: combinedScore,
+		thresholdPct,
+		blockEntries,
+		bannerText: blockEntries ? "NÃO APOSTAR — IMPREVISIBILIDADE ELEVADA (AGUARDAR ESTABILIZAÇÃO)" : regimeStatus === "CAUTELA" ? "CAUTELA MODERADA — EXIGIR CONSENSO E BANCA REDUZIDA" : "REGIME OPERÁVEL — DISTRIBUIÇÃO DENTRO DOS PARÂMETROS",
+		regimeStatus,
+		reasons,
+		windows
+	};
+}
+// src/engine/strategyBuilder.ts
+var LS_KEY_STRATEGIES = "quantlab_strategies_v1";
+var DEFAULT_QUANT_STRATEGIES = [
+	{
+		id: "r_absence_dozen",
+		name: "Ausência de Dúzia (Atraso >= 5)",
+		game: "roulette",
+		enabled: true,
+		isCustom: false,
+		isEvolved: false,
+		ruleType: "roulette_absence",
+		params: { minDelay: 5 },
+		description: "Atua quando uma dúzia completa 5+ rodadas ausente, visando retorno estatístico (retorno 3x)."
+	},
+	{
+		id: "r_streak_break_color",
+		name: "Quebra de Corrida de Cor (3x+)",
+		game: "roulette",
+		enabled: true,
+		isCustom: false,
+		isEvolved: false,
+		ruleType: "roulette_streak_break",
+		params: { minStreak: 3 },
+		description: "Aponta para a cor oposta após 3+ saídas seguidas de Vermelho ou Preto."
+	},
+	{
+		id: "r_streak_follow_color",
+		name: "Continuação de Tendência (3x+)",
+		game: "roulette",
+		enabled: true,
+		isCustom: false,
+		isEvolved: false,
+		ruleType: "roulette_streak_follow",
+		params: { minStreak: 3 },
+		description: "Acompanha corrida ativa de Vermelho/Preto quando o histórico sugere persistência."
+	},
+	{
+		id: "r_sector_confluence",
+		name: "Confluência de Setor & Vizinhos ±2",
+		game: "roulette",
+		enabled: true,
+		isCustom: false,
+		isEvolved: false,
+		ruleType: "roulette_sector_confluence",
+		params: {
+			windowSize: 20,
+			minConcentrationPct: 48
+		},
+		description: "Foca no setor físico dominante (Voisins/Tiers/Orphelins) quando concentra >= 48% em 20 giros."
+	},
+	{
+		id: "a_conservative_135",
+		name: "Aviator Saída Curta Estável (1.35x)",
+		game: "aviator",
+		enabled: true,
+		isCustom: false,
+		isEvolved: false,
+		ruleType: "aviator_conservative_stable",
+		params: {
+			targetMultiplier: 1.35,
+			lookbackNoInstant: 3
+		},
+		description: "Alvo 1.35x apenas quando as últimas 3 rodadas não tiveram crash instantâneo (<1.10x)."
+	},
+	{
+		id: "a_post_low_recovery_155",
+		name: "Recuperação Pós-Sequência Baixa (1.55x)",
+		game: "aviator",
+		enabled: true,
+		isCustom: false,
+		isEvolved: false,
+		ruleType: "aviator_post_low_recovery",
+		params: {
+			minStreak: 2,
+			lowThreshold: 1.5,
+			targetMultiplier: 1.55
+		},
+		description: "Ativa após 2+ voos consecutivos abaixo de 1.50x buscando cashout em 1.55x."
+	},
+	{
+		id: "a_window_freq_170",
+		name: "Frequência Recente >= 1.70x",
+		game: "aviator",
+		enabled: true,
+		isCustom: false,
+		isEvolved: false,
+		ruleType: "aviator_window_frequency",
+		params: {
+			windowSize: 15,
+			targetMultiplier: 1.7,
+			minHitRatePct: 53
+		},
+		description: "Entra em 1.70x quando pelo menos 53% dos últimos 15 voos atingiram >= 1.70x."
+	},
+	{
+		id: "a_purple_cluster_200",
+		name: "Bloco Roxo Ativo (2.00x)",
+		game: "aviator",
+		enabled: true,
+		isCustom: false,
+		isEvolved: false,
+		ruleType: "aviator_purple_cluster",
+		params: {
+			windowSize: 8,
+			minPurpleCount: 4,
+			targetMultiplier: 2
+		},
+		description: "Entra em 2.00x durante blocos com >= 4 velas roxas (>= 2.00x) nas últimas 8 rodadas."
+	}
+];
+function loadQuantStrategies() {
+	try {
+		if (typeof localStorage === "undefined") return DEFAULT_QUANT_STRATEGIES;
+		const raw = localStorage.getItem(LS_KEY_STRATEGIES);
+		if (!raw) return DEFAULT_QUANT_STRATEGIES;
+		const parsed = JSON.parse(raw);
+		if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_QUANT_STRATEGIES;
+		return parsed;
+	} catch {
+		return DEFAULT_QUANT_STRATEGIES;
+	}
+}
+function saveQuantStrategies(strategies) {
+	try {
+		if (typeof localStorage === "undefined") return;
+		localStorage.setItem(LS_KEY_STRATEGIES, JSON.stringify(strategies));
+	} catch {}
+}
+function inactiveSignal(reason) {
+	return {
+		active: false,
+		marketLabel: "Aguardar",
+		targetDescription: "Sem entrada",
+		payoutMultiplier: 1,
+		confidencePct: 0,
+		reason,
+		isHit: () => false
+	};
+}
+/**
+* Avalia estritamente `point-in-time` usando APENAS `historyBeforeNewestFirst` (nunca olha o futuro).
+*/
+function evaluateStrategyPointInTime(strategy, historyBeforeNewestFirst) {
+	const hist = historyBeforeNewestFirst;
+	const p = strategy.params;
+	if (strategy.game === "roulette") {
+		if (strategy.ruleType === "roulette_absence") {
+			const minDelay = p.minDelay ?? 5;
+			if (hist.length < 8) return inactiveSignal("Aguardando >= 8 giros.");
+			const top = [...[
+				1,
+				2,
+				3
+			].map((doz) => {
+				let delay = 0;
+				for (const n of hist) {
+					if (getDozenOf(n) === doz) break;
+					delay++;
+				}
+				return {
+					doz,
+					delay,
+					label: `${doz}ª Dúzia`
+				};
+			})].sort((a, b) => b.delay - a.delay)[0];
+			if (top.delay >= minDelay) return {
+				active: true,
+				marketLabel: top.label,
+				targetDescription: `${top.label} (${top.doz === 1 ? "1–12" : top.doz === 2 ? "13–24" : "25–36"})`,
+				payoutMultiplier: 3,
+				confidencePct: Math.min(82, 48 + (top.delay - minDelay) * 6),
+				reason: `${top.label} ausente há ${top.delay} giros (>= ${minDelay}).`,
+				isHit: (actual) => getDozenOf(actual) === top.doz
+			};
+			return inactiveSignal(`Maior atraso de dúzia: ${top.delay}/${minDelay} giros.`);
+		}
+		if (strategy.ruleType === "roulette_streak_break" || strategy.ruleType === "roulette_streak_follow") {
+			const minStreak = p.minStreak ?? 3;
+			if (hist.length < minStreak) return inactiveSignal(`Aguardando >= ${minStreak} giros.`);
+			const firstColor = getRouletteColor(hist[0]);
+			if (firstColor === "green") return inactiveSignal("Último giro foi Zero (0).");
+			let streak = 0;
+			for (const n of hist) if (getRouletteColor(n) === firstColor) streak++;
+			else break;
+			if (streak < minStreak) return inactiveSignal(`Corrida atual de cor: ${streak}/${minStreak}.`);
+			const targetColor = strategy.ruleType === "roulette_streak_break" ? firstColor === "red" ? "black" : "red" : firstColor;
+			const targetLabel = targetColor === "red" ? "Vermelho" : "Preto";
+			return {
+				active: true,
+				marketLabel: `Cor: ${targetLabel}`,
+				targetDescription: targetLabel,
+				payoutMultiplier: 2,
+				confidencePct: Math.min(78, 52 + (streak - minStreak) * 6),
+				reason: `Sequência de ${streak}× ${firstColor === "red" ? "Vermelho" : "Preto"} (${strategy.ruleType === "roulette_streak_break" ? "reversão" : "continuação"}).`,
+				isHit: (actual) => getRouletteColor(actual) === targetColor
+			};
+		}
+		if (strategy.ruleType === "roulette_sector_confluence") {
+			const win = p.windowSize ?? 20;
+			const minPct = p.minConcentrationPct ?? 48;
+			if (hist.length < 10) return inactiveSignal("Aguardando >= 10 giros.");
+			const slice = hist.slice(0, win);
+			const vSet = new Set(VOISINS_NUMBERS);
+			const tSet = new Set(TIERS_NUMBERS);
+			const oSet = new Set(ORPHELINS_NUMBERS);
+			const best = [
+				{
+					name: "Voisins du Zéro",
+					set: vSet,
+					count: slice.filter((n) => vSet.has(n)).length,
+					expected: 17 / 37 * 100
+				},
+				{
+					name: "Tiers du Cylindre",
+					set: tSet,
+					count: slice.filter((n) => tSet.has(n)).length,
+					expected: 12 / 37 * 100
+				},
+				{
+					name: "Orphelins",
+					set: oSet,
+					count: slice.filter((n) => oSet.has(n)).length,
+					expected: 8 / 37 * 100
+				}
+			].map((c) => ({
+				...c,
+				pct: c.count / slice.length * 100,
+				edge: c.count / slice.length * 100 - c.expected
+			})).sort((a, b) => b.edge - a.edge)[0];
+			if (best.pct >= minPct) {
+				const anchor = slice.find((n) => best.set.has(n)) ?? 0;
+				const nb = getWheelNeighbors(anchor, 2);
+				const nbSet = new Set(nb);
+				const payout = 36 / best.set.size;
+				return {
+					active: true,
+					marketLabel: `${best.name} + Vizinhos ${anchor} (±2)`,
+					targetDescription: `${best.name} (Âncora ${anchor}: ${nb.join(", ")})`,
+					payoutMultiplier: payout,
+					confidencePct: Math.min(80, 50 + Math.round(best.edge)),
+					reason: `${best.name} atingiu ${best.pct.toFixed(0)}% nos últimos ${slice.length} giros.`,
+					isHit: (actual) => best.set.has(actual) || nbSet.has(actual)
+				};
+			}
+			return inactiveSignal(`Concentração máxima (${best.name}): ${best.pct.toFixed(0)}% < ${minPct}%.`);
+		}
+	}
+	if (strategy.ruleType === "aviator_conservative_stable") {
+		const target = p.targetMultiplier ?? 1.35;
+		const lookback = p.lookbackNoInstant ?? 3;
+		if (hist.length < lookback) return inactiveSignal(`Aguardando >= ${lookback} rodadas.`);
+		if (!hist.slice(0, lookback).some((m) => m < 1.1) && hist[0] >= 1.15) return {
+			active: true,
+			marketLabel: `Cashout ${target.toFixed(2)}x`,
+			targetDescription: `${target.toFixed(2)}x`,
+			payoutMultiplier: target,
+			confidencePct: 68,
+			reason: `Últimas ${lookback} rodadas estáveis sem crash < 1.10x.`,
+			isHit: (actual) => actual >= target
+		};
+		return inactiveSignal("Crash recente muito baixo (<1.10x); aguardar estabilização.");
+	}
+	if (strategy.ruleType === "aviator_post_low_recovery") {
+		const minStreak = p.minStreak ?? 2;
+		const lowThresh = p.lowThreshold ?? 1.5;
+		const target = p.targetMultiplier ?? 1.55;
+		if (hist.length < minStreak) return inactiveSignal(`Aguardando >= ${minStreak} rodadas.`);
+		let lowStreak = 0;
+		for (const m of hist) if (m < lowThresh) lowStreak++;
+		else break;
+		if (lowStreak >= minStreak) return {
+			active: true,
+			marketLabel: `Cashout ${target.toFixed(2)}x`,
+			targetDescription: `${target.toFixed(2)}x`,
+			payoutMultiplier: target,
+			confidencePct: Math.min(76, 54 + (lowStreak - minStreak) * 5),
+			reason: `${lowStreak} crashes seguidos < ${lowThresh.toFixed(2)}x.`,
+			isHit: (actual) => actual >= target
+		};
+		return inactiveSignal(`Sequência baixa atual: ${lowStreak}/${minStreak}.`);
+	}
+	if (strategy.ruleType === "aviator_window_frequency") {
+		const win = p.windowSize ?? 15;
+		const target = p.targetMultiplier ?? 1.7;
+		const minHit = p.minHitRatePct ?? 53;
+		if (hist.length < win) return inactiveSignal(`Aguardando >= ${win} rodadas.`);
+		const rate = hist.slice(0, win).filter((m) => m >= target).length / win * 100;
+		if (rate >= minHit) return {
+			active: true,
+			marketLabel: `Cashout ${target.toFixed(2)}x`,
+			targetDescription: `${target.toFixed(2)}x`,
+			payoutMultiplier: target,
+			confidencePct: Math.min(78, Math.round(rate)),
+			reason: `${rate.toFixed(0)}% dos últimos ${win} voos atingiram >= ${target.toFixed(2)}x.`,
+			isHit: (actual) => actual >= target
+		};
+		return inactiveSignal(`Frequência >= ${target.toFixed(2)}x em ${rate.toFixed(0)}% (< ${minHit}%).`);
+	}
+	if (strategy.ruleType === "aviator_purple_cluster") {
+		const win = p.windowSize ?? 8;
+		const minPurple = p.minPurpleCount ?? 4;
+		const target = p.targetMultiplier ?? 2;
+		if (hist.length < win) return inactiveSignal(`Aguardando >= ${win} rodadas.`);
+		const purples = hist.slice(0, win).filter((m) => m >= 2).length;
+		if (purples >= minPurple && hist[0] < 10) return {
+			active: true,
+			marketLabel: `Cashout ${target.toFixed(2)}x`,
+			targetDescription: `${target.toFixed(2)}x`,
+			payoutMultiplier: target,
+			confidencePct: 60,
+			reason: `${purples}/${win} velas roxas (>= 2.00x) na janela recente.`,
+			isHit: (actual) => actual >= target
+		};
+		return inactiveSignal(`Velas roxas recentes: ${purples}/${win} (mínimo ${minPurple}).`);
+	}
+	return inactiveSignal("Regra não reconhecida.");
+}
+// src/engine/continuousLearning.ts
+function backtestPointInTimeSlice(strategy, historyNewestFirst, windowKey, label, stakeAoa) {
+	const chrono = [...windowKey === "all" ? historyNewestFirst : historyNewestFirst.slice(0, Math.min(historyNewestFirst.length, Number(windowKey)))].reverse();
+	let entries = 0;
+	let hits = 0;
+	let netPnlAoa = 0;
+	let peakEquity = 0;
+	let maxDrawdownAoa = 0;
+	for (let i = 3; i < chrono.length; i++) {
+		const sig = evaluateStrategyPointInTime(strategy, chrono.slice(0, i).reverse());
+		if (!sig.active) continue;
+		const actual = chrono[i];
+		const hit = sig.isHit(actual);
+		const pnl = hit ? stakeAoa * (sig.payoutMultiplier - 1) : -stakeAoa;
+		entries++;
+		if (hit) hits++;
+		netPnlAoa += pnl;
+		if (netPnlAoa > peakEquity) peakEquity = netPnlAoa;
+		const dd = peakEquity - netPnlAoa;
+		if (dd > maxDrawdownAoa) maxDrawdownAoa = dd;
+	}
+	const staked = entries * stakeAoa;
+	const hitRatePct = entries > 0 ? hits / entries * 100 : 0;
+	const roiPct = staked > 0 ? netPnlAoa / staked * 100 : 0;
+	const baseRef = Math.max(stakeAoa * 10, staked);
+	const maxDrawdownPct = baseRef > 0 ? Math.min(100, maxDrawdownAoa / baseRef * 100) : 0;
+	return {
+		windowKey,
+		label,
+		entries,
+		hits,
+		hitRatePct,
+		roiPct,
+		netPnlAoa,
+		maxDrawdownAoa,
+		maxDrawdownPct
+	};
+}
+function evaluateContinuousLearning(params) {
+	const { game, historyNewestFirst, strategies, stakeAoa } = params;
+	const gameStrategies = strategies.filter((s) => s.game === game && s.enabled);
+	const windowSpecs = [
+		{
+			key: "30",
+			label: "Últimas 30"
+		},
+		{
+			key: "100",
+			label: "Últimas 100"
+		},
+		{
+			key: "300",
+			label: "Últimas 300"
+		},
+		{
+			key: "all",
+			label: "Todo Histórico"
+		}
+	];
+	const chronoAll = [...historyNewestFirst].reverse();
+	const splitIdx = Math.max(6, Math.floor(chronoAll.length * .65));
+	const evaluations = gameStrategies.map((strategy) => {
+		const byWindow = windowSpecs.map((w) => backtestPointInTimeSlice(strategy, historyNewestFirst, w.key, w.label, stakeAoa));
+		const overall = byWindow[byWindow.length - 1];
+		let oosEntries = 0;
+		let oosHits = 0;
+		let oosPnl = 0;
+		if (chronoAll.length >= 16) for (let i = splitIdx; i < chronoAll.length; i++) {
+			const sig = evaluateStrategyPointInTime(strategy, chronoAll.slice(0, i).reverse());
+			if (!sig.active) continue;
+			oosEntries++;
+			const hit = sig.isHit(chronoAll[i]);
+			if (hit) oosHits++;
+			oosPnl += hit ? stakeAoa * (sig.payoutMultiplier - 1) : -stakeAoa;
+		}
+		const outOfSampleHitRatePct = oosEntries > 0 ? oosHits / oosEntries * 100 : overall.hitRatePct;
+		const outOfSampleRoiPct = oosEntries > 0 ? oosPnl / (oosEntries * stakeAoa) * 100 : overall.roiPct;
+		const w30 = byWindow[0];
+		const w100 = byWindow[1];
+		const stabilityPenalty = w30.entries >= 3 && w100.entries >= 5 ? Math.min(25, Math.abs(w30.hitRatePct - w100.hitRatePct) * .5) : 10;
+		const ddPenalty = Math.min(35, overall.maxDrawdownPct * .6);
+		const roiBonus = Math.max(-25, Math.min(35, outOfSampleRoiPct * .8));
+		const sampleBonus = overall.entries >= 10 ? 15 : overall.entries >= 4 ? 7 : 0;
+		const consistencyScore = Math.max(0, Math.min(100, Math.round(50 + roiBonus + sampleBonus - stabilityPenalty - ddPenalty)));
+		return {
+			strategy,
+			currentSignal: evaluateStrategyPointInTime(strategy, historyNewestFirst),
+			overall,
+			byWindow,
+			consistencyScore,
+			outOfSampleHitRatePct,
+			outOfSampleRoiPct,
+			outOfSampleEntries: oosEntries
+		};
+	});
+	evaluations.sort((a, b) => b.consistencyScore - a.consistencyScore || b.outOfSampleRoiPct - a.outOfSampleRoiPct || b.overall.hitRatePct - a.overall.hitRatePct);
+	const topStrategy = evaluations[0] ?? null;
+	const activeBestSignal = evaluations.find((ev) => ev.currentSignal.active) ?? null;
+	const evolutionNotes = [];
+	if (historyNewestFirst.length < 16) evolutionNotes.push(`Recolher >= 16 rodadas (atual: ${historyNewestFirst.length}) para habilitar validação Out-of-Sample e evolução.`);
+	else if (topStrategy) evolutionNotes.push(`Melhor consistência atual: "${topStrategy.strategy.name}" (Score ${topStrategy.consistencyScore}/100 · OOS ${topStrategy.outOfSampleHitRatePct.toFixed(1)}% em ${topStrategy.outOfSampleEntries} entradas).`);
+	return {
+		game,
+		totalRounds: historyNewestFirst.length,
+		evaluations,
+		topStrategy,
+		activeBestSignal,
+		evolutionNotes
+	};
+}
+function generateMutatedVariants(base) {
+	const variants = [];
+	const p = base.params;
+	const tag = Date.now().toString(36).slice(-4);
+	if (base.ruleType === "roulette_absence") {
+		const cur = p.minDelay ?? 5;
+		for (const d of [
+			cur - 1,
+			cur + 1,
+			cur + 2
+		].filter((x) => x >= 3 && x <= 10)) variants.push({
+			...base,
+			id: `${base.id}_evo_d${d}_${tag}`,
+			name: `${base.name.split(" (")[0]} (Atraso >= ${d} · Evoluída)`,
+			isCustom: true,
+			isEvolved: true,
+			parentId: base.id,
+			params: {
+				...p,
+				minDelay: d
+			}
+		});
+	} else if (base.ruleType === "roulette_streak_break" || base.ruleType === "roulette_streak_follow") {
+		const cur = p.minStreak ?? 3;
+		for (const s of [cur + 1, cur - 1].filter((x) => x >= 2 && x <= 6)) variants.push({
+			...base,
+			id: `${base.id}_evo_s${s}_${tag}`,
+			name: `${base.name.split(" (")[0]} (${s}x+ · Evoluída)`,
+			isCustom: true,
+			isEvolved: true,
+			parentId: base.id,
+			params: {
+				...p,
+				minStreak: s
+			}
+		});
+	} else if (base.ruleType === "aviator_post_low_recovery") {
+		const curStreak = p.minStreak ?? 2;
+		const curTarget = p.targetMultiplier ?? 1.55;
+		const combos = [
+			{
+				minStreak: Math.min(4, curStreak + 1),
+				targetMultiplier: 1.45
+			},
+			{
+				minStreak: Math.min(4, curStreak + 1),
+				targetMultiplier: 1.65
+			},
+			{
+				minStreak: curStreak,
+				targetMultiplier: Math.max(1.25, Math.round((curTarget - .15) * 100) / 100)
+			}
+		];
+		for (const c of combos) variants.push({
+			...base,
+			id: `${base.id}_evo_${c.minStreak}s_${Math.round(c.targetMultiplier * 100)}_${tag}`,
+			name: `Pós-Baixo ${c.minStreak}x -> ${c.targetMultiplier.toFixed(2)}x (Evoluída)`,
+			isCustom: true,
+			isEvolved: true,
+			parentId: base.id,
+			params: {
+				...p,
+				minStreak: c.minStreak,
+				targetMultiplier: c.targetMultiplier
+			}
+		});
+	} else if (base.ruleType === "aviator_window_frequency") {
+		const curHit = p.minHitRatePct ?? 53;
+		for (const delta of [
+			-5,
+			5,
+			8
+		]) {
+			const nextHit = Math.max(45, Math.min(75, curHit + delta));
+			const nextTarget = delta > 0 ? 1.5 : 1.85;
+			variants.push({
+				...base,
+				id: `${base.id}_evo_f${nextHit}_${tag}`,
+				name: `Freq. >= ${nextTarget.toFixed(2)}x (${nextHit}% · Evoluída)`,
+				isCustom: true,
+				isEvolved: true,
+				parentId: base.id,
+				params: {
+					...p,
+					minHitRatePct: nextHit,
+					targetMultiplier: nextTarget
+				}
+			});
+		}
+	} else if (base.ruleType === "aviator_conservative_stable") {
+		const curLook = p.lookbackNoInstant ?? 3;
+		for (const nextLook of [curLook + 1, curLook + 2].filter((x) => x <= 6)) variants.push({
+			...base,
+			id: `${base.id}_evo_l${nextLook}_${tag}`,
+			name: `Saída Estável 1.40x (${nextLook} rod. · Evoluída)`,
+			isCustom: true,
+			isEvolved: true,
+			parentId: base.id,
+			params: {
+				...p,
+				lookbackNoInstant: nextLook,
+				targetMultiplier: 1.4
+			}
+		});
+	}
+	return variants;
+}
+/**
+* Gera variações das estratégias ativas, testa Out-of-Sample e promove apenas
+* variantes que superam o baseline em consistência e baixo drawdown.
+*/
+function evolveTopStrategies(params) {
+	const { game, historyNewestFirst, existingStrategies, stakeAoa } = params;
+	if (historyNewestFirst.length < 24) return {
+		promoted: [],
+		rejectedCount: 0,
+		summaryNote: `Mínimo 24 rodadas para evoluir estratégias Out-of-Sample (atual: ${historyNewestFirst.length}).`
+	};
+	const baseReport = evaluateContinuousLearning({
+		game,
+		historyNewestFirst,
+		strategies: existingStrategies,
+		stakeAoa
+	});
+	const bestBaseScore = baseReport.topStrategy?.consistencyScore ?? 50;
+	const bestBaseDd = baseReport.topStrategy?.overall.maxDrawdownPct ?? 100;
+	const activeBases = existingStrategies.filter((s) => s.game === game && s.enabled && !s.isEvolved).slice(0, 4);
+	const candidatePool = [];
+	for (const b of activeBases) candidatePool.push(...generateMutatedVariants(b));
+	if (candidatePool.length === 0) return {
+		promoted: [],
+		rejectedCount: 0,
+		summaryNote: "Nenhuma variação elegível gerada para o conjunto atual."
+	};
+	const candidateReport = evaluateContinuousLearning({
+		game,
+		historyNewestFirst,
+		strategies: candidatePool,
+		stakeAoa
+	});
+	const existingNames = new Set(existingStrategies.map((s) => s.name));
+	const promoted = [];
+	let rejectedCount = 0;
+	for (const ev of candidateReport.evaluations) {
+		const meetsEntries = ev.overall.entries >= 4;
+		const beatsBaseline = ev.consistencyScore >= bestBaseScore + 2 && ev.overall.maxDrawdownPct <= Math.max(25, bestBaseDd + 5);
+		const positiveOrBetterRoi = ev.outOfSampleRoiPct > -5;
+		if (meetsEntries && beatsBaseline && positiveOrBetterRoi && !existingNames.has(ev.strategy.name)) {
+			promoted.push(ev.strategy);
+			existingNames.add(ev.strategy.name);
+			if (promoted.length >= 2) break;
+		} else rejectedCount++;
+	}
+	const summaryNote = promoted.length > 0 ? `Motor de Evolução promoveu ${promoted.length} variante(s) validada(s) fora da amostra (${rejectedCount} descartadas por menor consistência).` : `Nenhuma mutação superou as estratégias atuais em consistência e baixo drawdown (${rejectedCount} testadas e rejeitadas).`;
+	return {
+		promoted,
+		rejectedCount,
+		summaryNote
+	};
+}
+// src/engine/aiQuantAnalyst.ts
+function buildQuantAnalystDecision(params) {
+	const { game, regime, learning, bankroll } = params;
+	const disclaimer = `Base: ${regime.sampleSize} rodadas observadas. Resultados passados em jogos RNG/Provably Fair não garantem retornos futuros.`;
+	const bankrollBlockReasons = [];
+	if (bankroll.sessionPnlAoa <= -Math.abs(bankroll.stopLossAoa)) bankrollBlockReasons.push(`Stop-Loss atingido (${bankroll.sessionPnlAoa.toFixed(0)} AOA <= -${bankroll.stopLossAoa.toFixed(0)} AOA).`);
+	if (bankroll.sessionPnlAoa >= Math.abs(bankroll.stopWinAoa)) bankrollBlockReasons.push(`Stop-Win atingido (+${bankroll.sessionPnlAoa.toFixed(0)} AOA >= +${bankroll.stopWinAoa.toFixed(0)} AOA).`);
+	if (bankroll.consecutiveLosses >= bankroll.pauseAfterConsecutiveLosses) bankrollBlockReasons.push(`Pausa automática após ${bankroll.consecutiveLosses} perdas consecutivas.`);
+	if (bankrollBlockReasons.length > 0) return {
+		decision: "NAO_APOSTAR",
+		headline: "NÃO APOSTAR — PROTEÇÃO DE BANCA ATIVA",
+		marketOrTarget: "Sessão Pausada",
+		confidencePct: 0,
+		authorStrategyName: "Gestor de Risco QuantLab",
+		statisticalJustification: bankrollBlockReasons.join(" "),
+		sampleSize: regime.sampleSize,
+		validatedHitRatePct: learning.topStrategy?.outOfSampleHitRatePct ?? 0,
+		bankrollBlocked: true,
+		bankrollBlockReasons,
+		disclaimer
+	};
+	if (regime.blockEntries) return {
+		decision: "NAO_APOSTAR",
+		headline: regime.bannerText,
+		marketOrTarget: "Aguardar estabilização",
+		confidencePct: 0,
+		authorStrategyName: "Detector de Imprevisibilidade",
+		statisticalJustification: regime.reasons.join(" "),
+		sampleSize: regime.sampleSize,
+		validatedHitRatePct: learning.topStrategy?.outOfSampleHitRatePct ?? 0,
+		bankrollBlocked: false,
+		bankrollBlockReasons: [],
+		disclaimer
+	};
+	const active = learning.activeBestSignal;
+	if (!active || !active.currentSignal.active) return {
+		decision: "NAO_APOSTAR",
+		headline: "AGUARDAR GATILHO — SEM CONFLUÊNCIA ATIVA",
+		marketOrTarget: "Sem entrada no momento",
+		confidencePct: 0,
+		authorStrategyName: learning.topStrategy?.strategy.name ?? "Motor de Estratégias",
+		statisticalJustification: learning.topStrategy?.currentSignal.reason ?? "Nenhuma estratégia habilitada satisfez os critérios estatísticos nesta rodada.",
+		sampleSize: regime.sampleSize,
+		validatedHitRatePct: learning.topStrategy?.outOfSampleHitRatePct ?? 0,
+		bankrollBlocked: false,
+		bankrollBlockReasons: [],
+		disclaimer
+	};
+	return {
+		decision: "ENTRAR",
+		headline: `ENTRAR — ${active.currentSignal.targetDescription}`,
+		marketOrTarget: active.currentSignal.targetDescription,
+		confidencePct: Math.min(92, Math.round((active.currentSignal.confidencePct + active.consistencyScore) / 2)),
+		authorStrategyName: active.strategy.name,
+		statisticalJustification: `${active.currentSignal.reason} Consistência ${active.consistencyScore}/100 · Acerto OOS ${active.outOfSampleHitRatePct.toFixed(1)}% (n=${active.overall.entries} entradas, drawdown máx ${active.overall.maxDrawdownPct.toFixed(1)}%).`,
+		sampleSize: regime.sampleSize,
+		validatedHitRatePct: active.outOfSampleHitRatePct,
+		bankrollBlocked: false,
+		bankrollBlockReasons: [],
+		disclaimer
+	};
+}
+// node_modules/regenerator-runtime/runtime.js
+var require_runtime = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	/**
+	* Copyright (c) 2014-present, Facebook, Inc.
+	*
+	* This source code is licensed under the MIT license found in the
+	* LICENSE file in the root directory of this source tree.
+	*/
+	var runtime = function(exports) {
+		"use strict";
+		var Op = Object.prototype;
+		var hasOwn = Op.hasOwnProperty;
+		var defineProperty = Object.defineProperty || function(obj, key, desc) {
+			obj[key] = desc.value;
+		};
+		var undefined;
+		var $Symbol = typeof Symbol === "function" ? Symbol : {};
+		var iteratorSymbol = $Symbol.iterator || "@@iterator";
+		var asyncIteratorSymbol = $Symbol.asyncIterator || "@@asyncIterator";
+		var toStringTagSymbol = $Symbol.toStringTag || "@@toStringTag";
+		function define(obj, key, value) {
+			Object.defineProperty(obj, key, {
+				value,
+				enumerable: true,
+				configurable: true,
+				writable: true
+			});
+			return obj[key];
+		}
+		try {
+			define({}, "");
+		} catch (err) {
+			define = function(obj, key, value) {
+				return obj[key] = value;
+			};
+		}
+		function wrap(innerFn, outerFn, self, tryLocsList) {
+			var protoGenerator = outerFn && outerFn.prototype instanceof Generator ? outerFn : Generator;
+			var generator = Object.create(protoGenerator.prototype);
+			defineProperty(generator, "_invoke", { value: makeInvokeMethod(innerFn, self, new Context(tryLocsList || [])) });
+			return generator;
+		}
+		exports.wrap = wrap;
+		function tryCatch(fn, obj, arg) {
+			try {
+				return {
+					type: "normal",
+					arg: fn.call(obj, arg)
+				};
+			} catch (err) {
+				return {
+					type: "throw",
+					arg: err
+				};
+			}
+		}
+		var GenStateSuspendedStart = "suspendedStart";
+		var GenStateSuspendedYield = "suspendedYield";
+		var GenStateExecuting = "executing";
+		var GenStateCompleted = "completed";
+		var ContinueSentinel = {};
+		function Generator() {}
+		function GeneratorFunction() {}
+		function GeneratorFunctionPrototype() {}
+		var IteratorPrototype = {};
+		define(IteratorPrototype, iteratorSymbol, function() {
+			return this;
+		});
+		var getProto = Object.getPrototypeOf;
+		var NativeIteratorPrototype = getProto && getProto(getProto(values([])));
+		if (NativeIteratorPrototype && NativeIteratorPrototype !== Op && hasOwn.call(NativeIteratorPrototype, iteratorSymbol)) IteratorPrototype = NativeIteratorPrototype;
+		var Gp = GeneratorFunctionPrototype.prototype = Generator.prototype = Object.create(IteratorPrototype);
+		GeneratorFunction.prototype = GeneratorFunctionPrototype;
+		defineProperty(Gp, "constructor", {
+			value: GeneratorFunctionPrototype,
+			configurable: true
+		});
+		defineProperty(GeneratorFunctionPrototype, "constructor", {
+			value: GeneratorFunction,
+			configurable: true
+		});
+		GeneratorFunction.displayName = define(GeneratorFunctionPrototype, toStringTagSymbol, "GeneratorFunction");
+		function defineIteratorMethods(prototype) {
+			[
+				"next",
+				"throw",
+				"return"
+			].forEach(function(method) {
+				define(prototype, method, function(arg) {
+					return this._invoke(method, arg);
+				});
+			});
+		}
+		exports.isGeneratorFunction = function(genFun) {
+			var ctor = typeof genFun === "function" && genFun.constructor;
+			return ctor ? ctor === GeneratorFunction || (ctor.displayName || ctor.name) === "GeneratorFunction" : false;
+		};
+		exports.mark = function(genFun) {
+			if (Object.setPrototypeOf) Object.setPrototypeOf(genFun, GeneratorFunctionPrototype);
+			else {
+				genFun.__proto__ = GeneratorFunctionPrototype;
+				define(genFun, toStringTagSymbol, "GeneratorFunction");
+			}
+			genFun.prototype = Object.create(Gp);
+			return genFun;
+		};
+		exports.awrap = function(arg) {
+			return { __await: arg };
+		};
+		function AsyncIterator(generator, PromiseImpl) {
+			function invoke(method, arg, resolve, reject) {
+				var record = tryCatch(generator[method], generator, arg);
+				if (record.type === "throw") reject(record.arg);
+				else {
+					var result = record.arg;
+					var value = result.value;
+					if (value && typeof value === "object" && hasOwn.call(value, "__await")) return PromiseImpl.resolve(value.__await).then(function(value) {
+						invoke("next", value, resolve, reject);
+					}, function(err) {
+						invoke("throw", err, resolve, reject);
+					});
+					return PromiseImpl.resolve(value).then(function(unwrapped) {
+						result.value = unwrapped;
+						resolve(result);
+					}, function(error) {
+						return invoke("throw", error, resolve, reject);
+					});
+				}
+			}
+			var previousPromise;
+			function enqueue(method, arg) {
+				function callInvokeWithMethodAndArg() {
+					return new PromiseImpl(function(resolve, reject) {
+						invoke(method, arg, resolve, reject);
+					});
+				}
+				return previousPromise = previousPromise ? previousPromise.then(callInvokeWithMethodAndArg, callInvokeWithMethodAndArg) : callInvokeWithMethodAndArg();
+			}
+			defineProperty(this, "_invoke", { value: enqueue });
+		}
+		defineIteratorMethods(AsyncIterator.prototype);
+		define(AsyncIterator.prototype, asyncIteratorSymbol, function() {
+			return this;
+		});
+		exports.AsyncIterator = AsyncIterator;
+		exports.async = function(innerFn, outerFn, self, tryLocsList, PromiseImpl) {
+			if (PromiseImpl === void 0) PromiseImpl = Promise;
+			var iter = new AsyncIterator(wrap(innerFn, outerFn, self, tryLocsList), PromiseImpl);
+			return exports.isGeneratorFunction(outerFn) ? iter : iter.next().then(function(result) {
+				return result.done ? result.value : iter.next();
+			});
+		};
+		function makeInvokeMethod(innerFn, self, context) {
+			var state = GenStateSuspendedStart;
+			return function invoke(method, arg) {
+				if (state === GenStateExecuting) throw new Error("Generator is already running");
+				if (state === GenStateCompleted) {
+					if (method === "throw") throw arg;
+					return doneResult();
+				}
+				context.method = method;
+				context.arg = arg;
+				while (true) {
+					var delegate = context.delegate;
+					if (delegate) {
+						var delegateResult = maybeInvokeDelegate(delegate, context);
+						if (delegateResult) {
+							if (delegateResult === ContinueSentinel) continue;
+							return delegateResult;
+						}
+					}
+					if (context.method === "next") context.sent = context._sent = context.arg;
+					else if (context.method === "throw") {
+						if (state === GenStateSuspendedStart) {
+							state = GenStateCompleted;
+							throw context.arg;
+						}
+						context.dispatchException(context.arg);
+					} else if (context.method === "return") context.abrupt("return", context.arg);
+					state = GenStateExecuting;
+					var record = tryCatch(innerFn, self, context);
+					if (record.type === "normal") {
+						state = context.done ? GenStateCompleted : GenStateSuspendedYield;
+						if (record.arg === ContinueSentinel) continue;
+						return {
+							value: record.arg,
+							done: context.done
+						};
+					} else if (record.type === "throw") {
+						state = GenStateCompleted;
+						context.method = "throw";
+						context.arg = record.arg;
+					}
+				}
+			};
+		}
+		function maybeInvokeDelegate(delegate, context) {
+			var methodName = context.method;
+			var method = delegate.iterator[methodName];
+			if (method === undefined) {
+				context.delegate = null;
+				if (methodName === "throw" && delegate.iterator["return"]) {
+					context.method = "return";
+					context.arg = undefined;
+					maybeInvokeDelegate(delegate, context);
+					if (context.method === "throw") return ContinueSentinel;
+				}
+				if (methodName !== "return") {
+					context.method = "throw";
+					context.arg = /* @__PURE__ */ new TypeError("The iterator does not provide a '" + methodName + "' method");
+				}
+				return ContinueSentinel;
+			}
+			var record = tryCatch(method, delegate.iterator, context.arg);
+			if (record.type === "throw") {
+				context.method = "throw";
+				context.arg = record.arg;
+				context.delegate = null;
+				return ContinueSentinel;
+			}
+			var info = record.arg;
+			if (!info) {
+				context.method = "throw";
+				context.arg = /* @__PURE__ */ new TypeError("iterator result is not an object");
+				context.delegate = null;
+				return ContinueSentinel;
+			}
+			if (info.done) {
+				context[delegate.resultName] = info.value;
+				context.next = delegate.nextLoc;
+				if (context.method !== "return") {
+					context.method = "next";
+					context.arg = undefined;
+				}
+			} else return info;
+			context.delegate = null;
+			return ContinueSentinel;
+		}
+		defineIteratorMethods(Gp);
+		define(Gp, toStringTagSymbol, "Generator");
+		define(Gp, iteratorSymbol, function() {
+			return this;
+		});
+		define(Gp, "toString", function() {
+			return "[object Generator]";
+		});
+		function pushTryEntry(locs) {
+			var entry = { tryLoc: locs[0] };
+			if (1 in locs) entry.catchLoc = locs[1];
+			if (2 in locs) {
+				entry.finallyLoc = locs[2];
+				entry.afterLoc = locs[3];
+			}
+			this.tryEntries.push(entry);
+		}
+		function resetTryEntry(entry) {
+			var record = entry.completion || {};
+			record.type = "normal";
+			delete record.arg;
+			entry.completion = record;
+		}
+		function Context(tryLocsList) {
+			this.tryEntries = [{ tryLoc: "root" }];
+			tryLocsList.forEach(pushTryEntry, this);
+			this.reset(true);
+		}
+		exports.keys = function(val) {
+			var object = Object(val);
+			var keys = [];
+			for (var key in object) keys.push(key);
+			keys.reverse();
+			return function next() {
+				while (keys.length) {
+					var key = keys.pop();
+					if (key in object) {
+						next.value = key;
+						next.done = false;
+						return next;
+					}
+				}
+				next.done = true;
+				return next;
+			};
+		};
+		function values(iterable) {
+			if (iterable) {
+				var iteratorMethod = iterable[iteratorSymbol];
+				if (iteratorMethod) return iteratorMethod.call(iterable);
+				if (typeof iterable.next === "function") return iterable;
+				if (!isNaN(iterable.length)) {
+					var i = -1, next = function next() {
+						while (++i < iterable.length) if (hasOwn.call(iterable, i)) {
+							next.value = iterable[i];
+							next.done = false;
+							return next;
+						}
+						next.value = undefined;
+						next.done = true;
+						return next;
+					};
+					return next.next = next;
+				}
+			}
+			return { next: doneResult };
+		}
+		exports.values = values;
+		function doneResult() {
+			return {
+				value: undefined,
+				done: true
+			};
+		}
+		Context.prototype = {
+			constructor: Context,
+			reset: function(skipTempReset) {
+				this.prev = 0;
+				this.next = 0;
+				this.sent = this._sent = undefined;
+				this.done = false;
+				this.delegate = null;
+				this.method = "next";
+				this.arg = undefined;
+				this.tryEntries.forEach(resetTryEntry);
+				if (!skipTempReset) {
+					for (var name in this) if (name.charAt(0) === "t" && hasOwn.call(this, name) && !isNaN(+name.slice(1))) this[name] = undefined;
+				}
+			},
+			stop: function() {
+				this.done = true;
+				var rootRecord = this.tryEntries[0].completion;
+				if (rootRecord.type === "throw") throw rootRecord.arg;
+				return this.rval;
+			},
+			dispatchException: function(exception) {
+				if (this.done) throw exception;
+				var context = this;
+				function handle(loc, caught) {
+					record.type = "throw";
+					record.arg = exception;
+					context.next = loc;
+					if (caught) {
+						context.method = "next";
+						context.arg = undefined;
+					}
+					return !!caught;
+				}
+				for (var i = this.tryEntries.length - 1; i >= 0; --i) {
+					var entry = this.tryEntries[i];
+					var record = entry.completion;
+					if (entry.tryLoc === "root") return handle("end");
+					if (entry.tryLoc <= this.prev) {
+						var hasCatch = hasOwn.call(entry, "catchLoc");
+						var hasFinally = hasOwn.call(entry, "finallyLoc");
+						if (hasCatch && hasFinally) {
+							if (this.prev < entry.catchLoc) return handle(entry.catchLoc, true);
+							else if (this.prev < entry.finallyLoc) return handle(entry.finallyLoc);
+						} else if (hasCatch) {
+							if (this.prev < entry.catchLoc) return handle(entry.catchLoc, true);
+						} else if (hasFinally) {
+							if (this.prev < entry.finallyLoc) return handle(entry.finallyLoc);
+						} else throw new Error("try statement without catch or finally");
+					}
+				}
+			},
+			abrupt: function(type, arg) {
+				for (var i = this.tryEntries.length - 1; i >= 0; --i) {
+					var entry = this.tryEntries[i];
+					if (entry.tryLoc <= this.prev && hasOwn.call(entry, "finallyLoc") && this.prev < entry.finallyLoc) {
+						var finallyEntry = entry;
+						break;
+					}
+				}
+				if (finallyEntry && (type === "break" || type === "continue") && finallyEntry.tryLoc <= arg && arg <= finallyEntry.finallyLoc) finallyEntry = null;
+				var record = finallyEntry ? finallyEntry.completion : {};
+				record.type = type;
+				record.arg = arg;
+				if (finallyEntry) {
+					this.method = "next";
+					this.next = finallyEntry.finallyLoc;
+					return ContinueSentinel;
+				}
+				return this.complete(record);
+			},
+			complete: function(record, afterLoc) {
+				if (record.type === "throw") throw record.arg;
+				if (record.type === "break" || record.type === "continue") this.next = record.arg;
+				else if (record.type === "return") {
+					this.rval = this.arg = record.arg;
+					this.method = "return";
+					this.next = "end";
+				} else if (record.type === "normal" && afterLoc) this.next = afterLoc;
+				return ContinueSentinel;
+			},
+			finish: function(finallyLoc) {
+				for (var i = this.tryEntries.length - 1; i >= 0; --i) {
+					var entry = this.tryEntries[i];
+					if (entry.finallyLoc === finallyLoc) {
+						this.complete(entry.completion, entry.afterLoc);
+						resetTryEntry(entry);
+						return ContinueSentinel;
+					}
+				}
+			},
+			"catch": function(tryLoc) {
+				for (var i = this.tryEntries.length - 1; i >= 0; --i) {
+					var entry = this.tryEntries[i];
+					if (entry.tryLoc === tryLoc) {
+						var record = entry.completion;
+						if (record.type === "throw") {
+							var thrown = record.arg;
+							resetTryEntry(entry);
+						}
+						return thrown;
+					}
+				}
+				throw new Error("illegal catch attempt");
+			},
+			delegateYield: function(iterable, resultName, nextLoc) {
+				this.delegate = {
+					iterator: values(iterable),
+					resultName,
+					nextLoc
+				};
+				if (this.method === "next") this.arg = undefined;
+				return ContinueSentinel;
+			}
+		};
+		return exports;
+	}(typeof module === "object" ? module.exports : {});
+	try {
+		regeneratorRuntime = runtime;
+	} catch (accidentalStrictMode) {
+		if (typeof globalThis === "object") globalThis.regeneratorRuntime = runtime;
+		else Function("r", "regeneratorRuntime = r")(runtime);
+	}
+}));
+// node_modules/tesseract.js/src/utils/getId.js
+var require_getId = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	module.exports = (prefix, cnt) => `${prefix}-${cnt}-${Math.random().toString(16).slice(3, 8)}`;
+}));
+// node_modules/tesseract.js/src/createJob.js
+var require_createJob = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var getId = require_getId();
+	var jobCounter = 0;
+	module.exports = ({ id: _id, action, payload = {} }) => {
+		let id = _id;
+		if (typeof id === "undefined") {
+			id = getId("Job", jobCounter);
+			jobCounter += 1;
+		}
+		return {
+			id,
+			action,
+			payload
+		};
+	};
+}));
+// node_modules/tesseract.js/src/utils/log.js
+var require_log = /* @__PURE__ */ __commonJSMin(((exports, module, this$2) => {
+	var logging = false;
+	exports.logging = logging;
+	exports.setLogging = (_logging) => {
+		logging = _logging;
+	};
+	exports.log = (...args) => logging ? console.log.apply(this$2, args) : null;
+}));
+// node_modules/tesseract.js/src/createScheduler.js
+var require_createScheduler = /* @__PURE__ */ __commonJSMin(((exports, module, this$1) => {
+	var createJob = require_createJob();
+	var { log } = require_log();
+	var getId = require_getId();
+	var schedulerCounter = 0;
+	module.exports = () => {
+		const id = getId("Scheduler", schedulerCounter);
+		const workers = {};
+		const runningWorkers = {};
+		let jobQueue = [];
+		schedulerCounter += 1;
+		const getQueueLen = () => jobQueue.length;
+		const getNumWorkers = () => Object.keys(workers).length;
+		const dequeue = () => {
+			if (jobQueue.length !== 0) {
+				const wIds = Object.keys(workers);
+				for (let i = 0; i < wIds.length; i += 1) if (typeof runningWorkers[wIds[i]] === "undefined") {
+					jobQueue[0](workers[wIds[i]]);
+					break;
+				}
+			}
+		};
+		const queue = (action, payload) => new Promise((resolve, reject) => {
+			const job = createJob({
+				action,
+				payload
+			});
+			jobQueue.push(async (w) => {
+				jobQueue.shift();
+				runningWorkers[w.id] = job;
+				try {
+					resolve(await w[action].apply(this$1, [...payload, job.id]));
+				} catch (err) {
+					reject(err);
+				} finally {
+					delete runningWorkers[w.id];
+					dequeue();
+				}
+			});
+			log(`[${id}]: Add ${job.id} to JobQueue`);
+			log(`[${id}]: JobQueue length=${jobQueue.length}`);
+			dequeue();
+		});
+		const addWorker = (w) => {
+			workers[w.id] = w;
+			log(`[${id}]: Add ${w.id}`);
+			log(`[${id}]: Number of workers=${getNumWorkers()}`);
+			dequeue();
+			return w.id;
+		};
+		const addJob = async (action, ...payload) => {
+			if (getNumWorkers() === 0) throw Error(`[${id}]: You need to have at least one worker before adding jobs`);
+			return queue(action, payload);
+		};
+		const terminate = async () => {
+			Object.keys(workers).forEach(async (wid) => {
+				await workers[wid].terminate();
+			});
+			jobQueue = [];
+		};
+		return {
+			addWorker,
+			addJob,
+			terminate,
+			getQueueLen,
+			getNumWorkers
+		};
+	};
+}));
+// node_modules/tesseract.js/src/utils/getEnvironment.js
+var require_getEnvironment = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	module.exports = (key) => {
+		const env = {};
+		if (typeof WorkerGlobalScope !== "undefined") env.type = "webworker";
+		else if (typeof document === "object") env.type = "browser";
+		else if (typeof process === "object" && typeof __require === "function") env.type = "node";
+		if (typeof key === "undefined") return env;
+		return env[key];
+	};
+}));
+// node_modules/tesseract.js/src/utils/resolvePaths.js
+var require_resolvePaths = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var resolveURL = require_getEnvironment()("type") === "browser" ? (s) => new URL(s, window.location.href).href : (s) => s;
+	module.exports = (options) => {
+		const opts = { ...options };
+		[
+			"corePath",
+			"workerPath",
+			"langPath"
+		].forEach((key) => {
+			if (options[key]) opts[key] = resolveURL(opts[key]);
+		});
+		return opts;
+	};
+}));
+// node_modules/tesseract.js/src/constants/OEM.js
+var require_OEM = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	module.exports = {
+		TESSERACT_ONLY: 0,
+		LSTM_ONLY: 1,
+		TESSERACT_LSTM_COMBINED: 2,
+		DEFAULT: 3
+	};
+}));
+// node_modules/tesseract.js/package.json
+var package_exports = /* @__PURE__ */ __exportAll({
+	author: () => "",
+	browser: () => browser,
+	bugs: () => bugs,
+	collective: () => collective,
+	contributors: () => contributors,
+	default: () => package_default,
+	dependencies: () => dependencies,
+	description: () => description,
+	devDependencies: () => devDependencies,
+	homepage: () => homepage,
+	jsdelivr: () => jsdelivr,
+	license: () => license,
+	main: () => main,
+	name: () => name,
+	overrides: () => overrides,
+	repository: () => repository,
+	scripts: () => scripts,
+	type: () => type,
+	types: () => types,
+	unpkg: () => unpkg,
+	version: () => version
+}), name, version, description, main, type, types, unpkg, jsdelivr, scripts, browser, contributors, license, devDependencies, dependencies, overrides, repository, bugs, homepage, collective, package_default;
+var init_package = __esmMin((() => {
+	name = "tesseract.js";
+	version = "7.0.0";
+	description = "Pure Javascript Multilingual OCR";
+	main = "src/index.js";
+	type = "commonjs";
+	types = "src/index.d.ts";
+	unpkg = "dist/tesseract.min.js";
+	jsdelivr = "dist/tesseract.min.js";
+	scripts = {
+		"start": "node scripts/server.js",
+		"build": "rimraf dist && webpack --config scripts/webpack.config.prod.js && rollup -c scripts/rollup.esm.mjs",
+		"profile:tesseract": "webpack-bundle-analyzer dist/tesseract-stats.json",
+		"profile:worker": "webpack-bundle-analyzer dist/worker-stats.json",
+		"prepublishOnly": "npm run build",
+		"wait": "rimraf dist && wait-on http://localhost:3000/dist/tesseract.min.js",
+		"test": "npm-run-all -p -r start test:all",
+		"test:all": "npm-run-all wait test:browser test:node:all",
+		"test:browser": "karma start karma.conf.js",
+		"test:node": "nyc mocha --exit --bail --require ./scripts/test-helper.mjs",
+		"test:node:all": "npm run test:node -- ./tests/*.test.mjs",
+		"lint": "eslint src",
+		"lint:fix": "eslint --fix src",
+		"postinstall": "opencollective-postinstall || true"
+	};
+	browser = { "./src/worker/node/index.js": "./src/worker/browser/index.js" };
+	contributors = ["jeromewu"];
+	license = "Apache-2.0";
+	devDependencies = {
+		"@babel/core": "^7.21.4",
+		"@babel/eslint-parser": "^7.21.3",
+		"@babel/preset-env": "^7.21.4",
+		"@rollup/plugin-commonjs": "^24.1.0",
+		"acorn": "^8.8.2",
+		"babel-loader": "^9.1.2",
+		"buffer": "^6.0.3",
+		"cors": "^2.8.5",
+		"eslint": "^7.32.0",
+		"eslint-config-airbnb-base": "^14.2.1",
+		"eslint-plugin-import": "^2.27.5",
+		"expect.js": "^0.3.1",
+		"express": "^4.18.2",
+		"mocha": "^10.2.0",
+		"npm-run-all": "^4.1.5",
+		"karma": "^6.4.2",
+		"karma-chrome-launcher": "^3.2.0",
+		"karma-firefox-launcher": "^2.1.2",
+		"karma-mocha": "^2.0.1",
+		"karma-webpack": "^5.0.0",
+		"nyc": "^15.1.0",
+		"rimraf": "^5.0.0",
+		"rollup": "^3.20.7",
+		"wait-on": "^7.0.1",
+		"webpack": "^5.79.0",
+		"webpack-bundle-analyzer": "^4.8.0",
+		"webpack-cli": "^5.0.1",
+		"webpack-dev-middleware": "^6.0.2",
+		"rollup-plugin-sourcemaps": "^0.6.3"
+	};
+	dependencies = {
+		"bmp-js": "^0.1.0",
+		"idb-keyval": "^6.2.0",
+		"is-url": "^1.2.4",
+		"node-fetch": "^2.6.9",
+		"opencollective-postinstall": "^2.0.3",
+		"regenerator-runtime": "^0.13.3",
+		"tesseract.js-core": "^7.0.0",
+		"wasm-feature-detect": "^1.8.0",
+		"zlibjs": "^0.3.1"
+	};
+	overrides = { "@rollup/pluginutils": "^5.0.2" };
+	repository = {
+		"type": "git",
+		"url": "https://github.com/naptha/tesseract.js.git"
+	};
+	bugs = { "url": "https://github.com/naptha/tesseract.js/issues" };
+	homepage = "https://github.com/naptha/tesseract.js";
+	collective = {
+		"type": "opencollective",
+		"url": "https://opencollective.com/tesseractjs"
+	};
+	package_default = {
+		name,
+		version,
+		description,
+		main,
+		type,
+		types,
+		unpkg,
+		jsdelivr,
+		scripts,
+		browser,
+		author: "",
+		contributors,
+		license,
+		devDependencies,
+		dependencies,
+		overrides,
+		repository,
+		bugs,
+		homepage,
+		collective
+	};
+}));
+// node_modules/tesseract.js/src/constants/defaultOptions.js
+var require_defaultOptions$1 = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	module.exports = {
+		workerBlobURL: true,
+		logger: () => {}
+	};
+}));
+// node_modules/tesseract.js/src/worker/browser/defaultOptions.js
+var require_defaultOptions = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var version = (init_package(), __toCommonJS(package_exports).default).version;
+	module.exports = {
+		...require_defaultOptions$1(),
+		workerPath: `https://cdn.jsdelivr.net/npm/tesseract.js@v${version}/dist/worker.min.js`
+	};
+}));
+// node_modules/tesseract.js/src/worker/browser/spawnWorker.js
+var require_spawnWorker = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	/**
+	* spawnWorker
+	*
+	* @name spawnWorker
+	* @function create a new Worker in browser
+	* @access public
+	*/
+	module.exports = ({ workerPath, workerBlobURL }) => {
+		let worker;
+		if (Blob && URL && workerBlobURL) {
+			const blob = new Blob([`importScripts("${workerPath}");`], { type: "application/javascript" });
+			worker = new Worker(URL.createObjectURL(blob));
+		} else worker = new Worker(workerPath);
+		return worker;
+	};
+}));
+// node_modules/tesseract.js/src/worker/browser/terminateWorker.js
+var require_terminateWorker = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	/**
+	* terminateWorker
+	*
+	* @name terminateWorker
+	* @function terminate worker
+	* @access public
+	*/
+	module.exports = (worker) => {
+		worker.terminate();
+	};
+}));
+// node_modules/tesseract.js/src/worker/browser/onMessage.js
+var require_onMessage = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	module.exports = (worker, handler) => {
+		worker.onmessage = ({ data }) => {
+			handler(data);
+		};
+	};
+}));
+// node_modules/tesseract.js/src/worker/browser/send.js
+var require_send = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	/**
+	* send
+	*
+	* @name send
+	* @function send packet to worker and create a job
+	* @access public
+	*/
+	module.exports = async (worker, packet) => {
+		worker.postMessage(packet);
+	};
+}));
+// node_modules/tesseract.js/src/worker/browser/loadImage.js
+var require_loadImage = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	/**
+	* readFromBlobOrFile
+	*
+	* @name readFromBlobOrFile
+	* @function
+	* @access private
+	*/
+	var readFromBlobOrFile = (blob) => new Promise((resolve, reject) => {
+		const fileReader = new FileReader();
+		fileReader.onload = () => {
+			resolve(fileReader.result);
+		};
+		fileReader.onerror = ({ target: { error: { code } } }) => {
+			reject(Error(`File could not be read! Code=${code}`));
+		};
+		fileReader.readAsArrayBuffer(blob);
+	});
+	/**
+	* loadImage
+	*
+	* @name loadImage
+	* @function load image from different source
+	* @access private
+	*/
+	var loadImage = async (image) => {
+		let data = image;
+		if (typeof image === "undefined") return "undefined";
+		if (typeof image === "string") {
+			if (/data:image\/([a-zA-Z]*);base64,([^"]*)/.test(image)) data = atob(image.split(",")[1]).split("").map((c) => c.charCodeAt(0));
+			else data = await (await fetch(image)).arrayBuffer();
+		} else if (typeof HTMLElement !== "undefined" && image instanceof HTMLElement) {
+			if (image.tagName === "IMG") data = await loadImage(image.src);
+			if (image.tagName === "VIDEO") data = await loadImage(image.poster);
+			if (image.tagName === "CANVAS") await new Promise((resolve) => {
+				image.toBlob(async (blob) => {
+					data = await readFromBlobOrFile(blob);
+					resolve();
+				});
+			});
+		} else if (typeof OffscreenCanvas !== "undefined" && image instanceof OffscreenCanvas) data = await readFromBlobOrFile(await image.convertToBlob());
+		else if (image instanceof File || image instanceof Blob) data = await readFromBlobOrFile(image);
+		return new Uint8Array(data);
+	};
+	module.exports = loadImage;
+}));
+// node_modules/tesseract.js/src/worker/browser/index.js
+var require_browser = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	module.exports = {
+		defaultOptions: require_defaultOptions(),
+		spawnWorker: require_spawnWorker(),
+		terminateWorker: require_terminateWorker(),
+		onMessage: require_onMessage(),
+		send: require_send(),
+		loadImage: require_loadImage()
+	};
+}));
+// node_modules/tesseract.js/src/createWorker.js
+var require_createWorker = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var resolvePaths = require_resolvePaths();
+	var createJob = require_createJob();
+	var { log } = require_log();
+	var getId = require_getId();
+	var OEM = require_OEM();
+	var { defaultOptions, spawnWorker, terminateWorker, onMessage, loadImage, send } = require_browser();
+	var workerCounter = 0;
+	module.exports = async (langs = "eng", oem = OEM.LSTM_ONLY, _options = {}, config = {}) => {
+		const id = getId("Worker", workerCounter);
+		const { logger, errorHandler, ...options } = resolvePaths({
+			...defaultOptions,
+			..._options
+		});
+		const promises = {};
+		const currentLangs = typeof langs === "string" ? langs.split("+") : langs;
+		let currentOem = oem;
+		let currentConfig = config;
+		const lstmOnlyCore = [OEM.DEFAULT, OEM.LSTM_ONLY].includes(oem) && !options.legacyCore;
+		let workerResReject;
+		let workerResResolve;
+		const workerRes = new Promise((resolve, reject) => {
+			workerResResolve = resolve;
+			workerResReject = reject;
+		});
+		const workerError = (event) => {
+			workerResReject(event.message);
+		};
+		let worker = spawnWorker(options);
+		worker.onerror = workerError;
+		workerCounter += 1;
+		const startJob = ({ id: jobId, action, payload }) => new Promise((resolve, reject) => {
+			log(`[${id}]: Start ${jobId}, action=${action}`);
+			const promiseId = `${action}-${jobId}`;
+			promises[promiseId] = {
+				resolve,
+				reject
+			};
+			send(worker, {
+				workerId: id,
+				jobId,
+				action,
+				payload
+			});
+		});
+		const load = () => console.warn("`load` is depreciated and should be removed from code (workers now come pre-loaded)");
+		const loadInternal = (jobId) => startJob(createJob({
+			id: jobId,
+			action: "load",
+			payload: { options: {
+				lstmOnly: lstmOnlyCore,
+				corePath: options.corePath,
+				logging: options.logging
+			} }
+		}));
+		const writeText = (path, text, jobId) => startJob(createJob({
+			id: jobId,
+			action: "FS",
+			payload: {
+				method: "writeFile",
+				args: [path, text]
+			}
+		}));
+		const readText = (path, jobId) => startJob(createJob({
+			id: jobId,
+			action: "FS",
+			payload: {
+				method: "readFile",
+				args: [path, { encoding: "utf8" }]
+			}
+		}));
+		const removeFile = (path, jobId) => startJob(createJob({
+			id: jobId,
+			action: "FS",
+			payload: {
+				method: "unlink",
+				args: [path]
+			}
+		}));
+		const FS = (method, args, jobId) => startJob(createJob({
+			id: jobId,
+			action: "FS",
+			payload: {
+				method,
+				args
+			}
+		}));
+		const loadLanguageInternal = (_langs, jobId) => startJob(createJob({
+			id: jobId,
+			action: "loadLanguage",
+			payload: {
+				langs: _langs,
+				options: {
+					langPath: options.langPath,
+					dataPath: options.dataPath,
+					cachePath: options.cachePath,
+					cacheMethod: options.cacheMethod,
+					gzip: options.gzip,
+					lstmOnly: [OEM.DEFAULT, OEM.LSTM_ONLY].includes(currentOem) && !options.legacyLang
+				}
+			}
+		}));
+		const initializeInternal = (_langs, _oem, _config, jobId) => startJob(createJob({
+			id: jobId,
+			action: "initialize",
+			payload: {
+				langs: _langs,
+				oem: _oem,
+				config: _config
+			}
+		}));
+		const reinitialize = (langs = "eng", oem, config, jobId) => {
+			if (lstmOnlyCore && [OEM.TESSERACT_ONLY, OEM.TESSERACT_LSTM_COMBINED].includes(oem)) throw Error("Legacy model requested but code missing.");
+			const _oem = oem || currentOem;
+			currentOem = _oem;
+			const _config = config || currentConfig;
+			currentConfig = _config;
+			const _langs = (typeof langs === "string" ? langs.split("+") : langs).filter((x) => !currentLangs.includes(x));
+			currentLangs.push(..._langs);
+			if (_langs.length > 0) return loadLanguageInternal(_langs, jobId).then(() => initializeInternal(langs, _oem, _config, jobId));
+			return initializeInternal(langs, _oem, _config, jobId);
+		};
+		const setParameters = (params = {}, jobId) => startJob(createJob({
+			id: jobId,
+			action: "setParameters",
+			payload: { params }
+		}));
+		const recognize = async (image, opts = {}, output = { text: true }, jobId) => startJob(createJob({
+			id: jobId,
+			action: "recognize",
+			payload: {
+				image: await loadImage(image),
+				options: opts,
+				output
+			}
+		}));
+		const detect = async (image, jobId) => {
+			if (lstmOnlyCore) throw Error("`worker.detect` requires Legacy model, which was not loaded.");
+			return startJob(createJob({
+				id: jobId,
+				action: "detect",
+				payload: { image: await loadImage(image) }
+			}));
+		};
+		const terminate = async () => {
+			if (worker !== null) {
+				terminateWorker(worker);
+				worker = null;
+			}
+			return Promise.resolve();
+		};
+		onMessage(worker, ({ workerId, jobId, status, action, data }) => {
+			const promiseId = `${action}-${jobId}`;
+			if (status === "resolve") {
+				log(`[${workerId}]: Complete ${jobId}`);
+				promises[promiseId].resolve({
+					jobId,
+					data
+				});
+				delete promises[promiseId];
+			} else if (status === "reject") {
+				promises[promiseId].reject(data);
+				delete promises[promiseId];
+				if (action === "load") workerResReject(data);
+				if (errorHandler) errorHandler(data);
+				else throw Error(data);
+			} else if (status === "progress") logger({
+				...data,
+				userJobId: jobId
+			});
+		});
+		const resolveObj = {
+			id,
+			worker,
+			load,
+			writeText,
+			readText,
+			removeFile,
+			FS,
+			reinitialize,
+			setParameters,
+			recognize,
+			detect,
+			terminate
+		};
+		loadInternal().then(() => loadLanguageInternal(langs)).then(() => initializeInternal(langs, oem, config)).then(() => workerResResolve(resolveObj)).catch(() => {});
+		return workerRes;
+	};
+}));
+// node_modules/tesseract.js/src/Tesseract.js
+var require_Tesseract = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	var createWorker = require_createWorker();
+	var recognize = async (image, langs, options) => {
+		const worker = await createWorker(langs, 1, options);
+		return worker.recognize(image).finally(async () => {
+			await worker.terminate();
+		});
+	};
+	var detect = async (image, options) => {
+		const worker = await createWorker("osd", 0, options);
+		return worker.detect(image).finally(async () => {
+			await worker.terminate();
+		});
+	};
+	module.exports = {
+		recognize,
+		detect
+	};
+}));
+// node_modules/tesseract.js/src/constants/languages.js
+var require_languages = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	/**
+	* @typedef {object} Languages
+	* @property {string} AFR Afrikaans
+	* @property {string} AMH Amharic
+	* @property {string} ARA Arabic
+	* @property {string} ASM Assamese
+	* @property {string} AZE Azerbaijani
+	* @property {string} AZE_CYRL Azerbaijani - Cyrillic
+	* @property {string} BEL Belarusian
+	* @property {string} BEN Bengali
+	* @property {string} BOD Tibetan
+	* @property {string} BOS Bosnian
+	* @property {string} BUL Bulgarian
+	* @property {string} CAT Catalan; Valencian
+	* @property {string} CEB Cebuano
+	* @property {string} CES Czech
+	* @property {string} CHI_SIM Chinese - Simplified
+	* @property {string} CHI_TRA Chinese - Traditional
+	* @property {string} CHR Cherokee
+	* @property {string} CYM Welsh
+	* @property {string} DAN Danish
+	* @property {string} DEU German
+	* @property {string} DZO Dzongkha
+	* @property {string} ELL Greek, Modern (1453-)
+	* @property {string} ENG English
+	* @property {string} ENM English, Middle (1100-1500)
+	* @property {string} EPO Esperanto
+	* @property {string} EST Estonian
+	* @property {string} EUS Basque
+	* @property {string} FAS Persian
+	* @property {string} FIN Finnish
+	* @property {string} FRA French
+	* @property {string} FRK German Fraktur
+	* @property {string} FRM French, Middle (ca. 1400-1600)
+	* @property {string} GLE Irish
+	* @property {string} GLG Galician
+	* @property {string} GRC Greek, Ancient (-1453)
+	* @property {string} GUJ Gujarati
+	* @property {string} HAT Haitian; Haitian Creole
+	* @property {string} HEB Hebrew
+	* @property {string} HIN Hindi
+	* @property {string} HRV Croatian
+	* @property {string} HUN Hungarian
+	* @property {string} IKU Inuktitut
+	* @property {string} IND Indonesian
+	* @property {string} ISL Icelandic
+	* @property {string} ITA Italian
+	* @property {string} ITA_OLD Italian - Old
+	* @property {string} JAV Javanese
+	* @property {string} JPN Japanese
+	* @property {string} KAN Kannada
+	* @property {string} KAT Georgian
+	* @property {string} KAT_OLD Georgian - Old
+	* @property {string} KAZ Kazakh
+	* @property {string} KHM Central Khmer
+	* @property {string} KIR Kirghiz; Kyrgyz
+	* @property {string} KOR Korean
+	* @property {string} KUR Kurdish
+	* @property {string} LAO Lao
+	* @property {string} LAT Latin
+	* @property {string} LAV Latvian
+	* @property {string} LIT Lithuanian
+	* @property {string} MAL Malayalam
+	* @property {string} MAR Marathi
+	* @property {string} MKD Macedonian
+	* @property {string} MLT Maltese
+	* @property {string} MSA Malay
+	* @property {string} MYA Burmese
+	* @property {string} NEP Nepali
+	* @property {string} NLD Dutch; Flemish
+	* @property {string} NOR Norwegian
+	* @property {string} ORI Oriya
+	* @property {string} PAN Panjabi; Punjabi
+	* @property {string} POL Polish
+	* @property {string} POR Portuguese
+	* @property {string} PUS Pushto; Pashto
+	* @property {string} RON Romanian; Moldavian; Moldovan
+	* @property {string} RUS Russian
+	* @property {string} SAN Sanskrit
+	* @property {string} SIN Sinhala; Sinhalese
+	* @property {string} SLK Slovak
+	* @property {string} SLV Slovenian
+	* @property {string} SPA Spanish; Castilian
+	* @property {string} SPA_OLD Spanish; Castilian - Old
+	* @property {string} SQI Albanian
+	* @property {string} SRP Serbian
+	* @property {string} SRP_LATN Serbian - Latin
+	* @property {string} SWA Swahili
+	* @property {string} SWE Swedish
+	* @property {string} SYR Syriac
+	* @property {string} TAM Tamil
+	* @property {string} TEL Telugu
+	* @property {string} TGK Tajik
+	* @property {string} TGL Tagalog
+	* @property {string} THA Thai
+	* @property {string} TIR Tigrinya
+	* @property {string} TUR Turkish
+	* @property {string} UIG Uighur; Uyghur
+	* @property {string} UKR Ukrainian
+	* @property {string} URD Urdu
+	* @property {string} UZB Uzbek
+	* @property {string} UZB_CYRL Uzbek - Cyrillic
+	* @property {string} VIE Vietnamese
+	* @property {string} YID Yiddish
+	*/
+	/**
+	* @type {Languages}
+	*/
+	module.exports = {
+		AFR: "afr",
+		AMH: "amh",
+		ARA: "ara",
+		ASM: "asm",
+		AZE: "aze",
+		AZE_CYRL: "aze_cyrl",
+		BEL: "bel",
+		BEN: "ben",
+		BOD: "bod",
+		BOS: "bos",
+		BUL: "bul",
+		CAT: "cat",
+		CEB: "ceb",
+		CES: "ces",
+		CHI_SIM: "chi_sim",
+		CHI_TRA: "chi_tra",
+		CHR: "chr",
+		CYM: "cym",
+		DAN: "dan",
+		DEU: "deu",
+		DZO: "dzo",
+		ELL: "ell",
+		ENG: "eng",
+		ENM: "enm",
+		EPO: "epo",
+		EST: "est",
+		EUS: "eus",
+		FAS: "fas",
+		FIN: "fin",
+		FRA: "fra",
+		FRK: "frk",
+		FRM: "frm",
+		GLE: "gle",
+		GLG: "glg",
+		GRC: "grc",
+		GUJ: "guj",
+		HAT: "hat",
+		HEB: "heb",
+		HIN: "hin",
+		HRV: "hrv",
+		HUN: "hun",
+		IKU: "iku",
+		IND: "ind",
+		ISL: "isl",
+		ITA: "ita",
+		ITA_OLD: "ita_old",
+		JAV: "jav",
+		JPN: "jpn",
+		KAN: "kan",
+		KAT: "kat",
+		KAT_OLD: "kat_old",
+		KAZ: "kaz",
+		KHM: "khm",
+		KIR: "kir",
+		KOR: "kor",
+		KUR: "kur",
+		LAO: "lao",
+		LAT: "lat",
+		LAV: "lav",
+		LIT: "lit",
+		MAL: "mal",
+		MAR: "mar",
+		MKD: "mkd",
+		MLT: "mlt",
+		MSA: "msa",
+		MYA: "mya",
+		NEP: "nep",
+		NLD: "nld",
+		NOR: "nor",
+		ORI: "ori",
+		PAN: "pan",
+		POL: "pol",
+		POR: "por",
+		PUS: "pus",
+		RON: "ron",
+		RUS: "rus",
+		SAN: "san",
+		SIN: "sin",
+		SLK: "slk",
+		SLV: "slv",
+		SPA: "spa",
+		SPA_OLD: "spa_old",
+		SQI: "sqi",
+		SRP: "srp",
+		SRP_LATN: "srp_latn",
+		SWA: "swa",
+		SWE: "swe",
+		SYR: "syr",
+		TAM: "tam",
+		TEL: "tel",
+		TGK: "tgk",
+		TGL: "tgl",
+		THA: "tha",
+		TIR: "tir",
+		TUR: "tur",
+		UIG: "uig",
+		UKR: "ukr",
+		URD: "urd",
+		UZB: "uzb",
+		UZB_CYRL: "uzb_cyrl",
+		VIE: "vie",
+		YID: "yid"
+	};
+}));
+// node_modules/tesseract.js/src/constants/PSM.js
+var require_PSM = /* @__PURE__ */ __commonJSMin(((exports, module) => {
+	module.exports = {
+		OSD_ONLY: "0",
+		AUTO_OSD: "1",
+		AUTO_ONLY: "2",
+		AUTO: "3",
+		SINGLE_COLUMN: "4",
+		SINGLE_BLOCK_VERT_TEXT: "5",
+		SINGLE_BLOCK: "6",
+		SINGLE_LINE: "7",
+		SINGLE_WORD: "8",
+		CIRCLE_WORD: "9",
+		SINGLE_CHAR: "10",
+		SPARSE_TEXT: "11",
+		SPARSE_TEXT_OSD: "12",
+		RAW_LINE: "13"
+	};
+}));
+// src/engine/ocrPipeline.ts
+var import_src = (/* @__PURE__ */ __commonJSMin(((exports, module) => {
+	/**
+	*
+	* Entry point for tesseract.js, should be the entry when bundling.
+	*
+	* @fileoverview entry point for tesseract.js
+	* @author Kevin Kwok <antimatter15@gmail.com>
+	* @author Guillermo Webster <gui@mit.edu>
+	* @author Jerome Wu <jeromewus@gmail.com>
+	*/
+	require_runtime();
+	var createScheduler = require_createScheduler();
+	var createWorker = require_createWorker();
+	var Tesseract = require_Tesseract();
+	var languages = require_languages();
+	var OEM = require_OEM();
+	var PSM = require_PSM();
+	var { setLogging } = require_log();
+	module.exports = {
+		languages,
+		OEM,
+		PSM,
+		createScheduler,
+		createWorker,
+		setLogging,
+		...Tesseract
+	};
+})))();
+var LS_KEY_ROI_PROFILES = "quantlab_roi_profiles_v1";
+var DEFAULT_ROI_PROFILES = [
+	{
+		id: "preset_inferno_roulette",
+		name: "Inferno Roulette (Faixa Direita)",
+		game: "roulette",
+		roi: {
+			xPct: .73,
+			yPct: .65,
+			wPct: .25,
+			hPct: .065
+		},
+		expectedCells: 10,
+		newestOnLeft: true,
+		updatedAt: 1
+	},
+	{
+		id: "preset_roulette_top",
+		name: "Roleta Padrão (Faixa Topo)",
+		game: "roulette",
+		roi: {
+			xPct: .08,
+			yPct: .03,
+			wPct: .84,
+			hPct: .08
+		},
+		expectedCells: 12,
+		newestOnLeft: true,
+		updatedAt: 1
+	},
+	{
+		id: "preset_aviator_kwanzabet",
+		name: "Aviator Kwanzabet (Faixa Superior)",
+		game: "aviator",
+		roi: {
+			xPct: .24,
+			yPct: .35,
+			wPct: .56,
+			hPct: .06
+		},
+		expectedCells: 14,
+		newestOnLeft: true,
+		updatedAt: 1
+	}
+];
+function loadRoiProfiles() {
+	try {
+		if (typeof localStorage === "undefined") return DEFAULT_ROI_PROFILES;
+		const raw = localStorage.getItem(LS_KEY_ROI_PROFILES);
+		if (!raw) return DEFAULT_ROI_PROFILES;
+		const parsed = JSON.parse(raw);
+		if (!Array.isArray(parsed) || parsed.length === 0) return DEFAULT_ROI_PROFILES;
+		return parsed;
+	} catch {
+		return DEFAULT_ROI_PROFILES;
+	}
+}
+function saveRoiProfiles(profiles) {
+	try {
+		if (typeof localStorage === "undefined") return;
+		localStorage.setItem(LS_KEY_ROI_PROFILES, JSON.stringify(profiles));
+	} catch {}
+}
+function classifyRouletteCellRgb(r, g, b) {
+	if (g > r + 22 && g > b + 20 && g > 75) return "green";
+	if (r > g + 30 && r > b + 28 && r > 90) return "red";
+	return "black";
+}
+function classifyAviatorCellRgb(r, g, b) {
+	if (r > 135 && b > 125 && g < r * .72) return r > b + 18 ? "pink" : "purple";
+	if (b > r + 25 && b > 120) return "blue";
+	if (r > 165 && g > 110 && b < 95) return "pink";
+	return "unknown";
+}
+function validateRouletteCellToken(rawText, detectedColor, confidencePct) {
+	const cleaned = rawText.trim().replace(/\s+/g, "");
+	if (!cleaned) return {
+		accepted: false,
+		value: null,
+		expectedColor: "-",
+		rejectReason: "Célula vazia"
+	};
+	if (/[xX×.]/.test(cleaned)) return {
+		accepted: false,
+		value: null,
+		expectedColor: "-",
+		rejectReason: "Token com \"x\"/decimal (multiplicador relâmpago ignorado)"
+	};
+	const digits = cleaned.replace(/[^0-9]/g, "");
+	if (!digits || digits.length > 2) return {
+		accepted: false,
+		value: null,
+		expectedColor: "-",
+		rejectReason: `Texto inválido (${cleaned})`
+	};
+	const num = Number(digits);
+	if (!isValidRouletteNumber(num)) return {
+		accepted: false,
+		value: null,
+		expectedColor: "-",
+		rejectReason: `Fora de 0–36 (${num})`
+	};
+	const expectedColor = getRouletteColor(num);
+	if (expectedColor !== detectedColor) return {
+		accepted: false,
+		value: null,
+		expectedColor,
+		rejectReason: `Cor divergente: leu ${num} (${expectedColor}), mas pixel é ${detectedColor}`
+	};
+	if (confidencePct < 38) return {
+		accepted: false,
+		value: null,
+		expectedColor,
+		rejectReason: `Confiança baixa (${confidencePct.toFixed(0)}%)`
+	};
+	return {
+		accepted: true,
+		value: num,
+		expectedColor
+	};
+}
+function validateAviatorCellToken(rawText, detectedColor, confidencePct) {
+	const match = rawText.trim().replace(",", ".").replace(/[^0-9.xX]/g, "").match(/^(\d{1,5}(?:\.\d{1,2})?)[xX]?$/);
+	if (!match) return {
+		accepted: false,
+		value: null,
+		expectedColor: "-",
+		rejectReason: `Formato não decimal (${rawText.trim() || "vazio"})`
+	};
+	const val = Math.round(Number(match[1]) * 100) / 100;
+	if (!isValidAviatorValue(val)) return {
+		accepted: false,
+		value: null,
+		expectedColor: "-",
+		rejectReason: `Multiplicador fora de 1.00–10000 (${val})`
+	};
+	const expectedColor = getAviatorPillColorTier(val);
+	if (detectedColor !== "unknown") {
+		if (detectedColor === "blue" && val >= 2) return {
+			accepted: false,
+			value: null,
+			expectedColor,
+			rejectReason: `Cor azul contradiz ${val.toFixed(2)}x (esperado <2.00x)`
+		};
+		if (detectedColor === "pink" && val < 5) return {
+			accepted: false,
+			value: null,
+			expectedColor,
+			rejectReason: `Cor rosa contradiz ${val.toFixed(2)}x`
+		};
+	}
+	if (confidencePct < 35) return {
+		accepted: false,
+		value: null,
+		expectedColor,
+		rejectReason: `Confiança baixa (${confidencePct.toFixed(0)}%)`
+	};
+	return {
+		accepted: true,
+		value: val,
+		expectedColor
+	};
+}
+/**
+* Reconcilia nova faixa lida (mais recente em index 0) com histórico existente,
+* exigindo deslocamento coerente para não duplicar leituras.
+*/
+function reconcileCoherentStrip(existingNewestFirst, incomingNewestFirst) {
+	if (incomingNewestFirst.length === 0) return {
+		nextHistory: existingNewestFirst,
+		newCommitted: []
+	};
+	if (existingNewestFirst.length === 0) return {
+		nextHistory: incomingNewestFirst.slice(0, 500),
+		newCommitted: incomingNewestFirst
+	};
+	const anchorLen = Math.min(3, existingNewestFirst.length, incomingNewestFirst.length);
+	for (let shift = 0; shift <= Math.min(5, incomingNewestFirst.length - anchorLen); shift++) {
+		let aligned = true;
+		for (let k = 0; k < anchorLen; k++) if (Math.abs(incomingNewestFirst[shift + k] - existingNewestFirst[k]) > .001) {
+			aligned = false;
+			break;
+		}
+		if (aligned) {
+			if (shift === 0) return {
+				nextHistory: existingNewestFirst,
+				newCommitted: []
+			};
+			const newCommitted = incomingNewestFirst.slice(0, shift);
+			return {
+				nextHistory: [...newCommitted, ...existingNewestFirst].slice(0, 500),
+				newCommitted
+			};
+		}
+	}
+	if (Math.abs(incomingNewestFirst[0] - existingNewestFirst[0]) > .001) return {
+		nextHistory: [incomingNewestFirst[0], ...existingNewestFirst].slice(0, 500),
+		newCommitted: [incomingNewestFirst[0]]
+	};
+	return {
+		nextHistory: existingNewestFirst,
+		newCommitted: []
+	};
+}
+/**
+* Estabilizador temporal: só confirma um novo conjunto de resultados após 2 leituras consecutivas idênticas.
+*/
+var OcrTemporalStabilizer = class {
+	constructor() {
+		this.lastHeadSignature = "";
+		this.stableCount = 0;
+	}
+	reset() {
+		this.lastHeadSignature = "";
+		this.stableCount = 0;
+	}
+	pushAndCheck(valuesNewestFirst) {
+		if (valuesNewestFirst.length === 0) {
+			this.stableCount = 0;
+			return false;
+		}
+		const sig = valuesNewestFirst.slice(0, 4).map((v) => String(v)).join("|");
+		if (sig === this.lastHeadSignature) this.stableCount++;
+		else {
+			this.lastHeadSignature = sig;
+			this.stableCount = 1;
+		}
+		return this.stableCount >= 2;
+	}
+};
+var sharedWorkerPromise = null;
+async function getSharedOcrWorker() {
+	if (!sharedWorkerPromise) sharedWorkerPromise = (0, import_src.createWorker)("eng");
+	return sharedWorkerPromise;
+}
+function sampleDominantCellColor(ctx, x, y, w, h, game) {
+	const data = ctx.getImageData(Math.max(0, Math.floor(x)), Math.max(0, Math.floor(y)), Math.max(1, Math.floor(w)), Math.max(1, Math.floor(h))).data;
+	let sumR = 0;
+	let sumG = 0;
+	let sumB = 0;
+	let coloredCount = 0;
+	let bestChromaR = 0;
+	let bestChromaG = 0;
+	let bestChromaB = 0;
+	let maxChroma = 0;
+	for (let i = 0; i < data.length; i += 4) {
+		const r = data[i];
+		const g = data[i + 1];
+		const b = data[i + 2];
+		const luma = .299 * r + .587 * g + .114 * b;
+		const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+		if (game === "roulette") {
+			if (luma < 210) {
+				sumR += r;
+				sumG += g;
+				sumB += b;
+				coloredCount++;
+			}
+		} else if (chroma > maxChroma && luma > 45) {
+			maxChroma = chroma;
+			bestChromaR = r;
+			bestChromaG = g;
+			bestChromaB = b;
+		}
+	}
+	if (game === "roulette") {
+		if (coloredCount === 0) return "black";
+		return classifyRouletteCellRgb(sumR / coloredCount, sumG / coloredCount, sumB / coloredCount);
+	}
+	if (maxChroma < 24) return "unknown";
+	return classifyAviatorCellRgb(bestChromaR, bestChromaG, bestChromaB);
+}
+function preprocessCellCanvas(sourceCanvas, sx, sy, sw, sh, game) {
+	const effectiveHeight = game === "roulette" ? Math.max(8, Math.floor(sh * .7)) : sh;
+	const scale = 2.5;
+	const out = document.createElement("canvas");
+	out.width = Math.max(24, Math.round(sw * scale) + 16);
+	out.height = Math.max(24, Math.round(effectiveHeight * scale) + 16);
+	const ctx = out.getContext("2d");
+	if (!ctx) return out;
+	ctx.fillStyle = "#FFFFFF";
+	ctx.fillRect(0, 0, out.width, out.height);
+	ctx.imageSmoothingEnabled = true;
+	ctx.imageSmoothingQuality = "high";
+	ctx.drawImage(sourceCanvas, sx, sy, sw, effectiveHeight, 8, 8, out.width - 16, out.height - 16);
+	const img = ctx.getImageData(0, 0, out.width, out.height);
+	const d = img.data;
+	let minL = 255;
+	let maxL = 0;
+	const lumas = new Float32Array(out.width * out.height);
+	for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+		const px = p % out.width;
+		const py = Math.floor(p / out.width);
+		const l = .299 * d[i] + .587 * d[i + 1] + .114 * d[i + 2];
+		lumas[p] = l;
+		if (px >= 8 && px < out.width - 8 && py >= 8 && py < out.height - 8) {
+			if (l < minL) minL = l;
+			if (l > maxL) maxL = l;
+		}
+	}
+	const threshold = minL + (maxL - minL) * .54;
+	for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+		const px = p % out.width;
+		const py = Math.floor(p / out.width);
+		if (px < 8 || px >= out.width - 8 || py < 8 || py >= out.height - 8) {
+			d[i] = d[i + 1] = d[i + 2] = 255;
+			continue;
+		}
+		const val = lumas[p] >= threshold ? 0 : 255;
+		d[i] = d[i + 1] = d[i + 2] = val;
+		d[i + 3] = 255;
+	}
+	ctx.putImageData(img, 0, 0);
+	return out;
+}
+function segmentRoiIntoCellRects(roiCanvas, expectedCells) {
+	const ctx = roiCanvas.getContext("2d");
+	if (!ctx || roiCanvas.width < 20 || roiCanvas.height < 8) return [];
+	const w = roiCanvas.width;
+	const h = roiCanvas.height;
+	const data = ctx.getImageData(0, 0, w, h).data;
+	const colActivity = new Float32Array(w);
+	for (let x = 0; x < w; x++) {
+		let sum = 0;
+		for (let y = 2; y < h - 2; y++) {
+			const idx = (y * w + x) * 4;
+			if (.299 * data[idx] + .587 * data[idx + 1] + .114 * data[idx + 2] > 45) sum++;
+		}
+		colActivity[x] = sum / Math.max(1, h - 4);
+	}
+	const segments = [];
+	let inSeg = false;
+	let segStart = 0;
+	for (let x = 0; x < w; x++) {
+		const active = colActivity[x] > .12;
+		if (active && !inSeg) {
+			inSeg = true;
+			segStart = x;
+		} else if (!active && inSeg) {
+			inSeg = false;
+			if (x - segStart >= 8) segments.push({
+				x: segStart,
+				y: 0,
+				w: x - segStart,
+				h
+			});
+		}
+	}
+	if (inSeg && w - segStart >= 8) segments.push({
+		x: segStart,
+		y: 0,
+		w: w - segStart,
+		h
+	});
+	if (segments.length >= 3 && segments.length <= expectedCells + 6) return segments;
+	const count = Math.max(4, Math.min(20, expectedCells));
+	const cellW = w / count;
+	return Array.from({ length: count }, (_, idx) => ({
+		x: Math.floor(idx * cellW),
+		y: 0,
+		w: Math.max(8, Math.floor(cellW)),
+		h
+	}));
+}
+async function runHighPrecisionRoiOcr(params) {
+	const { source, profile, stabilizer, existingHistoryNewestFirst } = params;
+	const now = Date.now();
+	const srcW = source instanceof HTMLVideoElement ? source.videoWidth : source instanceof HTMLImageElement ? source.naturalWidth : source.width;
+	const srcH = source instanceof HTMLVideoElement ? source.videoHeight : source instanceof HTMLImageElement ? source.naturalHeight : source.height;
+	if (srcW < 40 || srcH < 40) return {
+		game: profile.game,
+		valuesNewestFirst: [],
+		overallConfidencePct: 0,
+		cells: [],
+		stabilized: false,
+		committedValuesNewestFirst: [],
+		committedNewCount: 0,
+		timestamp: now,
+		note: "Quadro de vídeo/imagem ainda não disponível."
+	};
+	const rx = Math.max(0, Math.floor(profile.roi.xPct * srcW));
+	const ry = Math.max(0, Math.floor(profile.roi.yPct * srcH));
+	const rw = Math.max(24, Math.min(srcW - rx, Math.floor(profile.roi.wPct * srcW)));
+	const rh = Math.max(14, Math.min(srcH - ry, Math.floor(profile.roi.hPct * srcH)));
+	const roiCanvas = document.createElement("canvas");
+	roiCanvas.width = rw;
+	roiCanvas.height = rh;
+	const roiCtx = roiCanvas.getContext("2d");
+	if (!roiCtx) return {
+		game: profile.game,
+		valuesNewestFirst: [],
+		overallConfidencePct: 0,
+		cells: [],
+		stabilized: false,
+		committedValuesNewestFirst: [],
+		committedNewCount: 0,
+		timestamp: now,
+		note: "Falha ao inicializar contexto Canvas."
+	};
+	roiCtx.drawImage(source, rx, ry, rw, rh, 0, 0, rw, rh);
+	const cellRects = segmentRoiIntoCellRects(roiCanvas, profile.expectedCells);
+	const worker = await getSharedOcrWorker();
+	await worker.setParameters({ tessedit_char_whitelist: profile.game === "roulette" ? "0123456789" : "0123456789.xX" });
+	const diagnostics = [];
+	const acceptedValues = [];
+	let previewUrl;
+	for (let i = 0; i < cellRects.length; i++) {
+		const rect = cellRects[i];
+		const detectedColor = sampleDominantCellColor(roiCtx, rect.x, rect.y, rect.w, rect.h, profile.game);
+		const cellCanvas = preprocessCellCanvas(roiCanvas, rect.x, rect.y, rect.w, rect.h, profile.game);
+		if (i === 0) previewUrl = cellCanvas.toDataURL("image/png");
+		const { data } = await worker.recognize(cellCanvas);
+		const rawText = (data.text ?? "").trim();
+		const confidencePct = typeof data.confidence === "number" ? data.confidence : 0;
+		if (profile.game === "roulette") {
+			const valRes = validateRouletteCellToken(rawText, detectedColor, confidencePct);
+			diagnostics.push({
+				index: i,
+				rawText,
+				parsedValue: valRes.value,
+				detectedColor,
+				expectedColor: valRes.expectedColor,
+				confidencePct,
+				accepted: valRes.accepted,
+				rejectReason: valRes.rejectReason
+			});
+			if (valRes.accepted && valRes.value !== null) acceptedValues.push(valRes.value);
+		} else {
+			const valRes = validateAviatorCellToken(rawText, detectedColor, confidencePct);
+			diagnostics.push({
+				index: i,
+				rawText,
+				parsedValue: valRes.value,
+				detectedColor,
+				expectedColor: valRes.expectedColor,
+				confidencePct,
+				accepted: valRes.accepted,
+				rejectReason: valRes.rejectReason
+			});
+			if (valRes.accepted && valRes.value !== null) acceptedValues.push(valRes.value);
+		}
+	}
+	const orderedNewestFirst = profile.newestOnLeft ? acceptedValues : [...acceptedValues].reverse();
+	const validCells = diagnostics.filter((c) => c.accepted);
+	const overallConfidencePct = validCells.length > 0 ? validCells.reduce((acc, c) => acc + c.confidencePct, 0) / validCells.length : 0;
+	const stabilized = stabilizer.pushAndCheck(orderedNewestFirst);
+	let committedValuesNewestFirst = [];
+	let committedNewCount = 0;
+	if (stabilized && orderedNewestFirst.length > 0) {
+		const rec = reconcileCoherentStrip(existingHistoryNewestFirst, orderedNewestFirst);
+		committedValuesNewestFirst = rec.newCommitted;
+		committedNewCount = rec.newCommitted.length;
+	}
+	const note = orderedNewestFirst.length === 0 ? "Nenhuma célula validada nesta ROI. Ajuste a caixa sobre a faixa de histórico." : stabilized ? committedNewCount > 0 ? `Confirmado (${committedNewCount} nova(s) rodada(s) estabilizada(s)).` : "Leitura estabilizada (sem novas rodadas desde a última captura)." : "Aguardando 2.ª leitura consecutiva idêntica para confirmar estabilidade...";
+	return {
+		game: profile.game,
+		valuesNewestFirst: orderedNewestFirst,
+		overallConfidencePct,
+		cells: diagnostics,
+		stabilized,
+		committedValuesNewestFirst,
+		committedNewCount,
+		timestamp: now,
+		note,
+		preprocessedPreviewUrl: previewUrl
+	};
+}
+// src/engine/quantLabTests.ts
+function runQuantLabTests() {
+	const cases = [];
+	const rOk18 = validateRouletteCellToken("18", "red", 92);
+	const rBad18vs13 = validateRouletteCellToken("13", "red", 92);
+	const rBadLightning = validateRouletteCellToken("100x", "red", 95);
+	cases.push({
+		name: "1. OCR Validação Roleta (Domínio 0-36 & Cor Pixel)",
+		passed: rOk18.accepted && rOk18.value === 18 && !rBad18vs13.accepted && !rBadLightning.accepted,
+		details: `18(red)=${rOk18.accepted}, 13(red) rejeitado=${!rBad18vs13.accepted}, 100x rejeitado=${!rBadLightning.accepted}`
+	});
+	const aOk = validateAviatorCellToken("6.36x", "purple", 88);
+	const aBad = validateAviatorCellToken("25.00x", "blue", 90);
+	const stab = new OcrTemporalStabilizer();
+	const s1 = stab.pushAndCheck([
+		6.36,
+		3.57,
+		11.43,
+		1.28
+	]);
+	const s2 = stab.pushAndCheck([
+		6.36,
+		3.57,
+		11.43,
+		1.28
+	]);
+	const rec = reconcileCoherentStrip([
+		3.57,
+		11.43,
+		1.28
+	], [
+		6.36,
+		3.57,
+		11.43,
+		1.28
+	]);
+	cases.push({
+		name: "2. OCR Aviator, Estabilização 2x & Reconciliação",
+		passed: aOk.accepted && !aBad.accepted && !s1 && s2 && rec.newCommitted.length === 1 && rec.newCommitted[0] === 6.36,
+		details: `1.ª leitura=${s1}, 2.ª leitura=${s2}, novo commit=${rec.newCommitted[0]}x`
+	});
+	const rRep = analyzeQuantRoulette([
+		27,
+		34,
+		16,
+		32,
+		10,
+		18,
+		0,
+		28,
+		13,
+		19,
+		34,
+		25,
+		17,
+		2,
+		21,
+		4,
+		19,
+		15,
+		32,
+		0
+	]);
+	cases.push({
+		name: "3. Motor Roleta (Setores Físicos, Atrasos & Vizinhos ±2)",
+		passed: rRep.totalSpins === 20 && rRep.neighborsPlusMinus2.length === 5 && rRep.sectors.length === 4,
+		details: `Âncora=${rRep.recommendedAnchor}, Vizinhos=[${rRep.neighborsPlusMinus2.join(",")}], Setor top=${rRep.topSector.label}`
+	});
+	const aRep = analyzeQuantAviator([
+		3.57,
+		11.43,
+		1.28,
+		1.33,
+		2.21,
+		2.21,
+		19.12,
+		1.4,
+		1,
+		2.64,
+		1.23,
+		1.25,
+		256.78,
+		1.13,
+		1,
+		4.5
+	]);
+	cases.push({
+		name: "4. Motor Aviator (5 Faixas, Gaps Roxo/Rosa & Média/Desvio)",
+		passed: aRep.totalRounds === 16 && aRep.bands.length === 5 && aRep.pinkGap.count === 3,
+		details: `Média20=${aRep.movingAvg20.toFixed(2)}x, Rosas=${aRep.pinkGap.count}, Gap atual >=10x=${aRep.pinkGap.currentGap}`
+	});
+	const regimeBlocked = detectMarketRegime({
+		game: "aviator",
+		valuesNewestFirst: Array.from({ length: 24 }, (_, i) => i % 5 === 0 ? 12.5 : 1.08 + i % 3 * .1),
+		thresholdPct: 60
+	});
+	cases.push({
+		name: "5. Detector de Imprevisibilidade (Regra Bloqueio > 60%)",
+		passed: regimeBlocked.blockEntries && regimeBlocked.bannerText.includes("NÃO APOSTAR"),
+		details: `Índice=${regimeBlocked.unpredictabilityPct}%, Bloqueio=${regimeBlocked.blockEntries}`
+	});
+	const longAviator = Array.from({ length: 40 }, (_, i) => i % 4 === 0 ? 1.18 : i % 4 === 1 ? 1.32 : i % 4 === 2 ? 2.4 : 1.85);
+	const learn = evaluateContinuousLearning({
+		game: "aviator",
+		historyNewestFirst: longAviator,
+		strategies: DEFAULT_QUANT_STRATEGIES,
+		stakeAoa: 100
+	});
+	const evo = evolveTopStrategies({
+		game: "aviator",
+		historyNewestFirst: longAviator,
+		existingStrategies: DEFAULT_QUANT_STRATEGIES,
+		stakeAoa: 100
+	});
+	const decision = buildQuantAnalystDecision({
+		game: "aviator",
+		regime: detectMarketRegime({
+			game: "aviator",
+			valuesNewestFirst: longAviator,
+			thresholdPct: 85
+		}),
+		learning: learn,
+		bankroll: {
+			initialBalanceAoa: 2500,
+			currentBalanceAoa: 2500,
+			baseStakeAoa: 100,
+			stopLossAoa: 500,
+			stopWinAoa: 800,
+			pauseAfterConsecutiveLosses: 3,
+			consecutiveLosses: 0,
+			sessionPnlAoa: 0
+		}
+	});
+	cases.push({
+		name: "6. Aprendizagem OOS, Evolução & Analista Quant",
+		passed: learn.evaluations.length === 4 && typeof evo.summaryNote === "string" && decision.sampleSize === 40,
+		details: `Top=${learn.topStrategy?.strategy.name}, Decisão=${decision.decision}, ${evo.summaryNote}`
+	});
+	const passedCount = cases.filter((c) => c.passed).length;
+	return {
+		passedCount,
+		totalCount: cases.length,
+		allPassed: passedCount === cases.length,
+		cases
+	};
+}
+// src/components/QuantLabDesktop.tsx
+var LS_KEY_QUANT_ROULETTE = "quantlab_roulette_history_v1";
+var LS_KEY_QUANT_AVIATOR = "quantlab_aviator_history_v1";
+function loadNumHistory(key) {
+	try {
+		const raw = localStorage.getItem(key);
+		if (!raw) return [];
+		const parsed = JSON.parse(raw);
+		return Array.isArray(parsed) ? parsed.filter((n) => typeof n === "number" && Number.isFinite(n)).slice(0, 500) : [];
+	} catch {
+		return [];
+	}
+}
+var QuantLabDesktop = ({ onSyncRouletteSpins, onSyncAviatorMultipliers }) => {
+	const [game, setGame] = (0, import_react.useState)("roulette");
+	const [rouletteHistory, setRouletteHistory] = (0, import_react.useState)(() => loadNumHistory(LS_KEY_QUANT_ROULETTE));
+	const [aviatorHistory, setAviatorHistory] = (0, import_react.useState)(() => loadNumHistory(LS_KEY_QUANT_AVIATOR));
+	const [roiProfiles, setRoiProfiles] = (0, import_react.useState)(() => loadRoiProfiles());
+	const [selectedProfileId, setSelectedProfileId] = (0, import_react.useState)(() => loadRoiProfiles()[0]?.id ?? DEFAULT_ROI_PROFILES[0].id);
+	const [newProfileName, setNewProfileName] = (0, import_react.useState)("");
+	const [strategies, setStrategies] = (0, import_react.useState)(() => loadQuantStrategies());
+	const [unpredictabilityThreshold, setUnpredictabilityThreshold] = (0, import_react.useState)(60);
+	const [bankroll, setBankroll] = (0, import_react.useState)({
+		initialBalanceAoa: 2500,
+		currentBalanceAoa: 2500,
+		baseStakeAoa: 100,
+		stopLossAoa: 500,
+		stopWinAoa: 800,
+		pauseAfterConsecutiveLosses: 3,
+		consecutiveLosses: 0,
+		sessionPnlAoa: 0
+	});
+	const [captureActive, setCaptureActive] = (0, import_react.useState)(false);
+	const [autoOcrLoop, setAutoOcrLoop] = (0, import_react.useState)(false);
+	const [ocrIntervalMs, setOcrIntervalMs] = (0, import_react.useState)(1400);
+	const [captureError, setCaptureError] = (0, import_react.useState)(null);
+	const [staticImageUrl, setStaticImageUrl] = (0, import_react.useState)("/assets/aistudio/image_6cf11545.png");
+	const [lastOcrResult, setLastOcrResult] = (0, import_react.useState)(null);
+	const [ocrBusy, setOcrBusy] = (0, import_react.useState)(false);
+	const [manualSingleInput, setManualSingleInput] = (0, import_react.useState)("");
+	const [bulkPasteInput, setBulkPasteInput] = (0, import_react.useState)("");
+	const [inputNotice, setInputNotice] = (0, import_react.useState)(null);
+	const [newStratName, setNewStratName] = (0, import_react.useState)("");
+	const [newStratRule, setNewStratRule] = (0, import_react.useState)("roulette_absence");
+	const [newStratParamA, setNewStratParamA] = (0, import_react.useState)("5");
+	const [newStratParamB, setNewStratParamB] = (0, import_react.useState)("1.55");
+	const [evolutionBanner, setEvolutionBanner] = (0, import_react.useState)(null);
+	const [aiNarrative, setAiNarrative] = (0, import_react.useState)(null);
+	const [aiBusy, setAiBusy] = (0, import_react.useState)(false);
+	const [testReport, setTestReport] = (0, import_react.useState)(null);
+	const videoRef = (0, import_react.useRef)(null);
+	const imgRef = (0, import_react.useRef)(null);
+	const streamRef = (0, import_react.useRef)(null);
+	const stageRef = (0, import_react.useRef)(null);
+	const fileInputRef = (0, import_react.useRef)(null);
+	const stabilizerRef = (0, import_react.useRef)(new OcrTemporalStabilizer());
+	const dragModeRef = (0, import_react.useRef)(null);
+	const activeHistory = game === "roulette" ? rouletteHistory : aviatorHistory;
+	const activeHistoryRef = (0, import_react.useRef)(activeHistory);
+	activeHistoryRef.current = activeHistory;
+	const activeProfile = (0, import_react.useMemo)(() => {
+		const exact = roiProfiles.find((p) => p.id === selectedProfileId && p.game === game);
+		if (exact) return exact;
+		return roiProfiles.find((p) => p.game === game) ?? DEFAULT_ROI_PROFILES[0];
+	}, [
+		roiProfiles,
+		selectedProfileId,
+		game
+	]);
+	const activeRoi = activeProfile.roi;
+	(0, import_react.useEffect)(() => {
+		try {
+			localStorage.setItem(LS_KEY_QUANT_ROULETTE, JSON.stringify(rouletteHistory.slice(0, 500)));
+		} catch {}
+	}, [rouletteHistory]);
+	(0, import_react.useEffect)(() => {
+		try {
+			localStorage.setItem(LS_KEY_QUANT_AVIATOR, JSON.stringify(aviatorHistory.slice(0, 500)));
+		} catch {}
+	}, [aviatorHistory]);
+	(0, import_react.useEffect)(() => {
+		saveRoiProfiles(roiProfiles);
+	}, [roiProfiles]);
+	(0, import_react.useEffect)(() => {
+		saveQuantStrategies(strategies);
+	}, [strategies]);
+	(0, import_react.useEffect)(() => {
+		return () => {
+			if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+		};
+	}, []);
+	const handleSwitchGame = (nextGame) => {
+		setGame(nextGame);
+		stabilizerRef.current.reset();
+		setLastOcrResult(null);
+		setAiNarrative(null);
+		setEvolutionBanner(null);
+		const matchedProfile = roiProfiles.find((p) => p.game === nextGame);
+		if (matchedProfile) setSelectedProfileId(matchedProfile.id);
+		if (nextGame === "roulette") {
+			setNewStratRule("roulette_absence");
+			setNewStratParamA("5");
+			if (staticImageUrl.includes("image_2f76b6dc")) setStaticImageUrl("/assets/aistudio/image_6cf11545.png");
+		} else {
+			setNewStratRule("aviator_post_low_recovery");
+			setNewStratParamA("2");
+			setNewStratParamB("1.55");
+			if (staticImageUrl.includes("image_6cf11545")) setStaticImageUrl("/assets/aistudio/image_2f76b6dc.png");
+		}
+	};
+	const rouletteReport = (0, import_react.useMemo)(() => analyzeQuantRoulette(rouletteHistory), [rouletteHistory]);
+	const aviatorReport = (0, import_react.useMemo)(() => analyzeQuantAviator(aviatorHistory), [aviatorHistory]);
+	const regimeReport = (0, import_react.useMemo)(() => detectMarketRegime({
+		game,
+		valuesNewestFirst: activeHistory,
+		thresholdPct: unpredictabilityThreshold,
+		minSampleSize: 12
+	}), [
+		game,
+		activeHistory,
+		unpredictabilityThreshold
+	]);
+	const learningReport = (0, import_react.useMemo)(() => evaluateContinuousLearning({
+		game,
+		historyNewestFirst: activeHistory,
+		strategies,
+		stakeAoa: bankroll.baseStakeAoa
+	}), [
+		game,
+		activeHistory,
+		strategies,
+		bankroll.baseStakeAoa
+	]);
+	const analystDecision = (0, import_react.useMemo)(() => buildQuantAnalystDecision({
+		game,
+		regime: regimeReport,
+		learning: learningReport,
+		bankroll
+	}), [
+		game,
+		regimeReport,
+		learningReport,
+		bankroll
+	]);
+	const startScreenCapture = async () => {
+		setCaptureError(null);
+		if (!navigator.mediaDevices || typeof navigator.mediaDevices.getDisplayMedia !== "function") {
+			setCaptureError("Screen Capture API (getDisplayMedia) não disponível neste contexto. Use navegador Desktop (Chrome/Edge) ou carregue um print.");
+			return;
+		}
+		try {
+			const stream = await navigator.mediaDevices.getDisplayMedia({
+				video: { frameRate: {
+					ideal: 15,
+					max: 30
+				} },
+				audio: false
+			});
+			streamRef.current = stream;
+			setCaptureActive(true);
+			stabilizerRef.current.reset();
+			const track = stream.getVideoTracks()[0];
+			if (track) track.onended = () => {
+				stopScreenCapture();
+			};
+			if (videoRef.current) {
+				videoRef.current.srcObject = stream;
+				await videoRef.current.play();
+			}
+		} catch {
+			setCaptureError("Captura cancelada ou permissão negada pelo navegador.");
+			setCaptureActive(false);
+		}
+	};
+	const stopScreenCapture = () => {
+		setAutoOcrLoop(false);
+		setCaptureActive(false);
+		if (streamRef.current) {
+			streamRef.current.getTracks().forEach((t) => t.stop());
+			streamRef.current = null;
+		}
+		if (videoRef.current) videoRef.current.srcObject = null;
+	};
+	const commitDetectedValues = (newValuesNewestFirst) => {
+		if (newValuesNewestFirst.length === 0) return;
+		if (game === "roulette") setRouletteHistory((prev) => {
+			const next = [...newValuesNewestFirst, ...prev].slice(0, 500);
+			onSyncRouletteSpins?.(next);
+			return next;
+		});
+		else setAviatorHistory((prev) => {
+			const next = [...newValuesNewestFirst, ...prev].slice(0, 500);
+			onSyncAviatorMultipliers?.(next);
+			return next;
+		});
+	};
+	const runSingleOcrPass = async () => {
+		if (ocrBusy) return;
+		const source = captureActive ? videoRef.current : imgRef.current;
+		if (!source) return;
+		setOcrBusy(true);
+		try {
+			const res = await runHighPrecisionRoiOcr({
+				source,
+				profile: activeProfile,
+				stabilizer: stabilizerRef.current,
+				existingHistoryNewestFirst: activeHistoryRef.current
+			});
+			setLastOcrResult(res);
+			if (res.committedNewCount > 0) commitDetectedValues(res.committedValuesNewestFirst);
+		} catch (err) {
+			setCaptureError(err instanceof Error ? err.message : "Erro ao executar OCR.");
+		} finally {
+			setOcrBusy(false);
+		}
+	};
+	(0, import_react.useEffect)(() => {
+		if (!autoOcrLoop) return;
+		const id = window.setInterval(() => {
+			runSingleOcrPass();
+		}, ocrIntervalMs);
+		return () => window.clearInterval(id);
+	}, [
+		autoOcrLoop,
+		ocrIntervalMs,
+		captureActive,
+		activeProfile,
+		game
+	]);
+	const updateActiveRoi = (nextRoi) => {
+		const clamped = {
+			xPct: Math.max(0, Math.min(.95, nextRoi.xPct)),
+			yPct: Math.max(0, Math.min(.95, nextRoi.yPct)),
+			wPct: Math.max(.05, Math.min(1 - nextRoi.xPct, nextRoi.wPct)),
+			hPct: Math.max(.03, Math.min(1 - nextRoi.yPct, nextRoi.hPct))
+		};
+		setRoiProfiles((prev) => prev.map((p) => p.id === activeProfile.id ? {
+			...p,
+			roi: clamped,
+			updatedAt: Date.now()
+		} : p));
+	};
+	const getRelCoords = (clientX, clientY) => {
+		const rect = stageRef.current?.getBoundingClientRect();
+		if (!rect || rect.width === 0 || rect.height === 0) return {
+			x: 0,
+			y: 0
+		};
+		return {
+			x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+			y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+		};
+	};
+	const handleStageMouseDown = (e) => {
+		const { x, y } = getRelCoords(e.clientX, e.clientY);
+		dragModeRef.current = {
+			type: "draw",
+			startX: x,
+			startY: y
+		};
+	};
+	const handleBoxMoveMouseDown = (e) => {
+		e.stopPropagation();
+		const { x, y } = getRelCoords(e.clientX, e.clientY);
+		dragModeRef.current = {
+			type: "move",
+			startX: x,
+			startY: y,
+			orig: { ...activeRoi }
+		};
+	};
+	const handleBoxResizeMouseDown = (e) => {
+		e.stopPropagation();
+		const { x, y } = getRelCoords(e.clientX, e.clientY);
+		dragModeRef.current = {
+			type: "resize",
+			startX: x,
+			startY: y,
+			orig: { ...activeRoi }
+		};
+	};
+	const handleStageMouseMove = (e) => {
+		const drag = dragModeRef.current;
+		if (!drag) return;
+		const { x, y } = getRelCoords(e.clientX, e.clientY);
+		if (drag.type === "draw") {
+			const xPct = Math.min(drag.startX, x);
+			const yPct = Math.min(drag.startY, y);
+			const wPct = Math.max(.05, Math.abs(x - drag.startX));
+			const hPct = Math.max(.03, Math.abs(y - drag.startY));
+			updateActiveRoi({
+				xPct,
+				yPct,
+				wPct,
+				hPct
+			});
+		} else if (drag.type === "move") {
+			const dx = x - drag.startX;
+			const dy = y - drag.startY;
+			updateActiveRoi({
+				xPct: Math.max(0, Math.min(1 - drag.orig.wPct, drag.orig.xPct + dx)),
+				yPct: Math.max(0, Math.min(1 - drag.orig.hPct, drag.orig.yPct + dy)),
+				wPct: drag.orig.wPct,
+				hPct: drag.orig.hPct
+			});
+		} else if (drag.type === "resize") {
+			const wPct = Math.max(.05, Math.min(1 - drag.orig.xPct, drag.orig.wPct + (x - drag.startX)));
+			const hPct = Math.max(.03, Math.min(1 - drag.orig.yPct, drag.orig.hPct + (y - drag.startY)));
+			updateActiveRoi({
+				...drag.orig,
+				wPct,
+				hPct
+			});
+		}
+	};
+	const handleStageMouseUp = () => {
+		dragModeRef.current = null;
+	};
+	const handleSaveNewProfile = () => {
+		const cleanName = newProfileName.trim();
+		if (!cleanName) return;
+		const created = {
+			id: `roi_${Date.now()}`,
+			name: cleanName,
+			game,
+			roi: { ...activeRoi },
+			expectedCells: activeProfile.expectedCells,
+			newestOnLeft: activeProfile.newestOnLeft,
+			updatedAt: Date.now()
+		};
+		setRoiProfiles((prev) => [created, ...prev]);
+		setSelectedProfileId(created.id);
+		setNewProfileName("");
+	};
+	const handleImageUpload = (e) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+		stopScreenCapture();
+		const reader = new FileReader();
+		reader.onload = () => {
+			if (typeof reader.result === "string") {
+				setStaticImageUrl(reader.result);
+				stabilizerRef.current.reset();
+				setLastOcrResult(null);
+			}
+		};
+		reader.readAsDataURL(file);
+		e.target.value = "";
+	};
+	const handleAddSingleValue = (e) => {
+		e.preventDefault();
+		setInputNotice(null);
+		const cleaned = manualSingleInput.trim().replace(",", ".").replace(/[xX×]$/, "");
+		const val = Number(cleaned);
+		if (game === "roulette") {
+			if (!cleaned || !Number.isInteger(val) || val < 0 || val > 36) {
+				setInputNotice("Introduza um número inteiro válido da roleta (0 a 36).");
+				return;
+			}
+			commitDetectedValues([val]);
+			setManualSingleInput("");
+			setInputNotice(`Número ${val} registado no topo do histórico.`);
+		} else {
+			if (!cleaned || Number.isNaN(val) || val < 1 || val > 1e4) {
+				setInputNotice("Introduza um multiplicador Aviator válido (>= 1.00).");
+				return;
+			}
+			const rounded = Math.round(val * 100) / 100;
+			commitDetectedValues([rounded]);
+			setManualSingleInput("");
+			setInputNotice(`Multiplicador ${rounded.toFixed(2)}x registado.`);
+		}
+	};
+	const handleBulkPasteImport = (e) => {
+		e.preventDefault();
+		setInputNotice(null);
+		const tokens = bulkPasteInput.replace(/,/g, ".").split(/[\s;|]+/).map((t) => t.trim().replace(/[xX×]$/, "")).filter(Boolean);
+		if (game === "roulette") {
+			const valid = tokens.map((t) => Number(t)).filter((n) => Number.isInteger(n) && n >= 0 && n <= 36).slice(0, 500);
+			if (valid.length === 0) {
+				setInputNotice("Nenhum número de roleta (0–36) encontrado no texto.");
+				return;
+			}
+			commitDetectedValues(valid);
+			setBulkPasteInput("");
+			setInputNotice(`${valid.length} giros importados para análise.`);
+		} else {
+			const valid = tokens.map((t) => Math.round(Number(t) * 100) / 100).filter((n) => Number.isFinite(n) && n >= 1 && n <= 1e4).slice(0, 500);
+			if (valid.length === 0) {
+				setInputNotice("Nenhum multiplicador Aviator (>= 1.00) encontrado.");
+				return;
+			}
+			commitDetectedValues(valid);
+			setBulkPasteInput("");
+			setInputNotice(`${valid.length} voos importados para análise.`);
+		}
+	};
+	const handleCreateStrategy = (e) => {
+		e.preventDefault();
+		const label = newStratName.trim() || `Estratégia ${strategies.length + 1}`;
+		const pA = Number(newStratParamA) || 3;
+		const pB = Number(newStratParamB.replace(",", ".")) || 1.55;
+		const params = newStratRule === "roulette_absence" ? { minDelay: Math.max(2, Math.round(pA)) } : newStratRule === "roulette_streak_break" || newStratRule === "roulette_streak_follow" ? { minStreak: Math.max(2, Math.round(pA)) } : newStratRule === "roulette_sector_confluence" ? {
+			windowSize: Math.max(10, Math.round(pA)),
+			minConcentrationPct: Math.max(35, Math.min(80, pB))
+		} : newStratRule === "aviator_conservative_stable" ? {
+			lookbackNoInstant: Math.max(2, Math.round(pA)),
+			targetMultiplier: Math.max(1.15, pB)
+		} : newStratRule === "aviator_post_low_recovery" ? {
+			minStreak: Math.max(2, Math.round(pA)),
+			lowThreshold: 1.5,
+			targetMultiplier: Math.max(1.2, pB)
+		} : newStratRule === "aviator_window_frequency" ? {
+			windowSize: Math.max(10, Math.round(pA)),
+			minHitRatePct: 52,
+			targetMultiplier: Math.max(1.2, pB)
+		} : {
+			windowSize: 8,
+			minPurpleCount: Math.max(3, Math.round(pA)),
+			targetMultiplier: Math.max(1.5, pB)
+		};
+		const created = {
+			id: `custom_${Date.now()}`,
+			name: label,
+			game,
+			enabled: true,
+			isCustom: true,
+			isEvolved: false,
+			ruleType: newStratRule,
+			params,
+			description: `Estratégia personalizada (${newStratRule}) criada no QuantLab.`
+		};
+		setStrategies((prev) => [created, ...prev]);
+		setNewStratName("");
+	};
+	const handleRunEvolution = () => {
+		const evo = evolveTopStrategies({
+			game,
+			historyNewestFirst: activeHistory,
+			existingStrategies: strategies,
+			stakeAoa: bankroll.baseStakeAoa
+		});
+		if (evo.promoted.length > 0) setStrategies((prev) => [...evo.promoted, ...prev]);
+		setEvolutionBanner(evo.summaryNote);
+	};
+	const handleAskGeminiQuant = async () => {
+		if (activeHistory.length < 5) {
+			setAiNarrative("Registe pelo menos 5 rodadas para gerar análise quantitativa.");
+			return;
+		}
+		setAiBusy(true);
+		try {
+			const topStrats = learningReport.evaluations.slice(0, 4).map((e) => `${e.strategy.name}: Consistência ${e.consistencyScore}/100, OOS ${e.outOfSampleHitRatePct.toFixed(1)}% (${e.outOfSampleEntries} entr.), ROI ${e.outOfSampleRoiPct.toFixed(1)}%, DD máx ${e.overall.maxDrawdownPct.toFixed(1)}%`).join(" | ");
+			const res = await fetch("/api/analyze-quant-ai", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					game,
+					sampleSize: activeHistory.length,
+					unpredictabilityPct: regimeReport.unpredictabilityPct,
+					decisionHeadline: analystDecision.headline,
+					regimeReasons: regimeReport.reasons,
+					topStrategiesSummary: topStrats,
+					recentValues: activeHistory.slice(0, 25)
+				})
+			});
+			if (!res.ok) {
+				setAiNarrative(`${analystDecision.headline}\n${analystDecision.statisticalJustification}\n${analystDecision.disclaimer}`);
+				return;
+			}
+			const data = await res.json();
+			setAiNarrative(data.answer ?? `${analystDecision.headline}\n${analystDecision.statisticalJustification}`);
+		} catch {
+			setAiNarrative(`${analystDecision.headline}\n${analystDecision.statisticalJustification}\n${analystDecision.disclaimer}`);
+		} finally {
+			setAiBusy(false);
+		}
+	};
+	const handleRecordBankrollOutcome = (won, payoutMult = 2) => {
+		const delta = won ? bankroll.baseStakeAoa * (payoutMult - 1) : -bankroll.baseStakeAoa;
+		setBankroll((prev) => ({
+			...prev,
+			currentBalanceAoa: Math.max(0, prev.currentBalanceAoa + delta),
+			sessionPnlAoa: prev.sessionPnlAoa + delta,
+			consecutiveLosses: won ? 0 : prev.consecutiveLosses + 1
+		}));
+	};
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "space-y-6",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "flex flex-col lg:flex-row lg:items-center justify-between gap-4",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "space-y-1",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex flex-wrap items-center gap-2 text-xs text-slate-400",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: "font-semibold text-amber-400",
+									children: "QuantLab Pro Desktop"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									"aria-hidden": "true",
+									children: "·"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "OCR de Alta Precisão" }),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									"aria-hidden": "true",
+									children: "·"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+									className: "font-mono tabular-nums",
+									children: [
+										"Amostra: ",
+										activeHistory.length,
+										" rodadas"
+									]
+								})
+							]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
+							className: "font-display text-xl sm:text-2xl font-semibold text-slate-100",
+							children: "Leitura de Ecrã em Tempo Real, Deteção de Imprevisibilidade & Aprendizagem Contínua"
+						})]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-wrap items-center gap-2",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "inline-flex rounded-lg border border-slate-800 bg-[#0B0F17] p-0.5",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => handleSwitchGame("roulette"),
+									className: `rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer ${game === "roulette" ? "bg-amber-400 text-slate-950" : "text-slate-400 hover:text-slate-100"}`,
+									children: "Roleta Europeia (0–36)"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => handleSwitchGame("aviator"),
+									className: `rounded-md px-3 py-1.5 text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer ${game === "aviator" ? "bg-red-600 text-white" : "text-slate-400 hover:text-slate-100"}`,
+									children: "Aviator"
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								onClick: () => setTestReport(runQuantLabTests()),
+								className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-2 text-xs font-medium text-amber-300 hover:bg-slate-800 whitespace-nowrap shrink-0 cursor-pointer",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(FlaskConical, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Testar Motores" })]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								onClick: () => {
+									if (game === "roulette") setRouletteHistory([]);
+									else setAviatorHistory([]);
+									stabilizerRef.current.reset();
+								},
+								className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-2 text-xs font-medium text-slate-300 hover:text-red-300 whitespace-nowrap shrink-0 cursor-pointer",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(RotateCcw, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Zerar Sessão" })]
+							})
+						]
+					})]
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "flex items-center gap-1.5 overflow-x-auto pt-1 border-t border-slate-800/80",
+					children: activeHistory.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						className: "text-xs text-slate-400 py-1",
+						children: "Sem rodadas na sessão. Inicie a captura de ecrã, corra o OCR num print ou cole resultados abaixo."
+					}) : activeHistory.slice(0, 26).map((val, idx) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+						className: `inline-flex h-7 min-w-[34px] px-2 items-center justify-center rounded border font-mono text-xs font-bold tabular-nums shrink-0 ${game === "roulette" ? val === 0 ? "bg-emerald-600/25 border-emerald-500/60 text-emerald-300" : [
+							1,
+							3,
+							5,
+							7,
+							9,
+							12,
+							14,
+							16,
+							18,
+							19,
+							21,
+							23,
+							25,
+							27,
+							30,
+							32,
+							34,
+							36
+						].includes(val) ? "bg-red-600/25 border-red-500/60 text-red-200" : "bg-slate-800 border-slate-600 text-slate-100" : val >= 10 ? "bg-fuchsia-600/25 border-fuchsia-400/70 text-fuchsia-200" : val >= 2 ? "bg-purple-600/25 border-purple-400/70 text-purple-200" : "bg-sky-600/25 border-sky-400/70 text-sky-200"} ${idx === 0 ? "ring-2 ring-amber-400" : ""}`,
+						children: game === "roulette" ? val : `${val.toFixed(2)}x`
+					}, `${val}-${idx}`))
+				})]
+			}),
+			testReport && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "rounded-xl border border-slate-800 bg-[#131924] p-4 space-y-3",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "flex items-center justify-between",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex items-center gap-2 text-sm font-semibold text-slate-100",
+						children: [testReport.allPassed ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CircleCheck, { className: "h-4 w-4 text-emerald-400" }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)(CircleX, { className: "h-4 w-4 text-red-400" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+							"Auditoria QuantLab Pro: ",
+							testReport.passedCount,
+							"/",
+							testReport.totalCount,
+							" módulos aprovados"
+						] })]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+						type: "button",
+						onClick: () => setTestReport(null),
+						className: "text-xs text-slate-400 hover:text-slate-200 cursor-pointer",
+						children: "Fechar"
+					})]
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+					className: "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2",
+					children: testReport.cases.map((tc) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: `rounded-lg border p-3 text-xs ${tc.passed ? "border-emerald-500/30 bg-emerald-500/5" : "border-red-500/40 bg-red-500/10"}`,
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "font-semibold text-slate-100 flex justify-between gap-2",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: tc.name }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: tc.passed ? "text-emerald-400" : "text-red-400",
+								children: tc.passed ? "OK" : "ERRO"
+							})]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "text-[11px] text-slate-400 mt-1",
+							children: tc.details
+						})]
+					}, tc.name))
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: `lg:col-span-5 rounded-xl border p-5 space-y-4 ${regimeReport.blockEntries ? "border-red-500/60 bg-red-950/20" : regimeReport.regimeStatus === "CAUTELA" ? "border-amber-500/50 bg-amber-950/15" : "border-emerald-500/40 bg-[#131924]"}`,
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex items-center justify-between gap-3",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex items-center gap-2 text-sm font-semibold text-slate-100",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ShieldAlert, { className: `h-4 w-4 ${regimeReport.blockEntries ? "text-red-400" : regimeReport.regimeStatus === "CAUTELA" ? "text-amber-400" : "text-emerald-400"}` }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Termómetro de Imprevisibilidade" })]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+								className: "font-mono text-lg font-bold tabular-nums text-slate-100",
+								children: [regimeReport.unpredictabilityPct, "%"]
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "h-2.5 w-full rounded-full bg-[#0B0F17] overflow-hidden border border-slate-800",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: `h-full transition-all ${regimeReport.blockEntries ? "bg-red-500" : regimeReport.regimeStatus === "CAUTELA" ? "bg-amber-400" : "bg-emerald-500"}`,
+								style: { width: `${Math.min(100, regimeReport.unpredictabilityPct)}%` }
+							})
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: `text-sm font-bold ${regimeReport.blockEntries ? "text-red-300" : regimeReport.regimeStatus === "CAUTELA" ? "text-amber-300" : "text-emerald-300"}`,
+							children: regimeReport.bannerText
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+							className: "space-y-1 text-xs text-slate-300",
+							children: regimeReport.reasons.map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", { children: ["• ", r] }, i))
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "pt-2 border-t border-slate-800/80 space-y-1.5",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex items-center justify-between text-xs text-slate-400",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [
+									"Limiar máximo de bloqueio (",
+									unpredictabilityThreshold,
+									"%)"
+								] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+									className: "font-mono tabular-nums",
+									children: [
+										"Janelas 20/50/100:",
+										" ",
+										regimeReport.windows.map((w) => `${w.unpredictabilityPct}%`).join(" / ") || "--"
+									]
+								})]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								type: "range",
+								min: 40,
+								max: 85,
+								value: unpredictabilityThreshold,
+								onChange: (e) => setUnpredictabilityThreshold(Number(e.target.value)),
+								className: "w-full"
+							})]
+						})
+					]
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "lg:col-span-7 rounded-xl border border-slate-800 bg-[#131924] p-5 flex flex-col justify-between space-y-4",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "space-y-3",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "flex flex-wrap items-center justify-between gap-2",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex items-center gap-2 text-sm font-semibold text-slate-100",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Target, { className: "h-4 w-4 text-amber-400" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Semáforo de Decisão & Analista Quant" })]
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: `rounded-md px-3 py-1 font-mono text-xs font-bold ${analystDecision.decision === "ENTRAR" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/50" : "bg-red-500/20 text-red-300 border border-red-500/50"}`,
+										children: analystDecision.decision === "ENTRAR" ? `ENTRAR · ${analystDecision.confidencePct}% CONFIANÇA` : "NÃO APOSTAR / AGUARDAR"
+									})]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "text-lg font-semibold text-slate-100",
+									children: analystDecision.headline
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+									className: "text-xs text-slate-300 leading-relaxed",
+									children: analystDecision.statisticalJustification
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "grid grid-cols-3 gap-3 pt-1 font-mono text-xs tabular-nums",
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "border-t border-slate-800 pt-2",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+												className: "font-sans text-[11px] text-slate-400",
+												children: "Estratégia Autora"
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+												className: "font-sans font-semibold text-slate-200 truncate",
+												children: analystDecision.authorStrategyName
+											})]
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "border-t border-slate-800 pt-2",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+												className: "font-sans text-[11px] text-slate-400",
+												children: "Acerto Validado OOS"
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "font-bold text-amber-300",
+												children: [analystDecision.validatedHitRatePct.toFixed(1), "%"]
+											})]
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "border-t border-slate-800 pt-2",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+												className: "font-sans text-[11px] text-slate-400",
+												children: "Amostra Analisada"
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+												className: "font-bold text-slate-100",
+												children: ["n = ", analystDecision.sampleSize]
+											})]
+										})
+									]
+								})
+							]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "text-[11px] text-slate-400",
+								children: analystDecision.disclaimer
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								onClick: handleAskGeminiQuant,
+								disabled: aiBusy,
+								className: "inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-500 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sparkles, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: aiBusy ? "A analisar..." : "Resumo Analista IA" })]
+							})]
+						}),
+						aiNarrative && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "rounded-lg border border-blue-500/30 bg-[#0B0F17] p-3.5 text-xs text-slate-200 whitespace-pre-line leading-relaxed",
+							children: aiNarrative
+						})
+					]
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-col lg:flex-row lg:items-center justify-between gap-3",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", {
+							className: "text-base font-semibold text-slate-100 flex items-center gap-2",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Monitor, { className: "h-4 w-4 text-emerald-400" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Monitor de Captura de Ecrã (`getDisplayMedia`) & Calibração de ROI" })]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+							className: "text-xs text-slate-400",
+							children: "Capture a janela do outro navegador ou carregue um print. Arraste sobre a imagem para desenhar, mover ou redimensionar a caixa ROI."
+						})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex flex-wrap items-center gap-2",
+							children: [
+								captureActive ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									onClick: stopScreenCapture,
+									className: "inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-500 whitespace-nowrap shrink-0 cursor-pointer",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Square, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Parar Captura" })]
+								}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									onClick: startScreenCapture,
+									className: "inline-flex items-center gap-1.5 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-slate-950 hover:bg-emerald-400 whitespace-nowrap shrink-0 cursor-pointer",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Play, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Capturar Janela / Ecrã" })]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									onClick: runSingleOcrPass,
+									disabled: ocrBusy,
+									className: "inline-flex items-center gap-1.5 rounded-lg border border-amber-400/50 bg-amber-400/15 px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-400/25 whitespace-nowrap shrink-0 cursor-pointer disabled:opacity-50",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Crosshair, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: ocrBusy ? "A ler ROI..." : "Ler ROI Agora" })]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									onClick: () => setAutoOcrLoop((v) => !v),
+									className: `inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold whitespace-nowrap shrink-0 cursor-pointer ${autoOcrLoop ? "bg-blue-600 text-white" : "border border-slate-700 bg-[#0B0F17] text-slate-300"}`,
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Activity, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: autoOcrLoop ? "Auto OCR: ATIVO" : "Ativar Loop OCR" })]
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+									ref: fileInputRef,
+									type: "file",
+									accept: "image/*",
+									onChange: handleImageUpload,
+									className: "hidden"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "button",
+									onClick: () => fileInputRef.current?.click(),
+									className: "inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 whitespace-nowrap shrink-0 cursor-pointer",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Upload, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Upload Print" })]
+								})
+							]
+						})]
+					}),
+					captureError && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+						className: "rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200",
+						children: captureError
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "grid grid-cols-1 lg:grid-cols-12 gap-5",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "lg:col-span-8 space-y-3",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								ref: stageRef,
+								onMouseDown: handleStageMouseDown,
+								onMouseMove: handleStageMouseMove,
+								onMouseUp: handleStageMouseUp,
+								onMouseLeave: handleStageMouseUp,
+								className: "relative w-full aspect-video rounded-lg border border-slate-800 bg-black overflow-hidden select-none cursor-crosshair",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("video", {
+										ref: videoRef,
+										muted: true,
+										playsInline: true,
+										className: `w-full h-full object-contain pointer-events-none ${captureActive ? "block" : "hidden"}`
+									}),
+									!captureActive && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+										ref: imgRef,
+										src: staticImageUrl,
+										alt: "Pré-visualização do ecrã para calibração de ROI",
+										referrerPolicy: "no-referrer",
+										className: "w-full h-full object-contain pointer-events-none"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										onMouseDown: handleBoxMoveMouseDown,
+										style: {
+											left: `${activeRoi.xPct * 100}%`,
+											top: `${activeRoi.yPct * 100}%`,
+											width: `${activeRoi.wPct * 100}%`,
+											height: `${activeRoi.hPct * 100}%`
+										},
+										className: "absolute border-2 border-amber-400 bg-amber-400/15 cursor-move",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "bg-amber-400 text-slate-950 font-mono text-[10px] font-bold px-1.5 py-0.5 inline-block",
+											children: ["ROI: ", activeProfile.name]
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+											onMouseDown: handleBoxResizeMouseDown,
+											title: "Arrastar para redimensionar ROI",
+											className: "absolute right-0 bottom-0 w-3.5 h-3.5 bg-amber-400 cursor-nwse-resize"
+										})]
+									})
+								]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex flex-wrap items-center gap-2 text-xs",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+										value: activeProfile.id,
+										onChange: (e) => setSelectedProfileId(e.target.value),
+										className: "rounded-lg border border-slate-700 bg-[#0B0F17] px-2.5 py-1.5 text-slate-200",
+										children: roiProfiles.filter((p) => p.game === game).map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("option", {
+											value: p.id,
+											children: [
+												p.name,
+												" (",
+												p.expectedCells,
+												" células)"
+											]
+										}, p.id))
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+										className: "inline-flex items-center gap-1.5 text-slate-400",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Células:" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+											type: "number",
+											min: 4,
+											max: 20,
+											value: activeProfile.expectedCells,
+											onChange: (e) => {
+												const n = Math.max(4, Math.min(20, Number(e.target.value) || 10));
+												setRoiProfiles((prev) => prev.map((p) => p.id === activeProfile.id ? {
+													...p,
+													expectedCells: n
+												} : p));
+											},
+											className: "w-14 rounded border border-slate-700 bg-[#0B0F17] px-2 py-1 font-mono text-slate-100"
+										})]
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("label", {
+										className: "inline-flex items-center gap-1.5 text-slate-400",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Intervalo:" }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("select", {
+											value: ocrIntervalMs,
+											onChange: (e) => setOcrIntervalMs(Number(e.target.value)),
+											className: "rounded border border-slate-700 bg-[#0B0F17] px-2 py-1 font-mono text-slate-100",
+											children: [
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+													value: 900,
+													children: "900ms"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+													value: 1400,
+													children: "1400ms"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+													value: 2200,
+													children: "2200ms"
+												})
+											]
+										})]
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex items-center gap-1 ml-auto",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+											type: "text",
+											value: newProfileName,
+											onChange: (e) => setNewProfileName(e.target.value),
+											placeholder: "Nome da casa/mesa...",
+											className: "rounded-lg border border-slate-700 bg-[#0B0F17] px-2.5 py-1.5 text-xs text-slate-100 w-36"
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+											type: "button",
+											onClick: handleSaveNewProfile,
+											className: "inline-flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 px-2.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700 cursor-pointer",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Save, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Guardar ROI" })]
+										})]
+									})
+								]
+							})]
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "lg:col-span-4 space-y-3",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5 space-y-2.5",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex items-center justify-between text-xs",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "font-semibold text-slate-200",
+											children: "Diagnóstico do Pipeline OCR"
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+											className: "font-mono text-amber-300 tabular-nums",
+											children: ["Confiança: ", lastOcrResult ? `${lastOcrResult.overallConfidencePct.toFixed(0)}%` : "--"]
+										})]
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+										className: "text-[11px] text-slate-400",
+										children: lastOcrResult?.note ?? "Pronto para leitura de ROI com validação por domínio e cor."
+									}),
+									lastOcrResult?.preprocessedPreviewUrl && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "flex items-center gap-2 text-[11px] text-slate-400",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "1.ª Célula Pré-processada:" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+											src: lastOcrResult.preprocessedPreviewUrl,
+											alt: "Célula binarizada para Tesseract",
+											className: "h-7 rounded border border-slate-700 bg-white"
+										})]
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "max-h-40 overflow-y-auto divide-y divide-slate-800/80 text-[11px] font-mono tabular-nums",
+										children: [lastOcrResult?.cells.map((c) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "py-1 flex items-center justify-between gap-2",
+											children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+												className: c.accepted ? "text-emerald-300" : "text-red-300",
+												children: [
+													"#",
+													c.index + 1,
+													" \"",
+													c.rawText || "-",
+													"\" (",
+													c.detectedColor,
+													")"
+												]
+											}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+												className: "text-slate-400 truncate",
+												children: c.accepted ? `OK -> ${c.parsedValue} (${c.confidencePct.toFixed(0)}%)` : c.rejectReason
+											})]
+										}, c.index)), !lastOcrResult && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+											className: "py-3 text-center font-sans text-slate-500",
+											children: "Execute \"Ler ROI Agora\" para inspecionar cada célula e filtro cromático."
+										})]
+									})
+								]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5 space-y-2.5",
+								children: [
+									/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "text-xs font-semibold text-slate-200",
+										children: "Correção Manual & Importação (até 500 rodadas)"
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+										onSubmit: handleAddSingleValue,
+										className: "flex items-center gap-2",
+										children: [
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+												type: "text",
+												value: manualSingleInput,
+												onChange: (e) => setManualSingleInput(e.target.value),
+												placeholder: game === "roulette" ? "Número 0–36 (ex: 18)" : "Mult. >=1.00 (ex: 6.36)",
+												className: "flex-1 rounded-lg border border-slate-700 bg-[#131924] px-2.5 py-1.5 font-mono text-xs text-slate-100"
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+												type: "submit",
+												className: "inline-flex items-center gap-1 rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-amber-300 cursor-pointer",
+												children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Inserir" })]
+											}),
+											/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+												type: "button",
+												onClick: () => {
+													if (game === "roulette") setRouletteHistory((p) => p.slice(1));
+													else setAviatorHistory((p) => p.slice(1));
+												},
+												title: "Remover último resultado registado",
+												className: "rounded-lg border border-slate-700 bg-[#131924] px-2 py-1.5 text-xs text-slate-300 hover:text-red-300 cursor-pointer",
+												children: "Desfazer"
+											})
+										]
+									}),
+									/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+										onSubmit: handleBulkPasteImport,
+										className: "space-y-1.5",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
+											rows: 2,
+											value: bulkPasteInput,
+											onChange: (e) => setBulkPasteInput(e.target.value),
+											placeholder: game === "roulette" ? "Colar sequência (mais recente à esquerda): 27 34 16 32 10 18 0 28 13 19" : "Colar sequência: 3.57x 11.43x 1.28x 1.33x 2.21x 19.12x 1.40x",
+											className: "w-full rounded-lg border border-slate-700 bg-[#131924] px-2.5 py-1.5 font-mono text-xs text-slate-100"
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+											type: "submit",
+											className: "w-full rounded-lg border border-slate-700 bg-slate-800 py-1.5 text-xs font-medium text-slate-100 hover:bg-slate-700 cursor-pointer",
+											children: "Importar Histórico para Análise"
+										})]
+									}),
+									inputNotice && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+										className: "text-[11px] text-emerald-400",
+										children: inputNotice
+									})
+								]
+							})]
+						})]
+					})
+				]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+				className: "rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", {
+					className: "text-base font-semibold text-slate-100 flex items-center gap-2",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(ChartColumn, { className: "h-4 w-4 text-sky-400" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: game === "roulette" ? "Análise Estatística Roleta Europeia (Setores, Atrasos & Vizinhos ±2)" : "Análise Estatística Aviator (5 Faixas, Streaks & Gaps Roxo/Rosa)" })]
+				}), game === "roulette" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "grid grid-cols-1 lg:grid-cols-3 gap-5 text-xs",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "space-y-2",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "font-semibold text-slate-300",
+								children: "Apostas Externas & Atrasos"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "divide-y divide-slate-800/70 font-mono tabular-nums",
+								children: [
+									rouletteReport.colors.red,
+									rouletteReport.colors.black,
+									rouletteReport.colors.green,
+									rouletteReport.parity.even,
+									rouletteReport.parity.odd,
+									rouletteReport.halves.low,
+									rouletteReport.halves.high
+								].map((g) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "py-1.5 flex items-center justify-between",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: "font-sans text-slate-300",
+										children: g.label
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+										className: "text-slate-200",
+										children: [
+											g.pct.toFixed(1),
+											"% · Atraso ",
+											g.currentDelay,
+											" (máx ",
+											g.maxDelay,
+											")"
+										]
+									})]
+								}, g.id))
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "space-y-2",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "font-semibold text-slate-300",
+								children: "Dúzias & Colunas"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "divide-y divide-slate-800/70 font-mono tabular-nums",
+								children: [...rouletteReport.dozens, ...rouletteReport.columns].map((g) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "py-1.5 flex items-center justify-between",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+										className: "font-sans text-slate-300",
+										children: g.label
+									}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+										className: "text-slate-200",
+										children: [
+											g.pct.toFixed(1),
+											"% · Atraso ",
+											g.currentDelay,
+											" (máx ",
+											g.maxDelay,
+											")"
+										]
+									})]
+								}, g.id))
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "space-y-3",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-semibold text-slate-300",
+									children: "Setores Físicos da Roda & Vizinhos ±2"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "divide-y divide-slate-800/70 font-mono tabular-nums",
+									children: rouletteReport.sectors.map((s) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+										className: "py-1.5 flex items-center justify-between",
+										children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+											className: "font-sans text-slate-200",
+											children: s.label
+										}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+											className: s.deltaPct >= 0 ? "text-emerald-300" : "text-slate-400",
+											children: [
+												s.pct.toFixed(1),
+												"% (",
+												s.deltaPct >= 0 ? "+" : "",
+												s.deltaPct.toFixed(1),
+												"pp)"
+											]
+										})]
+									}, s.id))
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "border-t border-slate-800 pt-2 space-y-1 text-xs",
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "text-slate-400",
+											children: [
+												"Âncora calculada:",
+												" ",
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
+													className: "font-mono text-amber-300",
+													children: rouletteReport.recommendedAnchor
+												}),
+												" · Vizinhos ±2:",
+												" ",
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("strong", {
+													className: "font-mono text-slate-100",
+													children: rouletteReport.neighborsPlusMinus2.join(", ")
+												})
+											]
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "text-slate-400",
+											children: ["Quentes: ", rouletteReport.hotNumbers.map((h) => `${h.number}(${h.count}×)`).join(" · ")]
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+											className: "text-slate-400",
+											children: ["Frios (atraso): ", rouletteReport.coldNumbers.map((c) => `${c.number}(${c.currentDelay}r)`).join(" · ")]
+										})
+									]
+								})
+							]
+						})
+					]
+				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					className: "grid grid-cols-1 lg:grid-cols-2 gap-5 text-xs",
+					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "space-y-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "font-semibold text-slate-300",
+							children: "Distribuição por Faixas"
+						}), aviatorReport.bands.map((b) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "space-y-1",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "flex justify-between font-mono tabular-nums",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+									className: `font-sans font-medium ${b.colorClass}`,
+									children: b.label
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", {
+									className: "text-slate-300",
+									children: [
+										b.count,
+										" (",
+										b.pct.toFixed(1),
+										"%)"
+									]
+								})]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "h-2 rounded-full bg-[#0B0F17] overflow-hidden",
+								children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "h-full bg-red-500",
+									style: { width: `${Math.min(100, b.pct)}%` }
+								})
+							})]
+						}, b.key))]
+					}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "grid grid-cols-2 gap-3 font-mono tabular-nums",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "border-t border-slate-800 pt-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-sans text-slate-400",
+									children: "Média 10 / 20 / Geral"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "text-sm font-bold text-slate-100 mt-0.5",
+									children: [
+										aviatorReport.movingAvg10.toFixed(2),
+										"x / ",
+										aviatorReport.movingAvg20.toFixed(2),
+										"x /",
+										" ",
+										aviatorReport.overallAvg.toFixed(2),
+										"x"
+									]
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "border-t border-slate-800 pt-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-sans text-slate-400",
+									children: "Mediana / Desvio Padrão 20"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "text-sm font-bold text-amber-300 mt-0.5",
+									children: [
+										aviatorReport.medianAll.toFixed(2),
+										"x / σ ",
+										aviatorReport.recent20StdDev.toFixed(2)
+									]
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "border-t border-slate-800 pt-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-sans text-slate-400",
+									children: "Sequência Baixa (<2x / <1.5x)"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "text-sm font-bold text-sky-300 mt-0.5",
+									children: [
+										aviatorReport.lowUnder2StreakCurrent,
+										"x (máx ",
+										aviatorReport.lowUnder2StreakMax,
+										") ·",
+										" ",
+										aviatorReport.lowUnder150StreakCurrent,
+										"x"
+									]
+								})]
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "border-t border-slate-800 pt-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-sans text-slate-400",
+									children: "Gaps Roxo / Rosa"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "text-sm font-bold text-fuchsia-300 mt-0.5",
+									children: [
+										">=2x: ",
+										aviatorReport.purpleGap.currentGap,
+										"r · >=10x: ",
+										aviatorReport.pinkGap.currentGap,
+										"r"
+									]
+								})]
+							})
+						]
+					})]
+				})]
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "grid grid-cols-1 lg:grid-cols-12 gap-5",
+				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "lg:col-span-8 rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex flex-col sm:flex-row sm:items-center justify-between gap-3",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", {
+								className: "text-base font-semibold text-slate-100 flex items-center gap-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Brain, { className: "h-4 w-4 text-purple-400" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Estratégias, Aprendizagem Point-in-Time & Motor de Evolução" })]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+								className: "text-xs text-slate-400",
+								children: "Avaliação estrita antes do resultado ocorrer (janelas 30 / 100 / 300) + mutação controlada."
+							})] }), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+								type: "button",
+								onClick: handleRunEvolution,
+								className: "inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-purple-500 whitespace-nowrap shrink-0 cursor-pointer",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Sparkles, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Evoluir Estratégias (OOS)" })]
+							})]
+						}),
+						evolutionBanner && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "rounded-lg border border-purple-500/40 bg-purple-500/10 px-3 py-2 text-xs text-purple-200",
+							children: evolutionBanner
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "overflow-x-auto",
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("table", {
+								className: "w-full text-left text-xs font-mono tabular-nums",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("thead", { children: /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+									className: "border-b border-slate-800 text-slate-400 font-sans",
+									children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 pr-2",
+											children: "Ativa"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 px-2",
+											children: "Estratégia"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 px-2 text-right",
+											children: "Consist."
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 px-2 text-right",
+											children: "Acerto OOS"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 px-2 text-right",
+											children: "ROI Sim."
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 px-2 text-right",
+											children: "Drawdown"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("th", {
+											className: "py-2 pl-2 text-right",
+											children: "Sinal"
+										})
+									]
+								}) }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("tbody", {
+									className: "divide-y divide-slate-800/70",
+									children: strategies.filter((s) => s.game === game).map((s) => {
+										const ev = learningReport.evaluations.find((e) => e.strategy.id === s.id);
+										return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("tr", {
+											className: "hover:bg-slate-800/20",
+											children: [
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+													className: "py-2 pr-2",
+													children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+														type: "checkbox",
+														checked: s.enabled,
+														onChange: () => setStrategies((prev) => prev.map((item) => item.id === s.id ? {
+															...item,
+															enabled: !item.enabled
+														} : item))
+													})
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("td", {
+													className: "py-2 px-2 font-sans",
+													children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+														className: "font-medium text-slate-100 flex items-center gap-1.5",
+														children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: s.name }), s.isCustom && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+															type: "button",
+															onClick: () => setStrategies((prev) => prev.filter((item) => item.id !== s.id)),
+															title: "Remover estratégia customizada",
+															className: "text-slate-500 hover:text-red-400 cursor-pointer",
+															children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Trash2, { className: "h-3 w-3" })
+														})]
+													}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+														className: "text-[11px] text-slate-400",
+														children: s.description
+													})]
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+													className: "py-2 px-2 text-right text-amber-300 font-bold",
+													children: ev ? `${ev.consistencyScore}/100` : "--"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+													className: "py-2 px-2 text-right text-slate-200",
+													children: ev ? `${ev.outOfSampleHitRatePct.toFixed(1)}% (${ev.outOfSampleEntries})` : "--"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+													className: `py-2 px-2 text-right font-semibold ${(ev?.overall.roiPct ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`,
+													children: ev ? `${ev.overall.roiPct >= 0 ? "+" : ""}${ev.overall.roiPct.toFixed(1)}%` : "--"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+													className: "py-2 px-2 text-right text-slate-300",
+													children: ev ? `${ev.overall.maxDrawdownPct.toFixed(1)}%` : "--"
+												}),
+												/* @__PURE__ */ (0, import_jsx_runtime.jsx)("td", {
+													className: "py-2 pl-2 text-right font-sans",
+													children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+														className: `rounded px-2 py-0.5 text-[10px] font-bold ${ev?.currentSignal.active ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-800 text-slate-400"}`,
+														children: ev?.currentSignal.active ? ev.currentSignal.targetDescription : "AGUARDA"
+													})
+												})
+											]
+										}, s.id);
+									})
+								})]
+							})
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+							onSubmit: handleCreateStrategy,
+							className: "pt-3 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+									type: "text",
+									value: newStratName,
+									onChange: (e) => setNewStratName(e.target.value),
+									placeholder: "Nome da nova estratégia...",
+									className: "sm:col-span-2 rounded-lg border border-slate-700 bg-[#0B0F17] px-2.5 py-2 text-slate-100"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("select", {
+									value: newStratRule,
+									onChange: (e) => setNewStratRule(e.target.value),
+									className: "rounded-lg border border-slate-700 bg-[#0B0F17] px-2 py-2 text-slate-200",
+									children: game === "roulette" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+											value: "roulette_absence",
+											children: "Ausência Dúzia (Gatilho)"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+											value: "roulette_streak_break",
+											children: "Quebra Sequência Cor"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+											value: "roulette_streak_follow",
+											children: "Continuação Cor"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+											value: "roulette_sector_confluence",
+											children: "Confluência Setor/Vizinhos"
+										})
+									] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+											value: "aviator_post_low_recovery",
+											children: "Pós-Baixos <1.5x"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+											value: "aviator_conservative_stable",
+											children: "Estabilidade Sem <1.1x"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+											value: "aviator_window_frequency",
+											children: "Frequência Janela"
+										}),
+										/* @__PURE__ */ (0, import_jsx_runtime.jsx)("option", {
+											value: "aviator_purple_cluster",
+											children: "Bloco Velas Roxas"
+										})
+									] })
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+									type: "text",
+									value: newStratParamA,
+									onChange: (e) => setNewStratParamA(e.target.value),
+									placeholder: game === "roulette" ? "Gatilho (ex: 5)" : "Seq./Janela (ex: 3)",
+									className: "rounded-lg border border-slate-700 bg-[#0B0F17] px-2.5 py-2 font-mono text-slate-100"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+									type: "submit",
+									className: "inline-flex items-center justify-center gap-1 rounded-lg bg-amber-400 px-3 py-2 font-semibold text-slate-950 hover:bg-amber-300 cursor-pointer",
+									children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Criar" })]
+								})
+							]
+						})
+					]
+				}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+					className: "lg:col-span-4 rounded-xl border border-slate-800 bg-[#131924] p-5 space-y-4",
+					children: [
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex items-center justify-between",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("h2", {
+								className: "text-base font-semibold text-slate-100 flex items-center gap-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Wallet, { className: "h-4 w-4 text-emerald-400" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Controlo de Banca" })]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "font-mono text-xs text-slate-400",
+								children: "Sem Martingale"
+							})]
+						}),
+						analystDecision.bankrollBlocked && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "rounded-lg border border-red-500/50 bg-red-500/10 p-3 text-xs text-red-200 space-y-1",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "font-bold flex items-center gap-1.5",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(TriangleAlert, { className: "h-3.5 w-3.5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Pausa Obrigatória" })]
+							}), analystDecision.bankrollBlockReasons.map((r, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: ["• ", r] }, i))]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "grid grid-cols-2 gap-3 font-mono text-xs tabular-nums",
+							children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "border-t border-slate-800 pt-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-sans text-[11px] text-slate-400",
+									children: "Saldo Sessão"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: "text-base font-bold text-slate-100",
+									children: [bankroll.currentBalanceAoa.toFixed(0), " AOA"]
+								})]
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+								className: "border-t border-slate-800 pt-2",
+								children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+									className: "font-sans text-[11px] text-slate-400",
+									children: "Resultado Líquido"
+								}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+									className: `text-base font-bold ${bankroll.sessionPnlAoa >= 0 ? "text-emerald-400" : "text-red-400"}`,
+									children: [
+										bankroll.sessionPnlAoa >= 0 ? "+" : "",
+										bankroll.sessionPnlAoa.toFixed(0),
+										" AOA"
+									]
+								})]
+							})]
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+							className: "grid grid-cols-2 gap-2.5 text-xs",
+							children: [
+								{
+									key: "baseStakeAoa",
+									label: "Entrada Fixa (AOA)"
+								},
+								{
+									key: "stopLossAoa",
+									label: "Stop-Loss (AOA)"
+								},
+								{
+									key: "stopWinAoa",
+									label: "Stop-Win (AOA)"
+								},
+								{
+									key: "pauseAfterConsecutiveLosses",
+									label: "Pausa após N perdas"
+								}
+							].map((f) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("label", {
+								className: "block text-slate-400 mb-1",
+								children: f.label
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+								type: "number",
+								min: 1,
+								value: bankroll[f.key],
+								onChange: (e) => setBankroll((prev) => ({
+									...prev,
+									[f.key]: Math.max(1, Number(e.target.value) || 1)
+								})),
+								className: "w-full rounded-lg border border-slate-700 bg-[#0B0F17] px-2.5 py-1.5 font-mono text-slate-100"
+							})] }, f.key))
+						}),
+						/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+							className: "flex flex-wrap gap-2 pt-1",
+							children: [
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => handleRecordBankrollOutcome(true, game === "roulette" ? 2 : 1.6),
+									className: "flex-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/30 cursor-pointer",
+									children: "+ Registar Acerto"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => handleRecordBankrollOutcome(false),
+									className: "flex-1 rounded-lg bg-red-500/20 border border-red-500/40 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/30 cursor-pointer",
+									children: "- Registar Perda"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									onClick: () => setBankroll((prev) => ({
+										...prev,
+										currentBalanceAoa: prev.initialBalanceAoa,
+										sessionPnlAoa: 0,
+										consecutiveLosses: 0
+									})),
+									className: "w-full rounded-lg border border-slate-700 bg-[#0B0F17] py-1.5 text-xs text-slate-300 hover:bg-slate-800 cursor-pointer",
+									children: "Reiniciar Banca da Sessão"
+								})
+							]
+						})
+					]
+				})]
+			})
+		]
+	});
+};
 // node_modules/@capacitor/core/dist/index.js
 /*! Capacitor: https://capacitorjs.com/ - MIT License */
 var createCapacitorPlatforms = (win) => {
@@ -23010,7 +27865,10 @@ function App() {
 	}, [gameMode, lastBacBoLiveResultAt]);
 	(0, import_react.useEffect)(() => {
 		gameModeRef.current = gameMode;
-		if (isAndroidApk) BrowserScanner.setGameMode({ mode: gameMode });
+		if (isAndroidApk) {
+			const nativeMode = gameMode === "quantlab" ? "roulette" : gameMode;
+			BrowserScanner.setGameMode({ mode: nativeMode });
+		}
 	}, [gameMode, isAndroidApk]);
 	(0, import_react.useEffect)(() => {
 		let active = true;
@@ -24319,7 +29177,7 @@ function App() {
 						className: "text-[10px] text-amber-300",
 						children: "Nenhum número lido ainda — abra a mesa da roleta acima ou toque em Mira para alinhar a caixa verde."
 					}) : combinedSpins.slice(0, 16).map((num, idx) => {
-						const col = getRouletteColor(num);
+						const col = getRouletteColor$1(num);
 						return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 							className: `inline-flex h-5 min-w-[22px] px-1 items-center justify-center rounded border font-mono text-[10px] font-bold text-white tabular-nums shrink-0 ${col === "green" ? "bg-emerald-700 border-emerald-500" : col === "red" ? "bg-[#A61B26] border-red-800" : "bg-[#181C24] border-slate-700"} ${idx === 0 ? "ring-1 ring-amber-400" : ""}`,
 							children: num
@@ -24391,7 +29249,7 @@ function App() {
 						}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 							className: "flex flex-wrap items-center gap-1",
 							children: analysis.suggestedChips.map((chip) => {
-								const col = getRouletteColor(chip);
+								const col = getRouletteColor$1(chip);
 								return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 									className: `inline-flex h-5 min-w-[22px] px-1 items-center justify-center rounded border font-mono text-[10px] font-bold text-white tabular-nums ${col === "green" ? "bg-emerald-700 border-emerald-500" : col === "red" ? "bg-[#B91C1C] border-red-700" : "bg-[#181C24] border-slate-600"}`,
 									children: chip
@@ -24467,6 +29325,14 @@ function App() {
 									onClick: () => setGameMode("aviator"),
 									className: `rounded-md px-3 py-1.5 text-xs font-bold tracking-wide transition-colors whitespace-nowrap shrink-0 cursor-pointer ${gameMode === "aviator" ? "bg-red-600 text-white" : "text-slate-400 hover:text-slate-100"}`,
 									children: "AVIATOR"
+								}),
+								/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+									type: "button",
+									role: "tab",
+									"aria-selected": gameMode === "quantlab",
+									onClick: () => setGameMode("quantlab"),
+									className: `rounded-md px-3 py-1.5 text-xs font-bold tracking-wide transition-colors whitespace-nowrap shrink-0 cursor-pointer ${gameMode === "quantlab" ? "bg-emerald-500 text-slate-950" : "text-slate-400 hover:text-slate-100"}`,
+									children: "QUANTLAB PC"
 								})
 							]
 						})]
@@ -24509,7 +29375,7 @@ function App() {
 							}),
 							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [bacboRounds.length, " rodadas guardadas"] })
 						]
-					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+					}) : gameMode === "aviator" ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 						className: "hidden lg:flex items-center gap-3 text-xs text-slate-400 font-mono tabular-nums",
 						children: [
 							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
@@ -24521,6 +29387,19 @@ function App() {
 								children: "·"
 							}),
 							/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("span", { children: [aviatorRounds.length, " rodadas guardadas"] })
+						]
+					}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "hidden lg:flex items-center gap-3 text-xs text-slate-400 font-mono tabular-nums",
+						children: [
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "text-emerald-400 font-semibold",
+								children: "QuantLab Pro Web/Desktop"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								"aria-hidden": "true",
+								children: "·"
+							}),
+							/* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", { children: "Screen Capture OCR & Regime Detector" })
 						]
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
@@ -24648,6 +29527,14 @@ function App() {
 					onStartMediaProjection: handleStartAviatorMediaProjection,
 					onStopMediaProjection: handleStopAviatorMediaProjection,
 					onChangeCaptureInterval: handleChangeAviatorInterval
+				}) : gameMode === "quantlab" ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(QuantLabDesktop, {
+					onSyncRouletteSpins: (spins) => setSpinMemory((prev) => ({
+						session: spins.slice(0, 500),
+						backup: prev.backup
+					})),
+					onSyncAviatorMultipliers: (mults) => {
+						if (mults.length > 0) handleBulkAddAviator(mults.slice(0, 20));
+					}
 				}) : /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
 					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 						className: "rounded-xl border border-slate-800 bg-[#131924] p-4 sm:p-5",
@@ -24757,7 +29644,7 @@ function App() {
 								className: "text-xs text-slate-400 py-1",
 								children: "Estado virgem (0% de acerto). Abra o navegador na Kwanzabet ou registre os números da mesa para iniciar."
 							}) : combinedSpins.slice(0, 24).map((num, idx) => {
-								const col = getRouletteColor(num);
+								const col = getRouletteColor$1(num);
 								return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 									className: `inline-flex h-8 min-w-[32px] px-1.5 items-center justify-center rounded border font-mono text-xs font-bold text-white tabular-nums shrink-0 ${col === "green" ? "bg-emerald-700 border-emerald-500" : col === "red" ? "bg-[#A61B26] border-red-800/80" : "bg-[#181C24] border-slate-700"} ${idx === 0 ? "ring-2 ring-amber-400" : ""}`,
 									children: num
@@ -24889,7 +29776,7 @@ function App() {
 										}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
 											className: "mt-2 flex flex-wrap items-center gap-1.5",
 											children: analysis.suggestedChips.map((chip) => {
-												const col = getRouletteColor(chip);
+												const col = getRouletteColor$1(chip);
 												return /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
 													className: `inline-flex h-7 min-w-[30px] px-1.5 items-center justify-center rounded border font-mono text-xs font-bold text-white tabular-nums ${col === "green" ? "bg-emerald-700 border-emerald-500" : col === "red" ? "bg-[#B91C1C] border-red-700" : "bg-[#181C24] border-slate-600"}`,
 													children: chip
