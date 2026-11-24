@@ -313,6 +313,7 @@ public class BrowserScannerPlugin extends Plugin {
     public void saveRoiRect(PluginCall call) {
         String game = call.getString("game", "roulette");
         String site = call.getString("site", "kwanzabet");
+        String surface = call.getString("surface", RoiConfigStore.SURFACE_SPLIT);
         float left = call.getFloat("leftRatio", 0f);
         float top = call.getFloat("topRatio", 0.04f);
         float width = call.getFloat("widthRatio", 1f);
@@ -320,7 +321,7 @@ public class BrowserScannerPlugin extends Plugin {
         if (getActivity() instanceof MainActivity) {
             MainActivity activity = (MainActivity) getActivity();
             activity.runOnUiThread(() -> {
-                activity.saveRoiRectForSite(game, site, left, top, width, height);
+                activity.saveRoiRectForSite(game, site, surface, left, top, width, height);
                 call.resolve();
             });
         } else {
@@ -332,14 +333,58 @@ public class BrowserScannerPlugin extends Plugin {
     public void getRoiRect(PluginCall call) {
         String game = call.getString("game", "roulette");
         String site = call.getString("site", "kwanzabet");
+        String surface = call.getString("surface", RoiConfigStore.SURFACE_SPLIT);
         RoiConfigStore store = new RoiConfigStore(getContext());
-        RoiConfigStore.RoiRect rect = store.getRoiRect(game, site);
+        RoiConfigStore.RoiRect rect = store.getRoiRect(game, site, surface);
         JSObject res = new JSObject();
         res.put("leftRatio", rect.leftRatio);
         res.put("topRatio", rect.topRatio);
         res.put("widthRatio", rect.widthRatio);
         res.put("heightRatio", rect.heightRatio);
+        res.put("surface", RoiConfigStore.normalizeSurface(surface));
         call.resolve(res);
+    }
+
+    @PluginMethod
+    public void getRouletteConfig(PluginCall call) {
+        String site = call.getString("site", "kwanzabet");
+        RoiConfigStore store = new RoiConfigStore(getContext());
+        JSObject res = new JSObject();
+        res.put("site", RoiConfigStore.normalizeSite(site));
+        res.put("newestOnLeft", store.isRouletteNewestOnLeft(site));
+        res.put("multiplierMode", store.isRouletteMultiplierMode(site));
+        call.resolve(res);
+    }
+
+    @PluginMethod
+    public void setRouletteConfig(PluginCall call) {
+        String site = call.getString("site", "kwanzabet");
+        RoiConfigStore store = new RoiConfigStore(getContext());
+        boolean newestOnLeft = Boolean.TRUE.equals(
+                call.getBoolean("newestOnLeft", store.isRouletteNewestOnLeft(site))
+        );
+        boolean multiplierMode = Boolean.TRUE.equals(
+                call.getBoolean("multiplierMode", store.isRouletteMultiplierMode(site))
+        );
+        if (getActivity() instanceof MainActivity) {
+            MainActivity activity = (MainActivity) getActivity();
+            activity.runOnUiThread(() -> {
+                activity.setRouletteScannerConfig(site, newestOnLeft, multiplierMode);
+                JSObject res = new JSObject();
+                res.put("site", RoiConfigStore.normalizeSite(site));
+                res.put("newestOnLeft", newestOnLeft);
+                res.put("multiplierMode", multiplierMode);
+                call.resolve(res);
+            });
+        } else {
+            store.setRouletteNewestOnLeft(site, newestOnLeft);
+            store.setRouletteMultiplierMode(site, multiplierMode);
+            JSObject res = new JSObject();
+            res.put("site", RoiConfigStore.normalizeSite(site));
+            res.put("newestOnLeft", newestOnLeft);
+            res.put("multiplierMode", multiplierMode);
+            call.resolve(res);
+        }
     }
 
     @PluginMethod

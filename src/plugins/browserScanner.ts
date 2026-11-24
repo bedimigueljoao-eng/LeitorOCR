@@ -2,12 +2,20 @@ import { Capacitor, registerPlugin, PluginListenerHandle } from '@capacitor/core
 
 export type NativeGameMode = 'roulette' | 'bacbo' | 'aviator';
 export type BacBoScanMode = 'auto' | 'blocks' | 'bead_plate';
+export type RoiSurfaceMode = 'split' | 'projection';
 
 export interface RoiRectConfig {
   leftRatio: number;
   topRatio: number;
   widthRatio: number;
   heightRatio: number;
+  surface?: RoiSurfaceMode;
+}
+
+export interface RouletteScannerConfig {
+  site: string;
+  newestOnLeft: boolean;
+  multiplierMode: boolean;
 }
 
 export interface HsvColorProfileConfig {
@@ -132,12 +140,23 @@ export interface BrowserScannerPlugin {
   saveRoiRect(options: {
     game: NativeGameMode;
     site: string;
+    surface?: RoiSurfaceMode;
     leftRatio: number;
     topRatio: number;
     widthRatio: number;
     heightRatio: number;
   }): Promise<void>;
-  getRoiRect(options: { game: NativeGameMode; site: string }): Promise<RoiRectConfig>;
+  getRoiRect(options: {
+    game: NativeGameMode;
+    site: string;
+    surface?: RoiSurfaceMode;
+  }): Promise<RoiRectConfig>;
+  getRouletteConfig(options: { site: string }): Promise<RouletteScannerConfig>;
+  setRouletteConfig(options: {
+    site: string;
+    newestOnLeft?: boolean;
+    multiplierMode?: boolean;
+  }): Promise<RouletteScannerConfig>;
   getHsvProfile(options: { site: string }): Promise<HsvColorProfileConfig>;
   calibrateHsvProfile(options: {
     site: string;

@@ -98,9 +98,9 @@ public class GameCaptureService extends Service {
     private long lastNotificationUpdateMs = 0L;
     private String lastNotificationStatus = "Captura ativa em segundo plano";
 
-    // Deduplicação leve em memória para evitar gravar o mesmo resultado contínuo
-    private Integer lastSavedRouletteHead = null;
-    private String lastSavedBacBoSig = null;
+    // Reconciliadores de sessão em memória
+    private final RouletteStripReconciler rouletteReconciler = new RouletteStripReconciler();
+    private final BacBoReconciler bacBoReconciler = new BacBoReconciler();
     private Double lastSavedAviatorLive = null;
     private boolean wasAviatorFlying = false;
 
@@ -153,6 +153,8 @@ public class GameCaptureService extends Service {
             String site = intent.getStringExtra(EXTRA_SITE_KEY);
             if (site != null) activeSiteKey = RoiConfigStore.normalizeSite(site);
             lastRoiSig = null;
+            rouletteReconciler.reset();
+            bacBoReconciler.reset();
             updateNotification("A monitorizar " + formatGameTitle(activeGameMode) + " (" + activeSiteKey + ")…", true);
             BrowserScannerPlugin.emitCaptureStatus(running, captureIntervalMs, activeGameMode, activeSiteKey, running ? "granted" : "idle", "");
             return START_STICKY;
@@ -166,6 +168,8 @@ public class GameCaptureService extends Service {
             String site = intent.getStringExtra(EXTRA_SITE_KEY);
             activeSiteKey = RoiConfigStore.normalizeSite(site != null ? site : configStore.getActiveSite());
             lastRoiSig = null;
+            rouletteReconciler.reset();
+            bacBoReconciler.reset();
 
             startAsForeground("A ler " + formatGameTitle(activeGameMode) + " (" + activeSiteKey + ")…");
 
@@ -332,7 +336,7 @@ public class GameCaptureService extends Service {
         }
 
         long now = SystemClock.elapsedRealtime();
-        RoiConfigStore.RoiRect roi = configStore.getRoiRect(activeGameMode, activeSiteKey);
+        RoiConfigStore.RoiRect roi = configStore.getRoiRect(activeGameMode, activeSiteKey, RoiConfigStore.SURFACE_PROJECTION);
         ScreenScanner.RoiFrameSignature sig = ScreenScanner.computeRoiSignature(frame, roi);
 
         boolean changed = ScreenScanner.hasSignificantRoiChange(lastRoiSig, sig);
@@ -365,7 +369,8 @@ public class GameCaptureService extends Service {
             String bbMode = configStore.getBacBoScanMode();
             scanner.scanBacBoFrame(frame, roi, bbMode, profile, collectDebug, (pTotal, bTotal, blocksVisible, plateCells, confidence, resolvedMode, debugBoxes, ocrOk) -> {
                 frame.recycle();
-                long elapsedMs = Math.max(1L, System.currentTimeMillis() - scanStartMs);
+                long nowMs = System.currentTimeMillis();
+                long elapsedMs = Math.max(1L, nowMs - scanStartMs);
                 totalReadTicks++;
 
                 boolean hasScore = pTotal >= 2 && bTotal >= 2;
@@ -379,26 +384,25 @@ public class GameCaptureService extends Service {
                     BrowserScannerPlugin.emitDebugOverlay(activeGameMode, resolvedMode, confidence, debugBoxes);
                 }
 
-                if (hasScore) {
-                    String outcome = pTotal > bTotal ? "P" : (bTotal > pTotal ? "B" : "T");
-                    String sig = outcome + ":" + pTotal + "x" + bTotal;
-                    if (!sig.equals(lastSavedBacBoSig)) {
-                        lastSavedBacBoSig = sig;
-                        historyDb.insertBacBoResult(System.currentTimeMillis(), site, outcome, pTotal, bTotal, resolvedMode, confidence, "media_projection");
+                if (RoiConfigStore.BACBO_MODE_BLOCKS.equals(resolvedMode) && (hasScore || blocksVisible)) {
+                    BacBoReconciler.ReconcileAction action = bacBoReconciler.reconcileBlocks(pTotal, bTotal, nowMs);
+                    if (action.type == BacBoReconciler.ActionType.BLOCK_CONFIRMED && !action.cellsToEmit.isEmpty()) {
+                        ScreenScanner.BacBoCell cell = action.cellsToEmit.get(0);
+                        historyDb.insertBacBoResult(nowMs, site, cell.outcome, cell.playerTotal, cell.bankerTotal, resolvedMode, confidence, "media_projection");
+                        BrowserScannerPlugin.emitBacBo(action.cellsToEmit, false);
+                        updateNotification("Bac Bo estável · JOGADOR " + cell.playerTotal + " × " + cell.bankerTotal + " BANCA", false);
+                    } else if (hasScore) {
+                        updateNotification("Bac Bo a confirmar · JOGADOR " + pTotal + " × " + bTotal + " BANCA", false);
+                    } else {
+                        updateNotification("Bac Bo · A aguardar os dois dados…", false);
                     }
-                    ScreenScanner.BacBoCell cell = new ScreenScanner.BacBoCell(outcome, Math.max(pTotal, bTotal), 0, 0, 0);
-                    cell.playerTotal = pTotal;
-                    cell.bankerTotal = bTotal;
-                    BrowserScannerPlugin.emitBacBo(Collections.singletonList(cell), false);
-                    updateNotification("Bac Bo estável · JOGADOR " + pTotal + " × " + bTotal + " BANCA", false);
                 } else if (stripSize >= 4) {
-                    ScreenScanner.BacBoCell head = plateCells.get(0);
-                    String sig = head.signature() + ":" + stripSize;
-                    if (!sig.equals(lastSavedBacBoSig)) {
-                        lastSavedBacBoSig = sig;
-                        historyDb.insertBacBoResult(System.currentTimeMillis(), site, head.outcome, -1, -1, resolvedMode, confidence, "media_projection");
+                    BacBoReconciler.ReconcileAction action = bacBoReconciler.reconcilePlate(plateCells, nowMs);
+                    if (action.type != BacBoReconciler.ActionType.NONE && !action.cellsToEmit.isEmpty()) {
+                        ScreenScanner.BacBoCell head = action.cellsToEmit.get(0);
+                        historyDb.insertBacBoResult(nowMs, site, head.outcome, head.playerTotal, head.bankerTotal, resolvedMode, confidence, "media_projection");
+                        BrowserScannerPlugin.emitBacBo(action.cellsToEmit, action.isFullPlate);
                     }
-                    BrowserScannerPlugin.emitBacBo(plateCells, true);
                     updateNotification("Bac Bo Bead Plate · " + stripSize + " células lidas", false);
                 } else {
                     updateNotification("A ler Bac Bo (" + resolvedMode + ")…", false);
@@ -452,7 +456,9 @@ public class GameCaptureService extends Service {
         }
 
         // Default: Roleta
-        scanner.scanRouletteFrame(frame, roi, profile, collectDebug, (numbersNewestFirst, avgConfidence, timestampMs, debugBoxes, hsvSamples, ocrOk) -> {
+        boolean newestOnLeft = configStore.isRouletteNewestOnLeft(site);
+        boolean multiplierMode = configStore.isRouletteMultiplierMode(site);
+        scanner.scanRouletteFrame(frame, roi, profile, newestOnLeft, multiplierMode, collectDebug, (numbersNewestFirst, avgConfidence, timestampMs, debugBoxes, hsvSamples, ocrOk) -> {
             frame.recycle();
             long elapsedMs = Math.max(1L, System.currentTimeMillis() - scanStartMs);
             totalReadTicks++;
@@ -468,12 +474,20 @@ public class GameCaptureService extends Service {
             }
 
             if (stripCount >= 3) {
-                if (lastSavedRouletteHead == null || !lastSavedRouletteHead.equals(head)) {
-                    lastSavedRouletteHead = head;
-                    historyDb.insertRouletteResult(timestampMs, site, numbersNewestFirst, avgConfidence, "media_projection");
+                RouletteStripReconciler.ReconcileAction action = rouletteReconciler.reconcile(numbersNewestFirst, avgConfidence);
+                if (action.type == RouletteStripReconciler.ActionType.NEW_SPINS && !action.spinsToEmit.isEmpty()) {
+                    historyDb.insertRouletteResult(timestampMs, site, action.spinsToEmit, avgConfidence, "media_projection");
+                    BrowserScannerPlugin.emitSpins(action.spinsToEmit, false);
+                    updateNotification(String.format(Locale.US, "Roleta · novo giro: %d (conf %.0f%%)", action.spinsToEmit.get(0), avgConfidence * 100f), false);
+                } else if ((action.type == RouletteStripReconciler.ActionType.INITIAL_FULL_STRIP
+                        || action.type == RouletteStripReconciler.ActionType.TABLE_SWITCH_FULL_STRIP)
+                        && !action.spinsToEmit.isEmpty()) {
+                    historyDb.insertRouletteResult(timestampMs, site, action.spinsToEmit, avgConfidence, "media_projection");
+                    BrowserScannerPlugin.emitSpins(action.spinsToEmit, true);
+                    updateNotification(String.format(Locale.US, "Roleta sincronizada · último: %d (%d lidos)", action.spinsToEmit.get(0), action.spinsToEmit.size()), false);
+                } else {
+                    updateNotification(String.format(Locale.US, "A ler Roleta… último: %d (conf %.0f%%)", head, avgConfidence * 100f), false);
                 }
-                BrowserScannerPlugin.emitSpins(numbersNewestFirst, true);
-                updateNotification(String.format(Locale.US, "A ler Roleta… último: %d (conf %.0f%%)", head, avgConfidence * 100f), false);
             } else {
                 updateNotification("A ler Roleta (" + site + ")…", false);
             }

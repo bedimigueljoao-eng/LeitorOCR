@@ -33,6 +33,8 @@ import {
   HsvColorProfileConfig,
   OcrDebugOverlayEvent,
   RoiRectConfig,
+  RoiSurfaceMode,
+  RouletteScannerConfig,
 } from '../plugins/browserScanner';
 
 type SubTab = 'strategies' | 'knowledge' | 'calibration';
@@ -93,10 +95,16 @@ export const StrategiesKnowledgeTab: React.FC<StrategiesKnowledgeTabProps> = ({
   const [obsWindow, setObsWindow] = useState<number>(80);
 
   // Calibração ROI & HSV state
+  const [roiSurface, setRoiSurface] = useState<RoiSurfaceMode>('split');
   const [roiDraft, setRoiDraft] = useState<RoiRectConfig>(() => {
     if (selectedGame === 'bacbo') return { leftRatio: 0, topRatio: 0.34, widthRatio: 1, heightRatio: 0.4 };
     if (selectedGame === 'aviator') return { leftRatio: 0, topRatio: 0.14, widthRatio: 1, heightRatio: 0.34 };
     return { leftRatio: 0, topRatio: 0.04, widthRatio: 1, heightRatio: 0.08 };
+  });
+  const [rouletteCfg, setRouletteCfg] = useState<RouletteScannerConfig>({
+    site: activeSite,
+    newestOnLeft: true,
+    multiplierMode: false,
   });
   const [hsvProfile, setHsvProfile] = useState<HsvColorProfileConfig | null>(null);
   const [calibFeedback, setCalibFeedback] = useState<string | null>(null);
@@ -198,27 +206,85 @@ export const StrategiesKnowledgeTab: React.FC<StrategiesKnowledgeTabProps> = ({
       return;
     }
     try {
-      const rect = await BrowserScanner.getRoiRect({ game: selectedGame, site: activeSite });
+      const rect = await BrowserScanner.getRoiRect({
+        game: selectedGame,
+        site: activeSite,
+        surface: roiSurface,
+      });
       setRoiDraft(rect);
       const hsv = await BrowserScanner.getHsvProfile({ site: activeSite });
       setHsvProfile(hsv);
-      setCalibFeedback(`ROI e perfil HSV de "${activeSite}" carregados.`);
+      const rCfg = await BrowserScanner.getRouletteConfig({ site: activeSite });
+      setRouletteCfg(rCfg);
+      setCalibFeedback(
+        `Mira (${roiSurface === 'projection' ? 'Captura Externa' : 'Navegador Integrado'}) e perfil HSV de "${activeSite}" carregados.`
+      );
     } catch {
       setCalibFeedback('Não foi possível ler o perfil nativo.');
     }
   };
 
+  const handleSelectRoiSurface = async (nextSurface: RoiSurfaceMode) => {
+    setRoiSurface(nextSurface);
+    if (!isAndroidApk) return;
+    try {
+      const rect = await BrowserScanner.getRoiRect({
+        game: selectedGame,
+        site: activeSite,
+        surface: nextSurface,
+      });
+      setRoiDraft(rect);
+      setCalibFeedback(
+        `A editar Mira: ${nextSurface === 'projection' ? 'Captura Externa (Chrome)' : 'Navegador Integrado'}.`
+      );
+    } catch {
+      // ignore read errors
+    }
+  };
+
   const handleSaveNativeRoi = async () => {
     if (!isAndroidApk) {
-      setCalibFeedback(`ROI gravada localmente (${selectedGame} · ${activeSite}).`);
+      setCalibFeedback(`ROI gravada localmente (${selectedGame} · ${activeSite} · ${roiSurface}).`);
       return;
     }
     await BrowserScanner.saveRoiRect({
       game: selectedGame,
       site: activeSite,
+      surface: roiSurface,
       ...roiDraft,
     });
-    setCalibFeedback(`ROI de "${activeSite}" (${selectedGame}) guardada no serviço de captura.`);
+    setCalibFeedback(
+      `Mira (${roiSurface === 'projection' ? 'Captura Externa' : 'Navegador Integrado'}) de "${activeSite}" guardada.`
+    );
+  };
+
+  const handleUpdateRouletteCfg = async (patch: {
+    newestOnLeft?: boolean;
+    multiplierMode?: boolean;
+  }) => {
+    const next: RouletteScannerConfig = {
+      site: activeSite,
+      newestOnLeft: patch.newestOnLeft ?? rouletteCfg.newestOnLeft,
+      multiplierMode: patch.multiplierMode ?? rouletteCfg.multiplierMode,
+    };
+    setRouletteCfg(next);
+    if (!isAndroidApk) {
+      setCalibFeedback(
+        `Roleta (${activeSite}): ${next.newestOnLeft ? 'Mais recente à Esquerda' : 'Mais recente à Direita'} · ${
+          next.multiplierMode ? 'Relâmpago / Inferno (50x)' : 'Mesa Normal'
+        }.`
+      );
+      return;
+    }
+    try {
+      const saved = await BrowserScanner.setRouletteConfig(next);
+      setRouletteCfg(saved);
+      setCalibFeedback(
+        `Configuração da Roleta "${saved.site}" aplicada ao OCR ao vivo.`
+      );
+    } catch {
+      setCalibFeedback('Não foi possível gravar configuração da Roleta.');
+    }
   };
 
   const handleCalibrateSampleHex = async () => {
@@ -1073,6 +1139,31 @@ export const StrategiesKnowledgeTab: React.FC<StrategiesKnowledgeTabProps> = ({
                 </button>
               </div>
 
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => handleSelectRoiSurface('split')}
+                  className={`rounded-lg border px-2.5 py-2 font-medium transition-colors cursor-pointer ${
+                    roiSurface === 'split'
+                      ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200'
+                      : 'border-slate-800 bg-[#0B0F17] text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Mira Navegador Integrado
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectRoiSurface('projection')}
+                  className={`rounded-lg border px-2.5 py-2 font-medium transition-colors cursor-pointer ${
+                    roiSurface === 'projection'
+                      ? 'border-emerald-500 bg-emerald-500/15 text-emerald-200'
+                      : 'border-slate-800 bg-[#0B0F17] text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Mira Captura Externa (Chrome)
+                </button>
+              </div>
+
               <div className="grid grid-cols-2 gap-3 text-xs font-mono tabular-nums">
                 <div>
                   <div className="flex justify-between text-slate-400 mb-1">
@@ -1082,9 +1173,16 @@ export const StrategiesKnowledgeTab: React.FC<StrategiesKnowledgeTabProps> = ({
                   <input
                     type="range"
                     min={0}
-                    max={70}
+                    max={88}
                     value={Math.round(roiDraft.leftRatio * 100)}
-                    onChange={(e) => setRoiDraft((p) => ({ ...p, leftRatio: Number(e.target.value) / 100 }))}
+                    onChange={(e) => {
+                      const nextLeft = Number(e.target.value) / 100;
+                      setRoiDraft((p) => ({
+                        ...p,
+                        leftRatio: nextLeft,
+                        widthRatio: Math.min(p.widthRatio, Math.max(0.1, 1 - nextLeft)),
+                      }));
+                    }}
                     className="w-full accent-emerald-500"
                   />
                 </div>
@@ -1096,9 +1194,16 @@ export const StrategiesKnowledgeTab: React.FC<StrategiesKnowledgeTabProps> = ({
                   <input
                     type="range"
                     min={0}
-                    max={85}
+                    max={92}
                     value={Math.round(roiDraft.topRatio * 100)}
-                    onChange={(e) => setRoiDraft((p) => ({ ...p, topRatio: Number(e.target.value) / 100 }))}
+                    onChange={(e) => {
+                      const nextTop = Number(e.target.value) / 100;
+                      setRoiDraft((p) => ({
+                        ...p,
+                        topRatio: nextTop,
+                        heightRatio: Math.min(p.heightRatio, Math.max(0.03, 1 - nextTop)),
+                      }));
+                    }}
                     className="w-full accent-emerald-500"
                   />
                 </div>
@@ -1109,7 +1214,7 @@ export const StrategiesKnowledgeTab: React.FC<StrategiesKnowledgeTabProps> = ({
                   </div>
                   <input
                     type="range"
-                    min={15}
+                    min={10}
                     max={100}
                     value={Math.round(roiDraft.widthRatio * 100)}
                     onChange={(e) => setRoiDraft((p) => ({ ...p, widthRatio: Number(e.target.value) / 100 }))}
@@ -1123,7 +1228,7 @@ export const StrategiesKnowledgeTab: React.FC<StrategiesKnowledgeTabProps> = ({
                   </div>
                   <input
                     type="range"
-                    min={4}
+                    min={3}
                     max={60}
                     value={Math.round(roiDraft.heightRatio * 100)}
                     onChange={(e) => setRoiDraft((p) => ({ ...p, heightRatio: Number(e.target.value) / 100 }))}
@@ -1132,13 +1237,64 @@ export const StrategiesKnowledgeTab: React.FC<StrategiesKnowledgeTabProps> = ({
                 </div>
               </div>
 
+              {selectedGame === 'roulette' && (
+                <div className="space-y-2.5 rounded-lg border border-slate-800 bg-[#0B0F17] p-3 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-slate-300 font-medium">Presets Rápidos da Mira (Roleta)</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setRoiDraft({ leftRatio: 0, topRatio: 0.04, widthRatio: 1, heightRatio: 0.08 })}
+                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800 cursor-pointer"
+                      >
+                        Topo 100%
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRoiDraft({ leftRatio: 0.68, topRatio: 0.63, widthRatio: 0.31, heightRatio: 0.1 })}
+                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800 cursor-pointer"
+                      >
+                        Inferno / Dir.
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRoiDraft({ leftRatio: 0.05, topRatio: 0.82, widthRatio: 0.9, heightRatio: 0.1 })}
+                        className="rounded border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-slate-200 hover:bg-slate-800 cursor-pointer"
+                      >
+                        Rodapé
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => void handleUpdateRouletteCfg({ newestOnLeft: !rouletteCfg.newestOnLeft })}
+                      className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[11px] text-blue-200 hover:bg-slate-800 cursor-pointer"
+                    >
+                      Ordem: {rouletteCfg.newestOnLeft ? 'Mais recente à Esq.' : 'Mais recente à Dir.'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleUpdateRouletteCfg({ multiplierMode: !rouletteCfg.multiplierMode })}
+                      className={`rounded-lg border px-2.5 py-1.5 text-[11px] cursor-pointer ${
+                        rouletteCfg.multiplierMode
+                          ? 'border-amber-500/60 bg-amber-500/15 text-amber-200'
+                          : 'border-slate-700 bg-slate-900 text-slate-300'
+                      }`}
+                    >
+                      {rouletteCfg.multiplierMode ? 'Relâmpago / Inferno (50x)' : 'Mesa Normal (Sem Mult.)'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   onClick={handleSaveNativeRoi}
                   className="rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-amber-300 cursor-pointer"
                 >
-                  Guardar ROI ({selectedGame} · {activeSite})
+                  Guardar Mira ({roiSurface === 'projection' ? 'Externa' : 'Integrado'} · {activeSite})
                 </button>
               </div>
 

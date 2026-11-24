@@ -16,6 +16,7 @@ import {
   RouletteAnalysis,
   StrategyProfile,
 } from './utils/rouletteEngine';
+import { reconcileScannerSpins } from './utils/rouletteReconciler';
 import { EuropeanWheel } from './components/EuropeanWheel';
 import { CreedroomzBoard } from './components/CreedroomzBoard';
 import { ScreenshotScannerTab } from './components/ScreenshotScannerTab';
@@ -105,54 +106,6 @@ const STORAGE_KEY_BANKROLL = 'roletavision_bankroll_v1';
 const STORAGE_KEY_UNIFIED_POLICY = 'roletavision_unified_policy_v1';
 const STORAGE_KEY_UNIFIED_LEDGER = 'roletavision_unified_ledger_v1';
 const SPLIT_PRESETS = [0.56, 0.45, 0.66] as const;
-
-function reconcileScannerSpins(
-  prevSession: number[],
-  prevBackup: number[],
-  incoming: number[],
-  isFullStrip: boolean
-): { nextSession: number[]; nextBackup: number[] } {
-  if (incoming.length === 0) {
-    return { nextSession: prevSession, nextBackup: prevBackup };
-  }
-
-  if (!isFullStrip) {
-    // Novos giros em tempo real: entram na sessão atual para avaliar OK/X + %
-    return {
-      nextSession: [...incoming, ...prevSession].slice(0, 500),
-      nextBackup: prevBackup,
-    };
-  }
-
-  // Faixa completa detectada ao abrir mesa ou trocar de mesa:
-  // Verifica se já está alinhada com o histórico atual (sessão + backup)
-  const combined = [...prevSession, ...prevBackup];
-  if (combined.length >= 3) {
-    for (let shift = 0; shift <= Math.min(4, incoming.length - 3); shift++) {
-      if (
-        incoming[shift] === combined[0] &&
-        incoming[shift + 1] === combined[1] &&
-        incoming[shift + 2] === combined[2]
-      ) {
-        if (shift === 0) {
-          return { nextSession: prevSession, nextBackup: prevBackup };
-        }
-        // Só o que é novo antes de combined[0] entra na sessão
-        return {
-          nextSession: [...incoming.slice(0, shift), ...prevSession].slice(0, 500),
-          nextBackup: prevBackup,
-        };
-      }
-    }
-  }
-
-  // Primeira leitura da mesa (ou troca de mesa): alimenta o contexto/aprendizagem
-  // sem gerar % falsa de acerto na sessão atual (sessão continua virgem 0%)
-  return {
-    nextSession: prevSession,
-    nextBackup: [...incoming, ...prevBackup].slice(0, 2000),
-  };
-}
 
 export default function App() {
   const [gameMode, setGameMode] = useState<GameMode>('roulette');
@@ -904,9 +857,27 @@ export default function App() {
     return { valid: true };
   };
 
-  const handleImportBacBoRounds = (restored: BacBoRoundRecord[]) => {
+  const handleImportBacBoRounds = (
+    restored: BacBoRoundRecord[],
+    options?: { replace?: boolean }
+  ) => {
+    if (options?.replace) {
+      bacboLastProbsRef.current = null;
+      setLastBacBoLiveResultAt(null);
+    }
     setBacboRounds(restored);
     void saveRounds(restored);
+    if (restored.length > 0) {
+      const last = restored[restored.length - 1];
+      const nowStr = new Date().toLocaleTimeString('pt-PT', { hour12: false });
+      const totalLabel = last.winningTotal !== null ? ` (${last.winningTotal})` : '';
+      setBacboScanDebug((prev) => ({
+        ...prev,
+        lastReadTime: nowStr,
+        lastOutcomeLabel: `${formatOutcomeLabel(last.outcome)}${totalLabel}`,
+        consecutiveFailures: 0,
+      }));
+    }
   };
 
   const handleResetAllBacBo = () => {

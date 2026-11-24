@@ -27,7 +27,11 @@ public class RoiConfigStore {
     public static final String BACBO_MODE_BLOCKS = "blocks";
     public static final String BACBO_MODE_BEAD_PLATE = "bead_plate";
 
-    private static final float MIN_ROI_SIZE = 0.03f;
+    public static final String SURFACE_SPLIT = "split";
+    public static final String SURFACE_PROJECTION = "projection";
+
+    private static final float MIN_ROI_WIDTH = 0.08f;
+    private static final float MIN_ROI_HEIGHT = 0.03f;
     private static final float MAX_ROI_RATIO = 1.0f;
 
     public static class RoiRect {
@@ -37,10 +41,10 @@ public class RoiConfigStore {
         public final float heightRatio;
 
         public RoiRect(float leftRatio, float topRatio, float widthRatio, float heightRatio) {
-            this.leftRatio = clamp(leftRatio, 0f, 0.95f);
+            this.leftRatio = clamp(leftRatio, 0f, 0.92f);
             this.topRatio = clamp(topRatio, 0f, 0.95f);
-            this.widthRatio = clamp(widthRatio, MIN_ROI_SIZE, MAX_ROI_RATIO - this.leftRatio);
-            this.heightRatio = clamp(heightRatio, MIN_ROI_SIZE, MAX_ROI_RATIO - this.topRatio);
+            this.widthRatio = clamp(widthRatio, MIN_ROI_WIDTH, MAX_ROI_RATIO - this.leftRatio);
+            this.heightRatio = clamp(heightRatio, MIN_ROI_HEIGHT, MAX_ROI_RATIO - this.topRatio);
         }
 
         public JSONObject toJson() {
@@ -212,12 +216,41 @@ public class RoiConfigStore {
         return GAME_ROULETTE;
     }
 
+    public static String normalizeSurface(String surface) {
+        if (surface == null) return SURFACE_SPLIT;
+        String clean = surface.trim().toLowerCase(Locale.US);
+        if (SURFACE_PROJECTION.equals(clean) || "fullscreen".equals(clean) || "media_projection".equals(clean)) {
+            return SURFACE_PROJECTION;
+        }
+        return SURFACE_SPLIT;
+    }
+
     public String getActiveSite() {
         return normalizeSite(prefs.getString("active_site", "kwanzabet"));
     }
 
     public void setActiveSite(String site) {
         prefs.edit().putString("active_site", normalizeSite(site)).apply();
+    }
+
+    public boolean isRouletteNewestOnLeft(String site) {
+        String s = normalizeSite(site);
+        return prefs.getBoolean("roulette_newest_left_" + s, true);
+    }
+
+    public void setRouletteNewestOnLeft(String site, boolean newestOnLeft) {
+        String s = normalizeSite(site);
+        prefs.edit().putBoolean("roulette_newest_left_" + s, newestOnLeft).apply();
+    }
+
+    public boolean isRouletteMultiplierMode(String site) {
+        String s = normalizeSite(site);
+        return prefs.getBoolean("roulette_multiplier_mode_" + s, false);
+    }
+
+    public void setRouletteMultiplierMode(String site, boolean multiplierMode) {
+        String s = normalizeSite(site);
+        prefs.edit().putBoolean("roulette_multiplier_mode_" + s, multiplierMode).apply();
     }
 
     public String getBacBoScanMode() {
@@ -244,8 +277,26 @@ public class RoiConfigStore {
     }
 
     public RoiRect getRoiRect(String game, String site) {
+        return getRoiRect(game, site, SURFACE_SPLIT);
+    }
+
+    public RoiRect getRoiRect(String game, String site, String surface) {
         String g = normalizeGame(game);
         String s = normalizeSite(site);
+        String surf = normalizeSurface(surface);
+
+        if (SURFACE_PROJECTION.equals(surf)) {
+            String projPrefix = "roi_proj_v2_" + s + "_" + g + "_";
+            if (prefs.contains(projPrefix + "top")) {
+                return new RoiRect(
+                        prefs.getFloat(projPrefix + "left", 0f),
+                        prefs.getFloat(projPrefix + "top", 0.14f),
+                        prefs.getFloat(projPrefix + "width", 1f),
+                        prefs.getFloat(projPrefix + "height", 0.10f)
+                );
+            }
+        }
+
         String prefix = "roi_v2_" + s + "_" + g + "_";
         if (prefs.contains(prefix + "top")) {
             return new RoiRect(
@@ -282,8 +333,25 @@ public class RoiConfigStore {
     }
 
     public void saveRoiRect(String game, String site, RoiRect rect) {
+        saveRoiRect(game, site, SURFACE_SPLIT, rect);
+    }
+
+    public void saveRoiRect(String game, String site, String surface, RoiRect rect) {
         String g = normalizeGame(game);
         String s = normalizeSite(site);
+        String surf = normalizeSurface(surface);
+
+        if (SURFACE_PROJECTION.equals(surf)) {
+            String projPrefix = "roi_proj_v2_" + s + "_" + g + "_";
+            prefs.edit()
+                    .putFloat(projPrefix + "left", rect.leftRatio)
+                    .putFloat(projPrefix + "top", rect.topRatio)
+                    .putFloat(projPrefix + "width", rect.widthRatio)
+                    .putFloat(projPrefix + "height", rect.heightRatio)
+                    .apply();
+            return;
+        }
+
         String prefix = "roi_v2_" + s + "_" + g + "_";
         SharedPreferences.Editor ed = prefs.edit()
                 .putFloat(prefix + "left", rect.leftRatio)
@@ -291,7 +359,7 @@ public class RoiConfigStore {
                 .putFloat(prefix + "width", rect.widthRatio)
                 .putFloat(prefix + "height", rect.heightRatio);
 
-        // Mantém chaves legadas sincronizadas para retrocompatibilidade
+        // Mantém chaves legadas sincronizadas para retrocompatibilidade no modo Split
         if (GAME_BACBO.equals(g)) {
             ed.putFloat("bacbo_blocks_v2_top", rect.topRatio)
               .putFloat("bacbo_blocks_v2_height", rect.heightRatio);

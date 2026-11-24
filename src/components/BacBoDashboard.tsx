@@ -21,11 +21,13 @@ import {
   BacBoRoundRecord,
   BacBoTestReport,
   BEAD_PLATE_ROWS,
+  buildPreSessionBacBoRounds,
   createBackupPayload,
   exportRoundsToCsv,
   filterRounds,
   formatOutcomeLabel,
   getBacBoRoundCycleStatus,
+  parseBacBoBatchSequence,
   parseBackupPayload,
   runAllBacBoTests,
   scanBacBoScreenshotImage,
@@ -62,7 +64,7 @@ interface BacBoDashboardProps {
     bankerDice?: [number, number] | null;
     source: 'ocr' | 'manual' | 'import';
   }) => { valid: boolean; reason?: string };
-  onImportRounds: (restored: BacBoRoundRecord[]) => void;
+  onImportRounds: (restored: BacBoRoundRecord[], options?: { replace?: boolean }) => void;
   onResetAll: () => void;
   bacboScanMode?: 'auto' | 'blocks' | 'bead_plate';
   onChangeBacBoScanMode?: (mode: 'auto' | 'blocks' | 'bead_plate') => void;
@@ -126,6 +128,17 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
   const [ocrImageMsg, setOcrImageMsg] = useState<string | null>(null);
   const [testReport, setTestReport] = useState<BacBoTestReport | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+
+  // Pré-carregamento de Mesa Anterior (Print Bead Plate + Sequência em Lote)
+  const [showPreloadPanel, setShowPreloadPanel] = useState(false);
+  const [preloadTab, setPreloadTab] = useState<'image' | 'batch'>('image');
+  const [cropIsPlateOnly, setCropIsPlateOnly] = useState(true);
+  const [isScanningPlateImage, setIsScanningPlateImage] = useState(false);
+  const [stagedItems, setStagedItems] = useState<{ outcome: BacBoOutcome; total: number | null }[]>([]);
+  const [stagedEngineInfo, setStagedEngineInfo] = useState<string | null>(null);
+  const [batchInputText, setBatchInputText] = useState('');
+  const [batchQuickTotal, setBatchQuickTotal] = useState('');
+  const [selectedStageIdx, setSelectedStageIdx] = useState<number | null>(null);
 
   // Filtros do Histórico
   const [dateFrom, setDateFrom] = useState('');
@@ -224,36 +237,130 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
-    setOcrImageMsg('A analisar imagem Bead Plate...');
+    setShowPreloadPanel(true);
+    setPreloadTab('image');
+    setIsScanningPlateImage(true);
+    setSelectedStageIdx(null);
+    setOcrImageMsg('A analisar imagem da grelha Bead Plate...');
     try {
       const scanTop =
         (roiTopPct === 4 && roiHeightPct === 7) ||
         (roiTopPct === 40 && roiHeightPct === 36) ||
         (roiTopPct === 34 && roiHeightPct === 40)
-          ? 66
+          ? 64
           : roiTopPct;
       const scanHeight =
         (roiTopPct === 4 && roiHeightPct === 7) ||
         (roiTopPct === 40 && roiHeightPct === 36) ||
         (roiTopPct === 34 && roiHeightPct === 40)
-          ? 15
+          ? 24
           : roiHeightPct;
-      const scan = await scanBacBoScreenshotImage(file, scanTop, scanHeight);
-      if (scan.outcomes.length === 0) {
-        setOcrImageMsg('Nenhuma célula azul/vermelha/dourada detetada na grelha Bead Plate.');
+      const scan = await scanBacBoScreenshotImage(file, {
+        fullImage: cropIsPlateOnly,
+        roiTopPct: scanTop,
+        roiHeightPct: scanHeight,
+      });
+      if (scan.cells.length === 0) {
+        setStagedItems([]);
+        setStagedEngineInfo(null);
+        setOcrImageMsg(
+          'Nenhuma bola azul/vermelha/dourada detetada. Tente alternar entre "Recorte da Grelha" e "Print Completo".'
+        );
         return;
       }
-      let added = 0;
-      for (const out of scan.outcomes) {
-        const res = onAddRound({ outcome: out, source: 'ocr' });
-        if (res.valid) added++;
-      }
+      const mapped = scan.cells.map((c) => ({ outcome: c.outcome, total: c.total }));
+      setStagedItems(mapped);
+      const pCnt = mapped.filter((m) => m.outcome === 'P').length;
+      const bCnt = mapped.filter((m) => m.outcome === 'B').length;
+      const tCnt = mapped.filter((m) => m.outcome === 'T').length;
+      const engineLabel = scan.engine === 'ai-vision' ? 'Visão IA (Cores + Totais 2–12)' : 'Scanner HSV 2D Offline';
+      setStagedEngineInfo(`${mapped.length} jogadas detetadas (${pCnt}P · ${bCnt}B · ${tCnt}T) · ${engineLabel}`);
       setOcrImageMsg(
-        `Leitura de imagem concluída: ${added} resultados importados (${scan.outcomes.join('-')}).`
+        `Pré-visualização pronta: ${mapped.length} jogadas lidas na grelha. Confira abaixo e clique em "Iniciar Mesa".`
       );
     } catch {
       setOcrImageMsg('Falha ao processar a imagem selecionada.');
+    } finally {
+      setIsScanningPlateImage(false);
     }
+  };
+
+  const handleBatchTextChange = (text: string) => {
+    setBatchInputText(text);
+    const parsed = parseBacBoBatchSequence(text);
+    setStagedItems(parsed.items);
+    setSelectedStageIdx(null);
+    if (parsed.items.length > 0) {
+      const pCnt = parsed.items.filter((m) => m.outcome === 'P').length;
+      const bCnt = parsed.items.filter((m) => m.outcome === 'B').length;
+      const tCnt = parsed.items.filter((m) => m.outcome === 'T').length;
+      const invMsg =
+        parsed.invalidTokens.length > 0
+          ? ` · Ignorados: ${parsed.invalidTokens.slice(0, 4).join(', ')}`
+          : '';
+      setStagedEngineInfo(`Lote manual: ${parsed.items.length} jogadas (${pCnt}P · ${bCnt}B · ${tCnt}T)${invMsg}`);
+    } else {
+      setStagedEngineInfo(null);
+    }
+  };
+
+  const handleAppendQuickStaged = (outcome: BacBoOutcome) => {
+    const trimmedTot = batchQuickTotal.trim();
+    let validTot: number | null = null;
+    if (trimmedTot) {
+      const n = Number(trimmedTot);
+      if (Number.isInteger(n) && n >= 2 && n <= 12) {
+        validTot = n;
+      }
+    }
+    const token = validTot !== null ? `${outcome}${validTot}` : outcome;
+    const nextText = batchInputText.trim() ? `${batchInputText.trim()} ${token}` : token;
+    setBatchInputText(nextText);
+    const nextItems = [...stagedItems, { outcome, total: validTot }];
+    setStagedItems(nextItems);
+    setBatchQuickTotal('');
+    const pCnt = nextItems.filter((m) => m.outcome === 'P').length;
+    const bCnt = nextItems.filter((m) => m.outcome === 'B').length;
+    const tCnt = nextItems.filter((m) => m.outcome === 'T').length;
+    setStagedEngineInfo(`Sequência preparada: ${nextItems.length} jogadas (${pCnt}P · ${bCnt}B · ${tCnt}T)`);
+  };
+
+  const handleCycleStagedOutcome = (idx: number) => {
+    setStagedItems((prev) =>
+      prev.map((item, i) => {
+        if (i !== idx) return item;
+        const nextOut: BacBoOutcome =
+          item.outcome === 'P' ? 'B' : item.outcome === 'B' ? 'T' : 'P';
+        return { ...item, outcome: nextOut };
+      })
+    );
+  };
+
+  const handleUpdateStagedTotal = (idx: number, rawVal: string) => {
+    const parsed = rawVal.trim() ? Number(rawVal.trim()) : null;
+    const valid =
+      parsed !== null && Number.isInteger(parsed) && parsed >= 2 && parsed <= 12 ? parsed : null;
+    setStagedItems((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, total: valid } : item))
+    );
+  };
+
+  const handleRemoveStagedCell = (idx: number) => {
+    setStagedItems((prev) => prev.filter((_, i) => i !== idx));
+    setSelectedStageIdx(null);
+  };
+
+  const handleApplyStagedTable = (mode: 'replace' | 'append') => {
+    if (stagedItems.length === 0) return;
+    const built = buildPreSessionBacBoRounds(stagedItems, rounds, mode);
+    onImportRounds(built, { replace: mode === 'replace' });
+    setShowPreloadPanel(false);
+    setSelectedStageIdx(null);
+    setOcrImageMsg(
+      mode === 'replace'
+        ? `Mesa carregada com ${stagedItems.length} jogadas anteriores! Análise, padrões e Aposta Mestra atualizados.`
+        : `${stagedItems.length} jogadas adicionadas ao histórico (total: ${built.length}).`
+    );
   };
 
   const handleRunLogicTests = () => {
@@ -415,11 +522,15 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
             />
             <button
               type="button"
-              onClick={() => screenshotInputRef.current?.click()}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-[#0B0F17] px-3 py-2 text-xs font-medium text-slate-200 hover:bg-slate-800 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              onClick={() => setShowPreloadPanel((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                showPreloadPanel
+                  ? 'border-blue-400 bg-blue-600 text-white'
+                  : 'border-blue-500/50 bg-blue-500/15 text-blue-200 hover:bg-blue-500/25'
+              }`}
             >
               <Upload className="h-3.5 w-3.5" />
-              <span>Ler Imagem</span>
+              <span>Carregar Mesa Anterior</span>
             </button>
 
             {!confirmReset ? (
@@ -544,6 +655,255 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
             OK
           </button>
         </div>
+      )}
+
+      {/* PAINEL: CARREGAR MESA ANTERIOR (PRÉ-SESSÃO) */}
+      {showPreloadPanel && (
+        <section className="rounded-xl border border-blue-500/40 bg-[#131924] p-5 space-y-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-100">
+                Carregar Jogadas Anteriores da Mesa (Pré-Sessão)
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Importe o histórico atual da mesa por print da grelha Bead Plate ou sequência em lote antes de iniciar o jogo ao vivo.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="inline-flex rounded-lg border border-slate-800 bg-[#0B0F17] p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setPreloadTab('image')}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+                    preloadTab === 'image' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Print da Grelha
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreloadTab('batch')}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold cursor-pointer ${
+                    preloadTab === 'batch' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Sequência / Lote
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPreloadPanel(false)}
+                className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+
+          {preloadTab === 'image' ? (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5">
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCropIsPlateOnly(true)}
+                    className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer ${
+                      cropIsPlateOnly
+                        ? 'border-emerald-500/60 bg-emerald-500/15 text-emerald-300'
+                        : 'border-slate-700 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Recorte direto da grelha (Recomendado)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCropIsPlateOnly(false)}
+                    className={`rounded-md border px-2.5 py-1 text-[11px] font-semibold cursor-pointer ${
+                      !cropIsPlateOnly
+                        ? 'border-amber-500/60 bg-amber-500/15 text-amber-300'
+                        : 'border-slate-700 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    Print completo do ecrã
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400">
+                  Ordem lida automaticamente: coluna esquerda → direita, de cima para baixo (Azul = P, Vermelho = B, Dourado = Tie).
+                </p>
+              </div>
+
+              <button
+                type="button"
+                disabled={isScanningPlateImage}
+                onClick={() => screenshotInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-500 disabled:opacity-50 cursor-pointer whitespace-nowrap shrink-0"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                <span>{isScanningPlateImage ? 'A ler grelha...' : 'Escolher Print da Grelha'}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3 rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="number"
+                  min={2}
+                  max={12}
+                  value={batchQuickTotal}
+                  onChange={(e) => setBatchQuickTotal(e.target.value)}
+                  placeholder="Total (opcional 2–12)"
+                  className="w-40 rounded-lg border border-slate-700 bg-[#131924] px-2.5 py-1.5 font-mono text-xs text-slate-100 focus:border-blue-500 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleAppendQuickStaged('P')}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-500 cursor-pointer"
+                >
+                  +P
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAppendQuickStaged('B')}
+                  className="rounded-lg bg-[#B91C1C] px-3 py-1.5 text-xs font-bold text-white hover:bg-red-600 cursor-pointer"
+                >
+                  +B
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAppendQuickStaged('T')}
+                  className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-500 cursor-pointer"
+                >
+                  +T
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (stagedItems.length > 0) {
+                      setStagedItems((prev) => prev.slice(0, -1));
+                    }
+                  }}
+                  className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-300 hover:bg-slate-800 cursor-pointer"
+                >
+                  Apagar Último
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBatchInputText('');
+                    setStagedItems([]);
+                    setStagedEngineInfo(null);
+                  }}
+                  className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-400 hover:text-red-300 cursor-pointer"
+                >
+                  Limpar
+                </button>
+              </div>
+              <textarea
+                rows={2}
+                value={batchInputText}
+                onChange={(e) => handleBatchTextChange(e.target.value)}
+                placeholder="Ou cole a sequência do mais antigo ao mais recente. Ex: P7 B10 P9 B9 T7 P8 B5..."
+                className="w-full rounded-lg border border-slate-700 bg-[#131924] px-3 py-2 font-mono text-xs text-slate-100 focus:border-blue-500 focus:outline-none"
+              />
+            </div>
+          )}
+
+          {/* Pré-visualização interativa da grelha antes de aplicar */}
+          {stagedItems.length > 0 && (
+            <div className="space-y-3 rounded-lg border border-slate-800 bg-[#0B0F17] p-3.5">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span className="font-semibold text-emerald-300">
+                  {stagedEngineInfo ?? `${stagedItems.length} jogadas prontas para carregar`}
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Toque numa bola para corrigir cor/número antes de guardar.
+                </span>
+              </div>
+
+              <div className="overflow-x-auto pb-1">
+                <div className="inline-flex gap-1.5">
+                  {Array.from({ length: Math.ceil(stagedItems.length / BEAD_PLATE_ROWS) }, (_, colIdx) => (
+                    <div key={colIdx} className="grid grid-rows-6 gap-1.5">
+                      {Array.from({ length: BEAD_PLATE_ROWS }, (_, rowIdx) => {
+                        const itemIdx = colIdx * BEAD_PLATE_ROWS + rowIdx;
+                        const item = stagedItems[itemIdx];
+                        if (!item) {
+                          return (
+                            <span
+                              key={rowIdx}
+                              className="h-7 w-7 rounded-full border border-slate-800/60 bg-slate-950/50"
+                            />
+                          );
+                        }
+                        const st = outcomeStyle(item.outcome);
+                        const isSel = selectedStageIdx === itemIdx;
+                        return (
+                          <button
+                            key={itemIdx}
+                            type="button"
+                            onClick={() => setSelectedStageIdx(isSel ? null : itemIdx)}
+                            title={`#${itemIdx + 1} · Clique para editar`}
+                            className={`h-7 w-7 rounded-full border font-mono text-[11px] font-bold text-white cursor-pointer flex items-center justify-center ${st.bg} ${
+                              isSel ? 'ring-2 ring-white scale-105' : ''
+                            }`}
+                          >
+                            {item.total ?? item.outcome}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {selectedStageIdx !== null && stagedItems[selectedStageIdx] && (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-700 bg-[#131924] px-3 py-2 text-xs">
+                  <span className="font-mono text-slate-300">Jogada #{selectedStageIdx + 1}:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCycleStagedOutcome(selectedStageIdx)}
+                    className="rounded border border-slate-600 bg-slate-800 px-2.5 py-1 font-semibold text-slate-100 hover:bg-slate-700 cursor-pointer"
+                  >
+                    Alternar Cor ({formatOutcomeLabel(stagedItems[selectedStageIdx].outcome)})
+                  </button>
+                  <input
+                    type="number"
+                    min={2}
+                    max={12}
+                    value={stagedItems[selectedStageIdx].total ?? ''}
+                    onChange={(e) => handleUpdateStagedTotal(selectedStageIdx, e.target.value)}
+                    placeholder="Nº 2–12"
+                    className="w-20 rounded border border-slate-700 bg-[#0B0F17] px-2 py-1 font-mono text-xs text-slate-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveStagedCell(selectedStageIdx)}
+                    className="rounded border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-red-300 hover:bg-red-500/20 cursor-pointer"
+                  >
+                    Remover Bola
+                  </button>
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleApplyStagedTable('append')}
+                  className="rounded-lg border border-slate-700 bg-slate-800 px-3.5 py-2 text-xs font-semibold text-slate-100 hover:bg-slate-700 cursor-pointer"
+                >
+                  Adicionar ao Histórico ({rounds.length} + {stagedItems.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyStagedTable('replace')}
+                  className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-bold text-slate-950 hover:bg-emerald-400 cursor-pointer"
+                >
+                  Iniciar Nova Mesa ({stagedItems.length} jogadas)
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
       )}
 
       {/* SECÇÃO 1: ANÁLISE AO VIVO */}
@@ -700,8 +1060,18 @@ export const BacBoDashboard: React.FC<BacBoDashboardProps> = ({
                 </div>
 
                 {rounds.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-slate-800 p-6 text-center text-xs text-slate-400">
-                    Nenhuma rodada registada ainda. Use o navegador integrado com OCR ou registe manualmente acima.
+                  <div className="rounded-lg border border-dashed border-slate-800 p-6 text-center text-xs text-slate-400 space-y-3">
+                    <p>
+                      Nenhuma rodada registada ainda. Pode carregar o histórico completo da mesa anterior (print ou lote) antes de começar.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowPreloadPanel(true)}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/50 bg-blue-500/15 px-3.5 py-2 text-xs font-semibold text-blue-200 hover:bg-blue-500/25 cursor-pointer"
+                    >
+                      <Upload className="h-3.5 w-3.5" />
+                      <span>Carregar Mesa Anterior (Print / Lote)</span>
+                    </button>
                   </div>
                 ) : (
                   <div className="overflow-x-auto pb-1">
